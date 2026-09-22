@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Target, PhoneCall, Plus, CheckCircle2, Clock, MapPin, Building, Trash2, TrendingUp, DollarSign, ArrowUpRight, Share2, Sparkles } from 'lucide-react';
+import { PhoneCall, Plus, MapPin, Trash2, TrendingUp } from 'lucide-react';
 import { BUSINESS_INFO } from '../data/marketingData';
+import { supabase } from '../lib/supabase';
 
 interface LeadItem {
   id: string;
@@ -14,54 +15,39 @@ interface LeadItem {
   date: string;
 }
 
-const DEFAULT_LEADS: LeadItem[] = [
-  {
-    id: '1',
-    clientName: 'Tozkoparan Kentsel Dönüşüm Şantiyesi',
-    phone: '0532 555 12 34',
-    district: 'Güngören',
-    serviceType: 'manitou',
-    offerAmount: '8.500 TL (Günlük)',
-    status: 'won',
-    notes: 'Dar sokakta 4. kata 2 tır ytong ve harç paleti çıkarıldı. İş tamamlandı, yorum istenecek.',
-    date: 'Bugün'
-  },
-  {
-    id: '2',
-    clientName: 'Bağcılar Güneşli Konut Projesi',
-    phone: '0533 444 88 99',
-    district: 'Bağcılar',
-    serviceType: 'manitou',
-    offerAmount: '16.000 TL (2 Gün)',
-    status: 'quoted',
-    notes: 'Tuğla paletleri kat tabliyelerine aktarılacak. Yarın sabah saat 08:30 için randevu bekleniyor.',
-    date: 'Dün'
-  },
-  {
-    id: '3',
-    clientName: 'Bakırköy Bina Güçlendirme',
-    phone: '0530 111 22 33',
-    district: 'Bakırköy',
-    serviceType: 'insaat',
-    offerAmount: 'Teklif Aşaması',
-    status: 'new',
-    notes: 'Bina statik güçlendirme ve dış cephe yenileme için keşif istendi.',
-    date: '2 gün önce'
-  }
-];
+type DbLead = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  district: string | null;
+  service: 'manitou' | 'insaat' | 'kentsel_donusum' | 'diger' | null;
+  stage: 'yeni' | 'arandi' | 'teklif' | 'kazanildi' | 'kaybedildi';
+  note: string | null;
+  created_at: string;
+};
+
+const toLeadItem = (lead: DbLead): LeadItem => ({
+  id: lead.id,
+  clientName: lead.full_name || 'İsimsiz lead',
+  phone: lead.phone || 'Belirtilmedi',
+  district: lead.district || 'Belirtilmedi',
+  serviceType: lead.service === 'manitou' ? 'manitou' : 'insaat',
+  offerAmount: lead.stage === 'teklif' ? 'Teklif Aşaması' : 'Teklif Verilecek',
+  status: lead.stage === 'kazanildi' ? 'won' : lead.stage === 'teklif' ? 'quoted' : lead.stage === 'arandi' ? 'completed' : 'new',
+  notes: lead.note || '',
+  date: new Date(lead.created_at).toLocaleDateString('tr-TR'),
+});
+
+const toDbStage = (status: LeadItem['status']): DbLead['stage'] => ({
+  new: 'yeni',
+  quoted: 'teklif',
+  won: 'kazanildi',
+  completed: 'arandi',
+}[status] as DbLead['stage']);
 
 export function CustomerLeadHub() {
-  const [leads, setLeads] = useState<LeadItem[]>(() => {
-    const saved = localStorage.getItem('sahin_leads');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return DEFAULT_LEADS;
-      }
-    }
-    return DEFAULT_LEADS;
-  });
+  const [leads, setLeads] = useState<LeadItem[]>([]);
+  const [loadError, setLoadError] = useState('');
 
   const [activeSubTab, setActiveSubTab] = useState<'leads' | 'ads_kit'>('leads');
 
@@ -72,42 +58,64 @@ export function CustomerLeadHub() {
   const [newService, setNewService] = useState<'manitou' | 'insaat'>('manitou');
   const [newAmount, setNewAmount] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [consentGiven, setConsentGiven] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('sahin_leads', JSON.stringify(leads));
-  }, [leads]);
-
-  const handleAddLead = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newClient.trim()) return;
-
-    const newEntry: LeadItem = {
-      id: Date.now().toString(),
-      clientName: newClient,
-      phone: newPhone || 'Belirtilmedi',
-      district: newDistrict,
-      serviceType: newService,
-      offerAmount: newAmount ? `${newAmount} TL` : 'Teklif Verilecek',
-      status: 'new',
-      notes: newNotes,
-      date: 'Bugün'
+    let mounted = true;
+    const loadLeads = async () => {
+      if (!supabase) {
+        setLoadError('Supabase bağlantısı yapılandırılmamış.');
+        return;
+      }
+      const { data, error } = await supabase.from('leads').select('id,full_name,phone,district,service,stage,note,created_at').order('created_at', { ascending: false }).limit(100);
+      if (!mounted) return;
+      if (error) setLoadError('Lead kayıtları yüklenemedi. RLS veya oturum yetkisini kontrol edin.');
+      else setLeads((data as DbLead[]).map(toLeadItem));
     };
+    loadLeads();
+    return () => { mounted = false; };
+  }, []);
 
-    setLeads([newEntry, ...leads]);
+  const handleAddLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClient.trim() || !consentGiven || !supabase) return;
+    const { data, error } = await supabase.from('leads').insert({
+      full_name: newClient.trim(), phone: newPhone || null, district: newDistrict,
+      service: newService, source: 'manual', note: newNotes || null,
+      stage: 'yeni', consent_given: true, consent_text: 'Yetkili panelden manuel kayıt',
+    }).select('id,full_name,phone,district,service,stage,note,created_at').single();
+    if (error || !data) {
+      setLoadError('Lead kaydedilemedi. Zorunlu alanları ve RLS yetkisini kontrol edin.');
+      return;
+    }
+    setLeads(current => [toLeadItem(data as DbLead), ...current]);
     setNewClient('');
     setNewPhone('');
     setNewAmount('');
     setNewNotes('');
+    setConsentGiven(false);
     setIsAdding(false);
   };
 
-  const updateStatus = (id: string, status: LeadItem['status']) => {
-    setLeads(leads.map(lead => lead.id === id ? { ...lead, status } : lead));
+  const updateStatus = async (id: string, status: LeadItem['status']) => {
+    if (!supabase) return;
+    const { error } = await supabase.from('leads').update({ stage: toDbStage(status) }).eq('id', id);
+    if (error) {
+      setLoadError('Lead durumu güncellenemedi.');
+      return;
+    }
+    setLeads(current => current.map(lead => lead.id === id ? { ...lead, status } : lead));
   };
 
-  const deleteLead = (id: string) => {
-    setLeads(leads.filter(lead => lead.id !== id));
+  const deleteLead = async (id: string) => {
+    if (!supabase) return;
+    const { error } = await supabase.from('leads').delete().eq('id', id);
+    if (error) {
+      setLoadError('Lead silinemedi.');
+      return;
+    }
+    setLeads(current => current.filter(lead => lead.id !== id));
   };
 
   const openWhatsAppQuote = (lead: LeadItem) => {
@@ -169,6 +177,12 @@ export function CustomerLeadHub() {
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-xs text-amber-200">
+          {loadError}
+        </div>
+      )}
 
       {activeSubTab === 'leads' ? (
         <div className="space-y-6">
@@ -271,6 +285,10 @@ export function CustomerLeadHub() {
                 rows={2}
                 className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs sm:text-sm focus:border-emerald-500 outline-none"
               />
+              <label className="flex items-start gap-2 text-[11px] text-slate-400">
+                <input type="checkbox" checked={consentGiven} onChange={e => setConsentGiven(e.target.checked)} required className="mt-0.5 accent-emerald-500" />
+                <span>Bu kaydı oluşturmak için ilgili kişinin iletişim bilgilerinin şirket içi CRM’de işlenmesine dair onay alındığını doğruluyorum.</span>
+              </label>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
