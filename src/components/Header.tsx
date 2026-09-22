@@ -20,15 +20,16 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
   const navItems = [
     { id: 'gbp', label: '1. Google GBP & Yerel SEO' },
-    { id: 'leads', label: '2. Şantiye & İş Takip CRM' },
-    { id: 'quote', label: '3. 30sn Teklif & WhatsApp' },
-    { id: 'twopage', label: '4. 2-Sayfalı Site & Search Console' },
-    { id: 'districts', label: '5. İlçe Pazar Alanları (SEO)' },
-    { id: 'instagram', label: '6. Instagram & Reels (@embayyapi)' },
-    { id: 'calendar', label: '7. Haftalık İçerik Planı' },
-    { id: 'website', label: '8. Web Site SEO & Schema' },
-    { id: 'generator', label: '9. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '10. Görev & Sorumluluklar' }
+    { id: 'hunter', label: '2. Şantiye Avcısı & İş Bulma' },
+    { id: 'leads', label: '3. Şantiye & İş Takip CRM' },
+    { id: 'quote', label: '4. 30sn Teklif & WhatsApp' },
+    { id: 'twopage', label: '5. 2-Sayfalı Site & Search Console' },
+    { id: 'districts', label: '6. İlçe Pazar Alanları (SEO)' },
+    { id: 'instagram', label: '7. Instagram & Reels (@embayyapi)' },
+    { id: 'calendar', label: '8. Haftalık İçerik Planı' },
+    { id: 'website', label: '9. Web Site SEO & Schema' },
+    { id: 'generator', label: '10. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '11. Görev & Sorumluluklar' }
   ];
 
   return (

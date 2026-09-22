@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { MobileQuickActions } from './components/MobileQuickActions';
 import { GbpSeoSection } from './components/GbpSeoSection';
 import { CustomerLeadHub } from './components/CustomerLeadHub';
+import { ProjectHunterHub } from './components/ProjectHunterHub';
 import { QuickQuoteCalculator } from './components/QuickQuoteCalculator';
 import { TwoPageSiteKit } from './components/TwoPageSiteKit';
 import { DistrictPagesSection } from './components/DistrictPagesSection';
@@ -84,6 +85,7 @@ export default function App() {
               <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
               <span className="text-white font-medium capitalize">
                 {activeTab === 'gbp' && 'Google İşletme Profili (GBP), Hizmetler & Yerel SEO'}
+                {activeTab === 'hunter' && 'Sıcak Şantiye Avcısı & İnşaat & Manitou İş Bulma Motoru'}
                 {activeTab === 'leads' && 'Şantiye & Sıcak Müşteri Takip Kokpiti (CRM) & Google Ads'}
                 {activeTab === 'quote' && '30 Saniyede Anlık Şantiye Teklifi & WhatsApp Sözleşme Kartı'}
                 {activeTab === 'twopage' && '2-Sayfalı Site Mimarisi, Search Console & Instagram Embed'}
@@ -97,6 +99,7 @@ export default function App() {
             </div>
 
             {activeTab === 'gbp' && <GbpSeoSection />}
+            {activeTab === 'hunter' && <ProjectHunterHub />}
             {activeTab === 'leads' && <CustomerLeadHub />}
             {activeTab === 'quote' && <QuickQuoteCalculator />}
             {activeTab === 'twopage' && <TwoPageSiteKit />}
