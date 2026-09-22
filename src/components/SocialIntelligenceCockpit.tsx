@@ -26,9 +26,14 @@ import {
   Target,
   FileSpreadsheet,
   Megaphone,
-  UserCheck
+  UserCheck,
+  Plus,
+  RefreshCw,
+  Sliders,
+  ShieldCheck
 } from 'lucide-react';
 import { BUSINESS_INFO } from '../data/marketingData';
+import { usePersistentStorage } from '../hooks/usePersistentStorage';
 
 interface PostMetric {
   id: string;
@@ -169,10 +174,61 @@ const INITIAL_COMPETITOR_LEADS: CompetitorLead[] = [
 ];
 
 export function SocialIntelligenceCockpit() {
+  const { addInvestorProfile } = usePersistentStorage();
   const [metrics, setMetrics] = useState<PostMetric[]>(INITIAL_METRICS);
   const [competitorLeads, setCompetitorLeads] = useState<CompetitorLead[]>(INITIAL_COMPETITOR_LEADS);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'analytics' | 'budget_planner' | 'competitor_intel' | 'outreach_engine'>('analytics');
+
+  // Yeni Gönderi İstatistiği Ekleme State'leri
+  const [showAddMetricModal, setShowAddMetricModal] = useState(false);
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostPlatform, setNewPostPlatform] = useState<PostMetric['platform']>('Instagram');
+  const [newPostCategory, setNewPostCategory] = useState<PostMetric['categoryTag']>('Dar Sokak & Vinç Alternatifi');
+  const [newPostReach, setNewPostReach] = useState<number | ''>(5000);
+  const [newPostLikes, setNewPostLikes] = useState<number | ''>(250);
+  const [newPostInquiries, setNewPostInquiries] = useState<number | ''>(6);
+  const [newPostSpend, setNewPostSpend] = useState<number | ''>(200);
+
+  const handleAddNewMetric = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPostTitle.trim()) return;
+
+    const reachVal = Number(newPostReach) || 0;
+    const likesVal = Number(newPostLikes) || 0;
+    const inqVal = Number(newPostInquiries) || 1;
+    const spendVal = Number(newPostSpend) || 0;
+    const calculatedCpl = Math.round(spendVal / inqVal);
+
+    const newMetricItem: PostMetric = {
+      id: 'm-' + Date.now(),
+      title: newPostTitle,
+      platform: newPostPlatform,
+      categoryTag: newPostCategory,
+      date: 'Bugün',
+      reach: reachVal,
+      likes: likesVal,
+      comments: Math.round(likesVal * 0.1),
+      shares: Math.round(likesVal * 0.05),
+      inquiriesGenerated: inqVal,
+      adSpend: spendVal,
+      cpl: calculatedCpl,
+      status: 'yayında'
+    };
+
+    setMetrics([newMetricItem, ...metrics]);
+    setNewPostTitle('');
+    setShowAddMetricModal(false);
+  };
+
+  // Yeni Rakip Yorumu / Sıcak Talep Ekleme State'i
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [newLeadSource, setNewLeadSource] = useState('Instagram Rakip Gönderi Yorumları');
+  const [newLeadName, setNewLeadName] = useState('');
+  const [newLeadPhone, setNewLeadPhone] = useState('');
+  const [newLeadSnippet, setNewLeadSnippet] = useState('');
+  const [newLeadIntent, setNewLeadIntent] = useState<CompetitorLead['intentLevel']>('Ateşli (Acil Fiyat İstiyor)');
+  const [transferredNotice, setTransferredNotice] = useState<string | null>(null);
 
   // Kampanya ve Teklif Metni Oluşturucu State'leri
   const [campaignTarget, setCampaignTarget] = useState<'manitou_dar_sokak' | 'kentsel_donusum_c35' | 'acil_tir_indirme'>('manitou_dar_sokak');
@@ -180,6 +236,54 @@ export function SocialIntelligenceCockpit() {
   const [outreachRecipient, setOutreachRecipient] = useState('');
   const [copiedText, setCopiedText] = useState(false);
   const [generatedPdfNotice, setGeneratedPdfNotice] = useState(false);
+
+  const handleAddNewCompetitorLead = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLeadName.trim() || !newLeadSnippet.trim()) return;
+
+    const newLeadItem: CompetitorLead = {
+      id: 'comp-' + Date.now(),
+      source: newLeadSource,
+      clientName: newLeadName,
+      phoneOrHandle: newLeadPhone || 'Belirtilmedi',
+      inquirySnippet: newLeadSnippet,
+      intentLevel: newLeadIntent,
+      extractedDate: 'Şimdi',
+      outreachStatus: 'hazır'
+    };
+
+    setCompetitorLeads([newLeadItem, ...competitorLeads]);
+    setNewLeadName('');
+    setNewLeadPhone('');
+    setNewLeadSnippet('');
+    setShowAddLeadModal(false);
+  };
+
+  const handleTransferToInvestorCrm = (lead: CompetitorLead) => {
+    try {
+      addInvestorProfile({
+        fullName: lead.clientName,
+        phone: lead.phoneOrHandle.includes('05') ? lead.phoneOrHandle.slice(0, 15) : '0530 000 00 00',
+        cityDistrict: lead.inquirySnippet.includes('Güngören') ? 'Güngören / Tozkoparan' : 'İstanbul Şantiye Bölgesi',
+        clientSegment: lead.inquirySnippet.toLowerCase().includes('bina') || lead.inquirySnippet.toLowerCase().includes('müteahhit') 
+          ? 'Arsa Sahibi (Kentsel Dönüşüm)' 
+          : 'Müteahhit / Yüklenici (İş Makinesi)',
+        primaryDemand: lead.inquirySnippet,
+        investmentBudget: lead.inquirySnippet.toLowerCase().includes('bina') ? 8000000 : 25000,
+        investmentHorizon: 'Acil (1-3 Gün)',
+        companyExecutionPlan: 'Şahin Manitou & Embay Yapı acil keşif ve fiyat teklifi protokolü.',
+        projectedMinimalProfitRate: 45,
+        projectedProfitAmount: 3600000,
+        periodicAdStrategy: 'Haftalık Manitou İndirim SMS',
+        kvkkConsentGiven: true
+      }, true);
+
+      setTransferredNotice(`${lead.clientName} başarıyla Kalıcı Müşteri & Sermaye CRM Portföyüne aktarıldı!`);
+      setTimeout(() => setTransferredNotice(null), 3500);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   // İstatistiksel Özetler
   const totalSpend = metrics.reduce((sum, m) => sum + m.adSpend, 0);
@@ -353,28 +457,144 @@ export function SocialIntelligenceCockpit() {
       {/* SEKME 1: GÖNDERİ ANALİTİĞİ & ETİKET SIRALAMASI */}
       {activeTab === 'analytics' && (
         <div className="space-y-4">
-          {/* Kategori Filtresi */}
+          {/* Kategori Filtresi & Yeni Metrik Ekleme Butonu */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 p-3.5 rounded-xl border border-slate-800 text-xs">
             <div className="flex items-center gap-2 text-slate-400">
               <Filter className="w-4 h-4 text-emerald-400" />
               <span>İçerik Etiketine Göre Filtrele:</span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {['all', 'Dar Sokak & Vinç Alternatifi', 'C35 Beton & Statik Güven', 'Fiyat & Teklif Şeffaflığı', 'Şantiye Mizahı / Reels', 'Çevreci Kimlik & Ağaç Bağışı'].map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                    selectedCategory === cat
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                >
-                  {cat === 'all' ? 'Tüm İçerikler' : cat}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap gap-1.5">
+                {['all', 'Dar Sokak & Vinç Alternatifi', 'C35 Beton & Statik Güven', 'Fiyat & Teklif Şeffaflığı', 'Şantiye Mizahı / Reels', 'Çevreci Kimlik & Ağaç Bağışı'].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                      selectedCategory === cat
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    {cat === 'all' ? 'Tüm İçerikler' : cat}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowAddMetricModal(true)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Yeni Gönderi İstatistiği Ekle</span>
+              </button>
             </div>
           </div>
+
+          {/* Yeni Gönderi Metrik Giriş Formu */}
+          {showAddMetricModal && (
+            <form onSubmit={handleAddNewMetric} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="font-bold text-white">Canlı Gönderi / Reklam İstatistiği Kaydet</span>
+                <button type="button" onClick={() => setShowAddMetricModal(false)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-slate-400 block mb-1">Gönderi Başlığı</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Güngören 3. Kat Palet Sevkiyatı"
+                    value={newPostTitle}
+                    onChange={e => setNewPostTitle(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Platform</label>
+                  <select
+                    value={newPostPlatform}
+                    onChange={e => setNewPostPlatform(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white"
+                  >
+                    <option value="Instagram">Instagram</option>
+                    <option value="Google Business">Google Business</option>
+                    <option value="Facebook">Facebook</option>
+                    <option value="TikTok">TikTok</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Etiket / Kategori</label>
+                  <select
+                    value={newPostCategory}
+                    onChange={e => setNewPostCategory(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white"
+                  >
+                    <option value="Dar Sokak & Vinç Alternatifi">Dar Sokak & Vinç Alternatifi</option>
+                    <option value="C35 Beton & Statik Güven">C35 Beton & Statik Güven</option>
+                    <option value="Fiyat & Teklif Şeffaflığı">Fiyat & Teklif Şeffaflığı</option>
+                    <option value="Şantiye Mizahı / Reels">Şantiye Mizahı / Reels</option>
+                    <option value="Çevreci Kimlik & Ağaç Bağışı">Çevreci Kimlik & Ağaç Bağışı</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="text-slate-400 block mb-1">Erişim (Reach)</label>
+                  <input
+                    type="number"
+                    value={newPostReach}
+                    onChange={e => setNewPostReach(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Beğeni</label>
+                  <input
+                    type="number"
+                    value={newPostLikes}
+                    onChange={e => setNewPostLikes(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-emerald-400 block mb-1 font-bold">Gelen Arama/DM (Lead)</label>
+                  <input
+                    type="number"
+                    value={newPostInquiries}
+                    onChange={e => setNewPostInquiries(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-emerald-500/50 text-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Reklam Harcaması (₺)</label>
+                  <input
+                    type="number"
+                    value={newPostSpend}
+                    onChange={e => setNewPostSpend(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMetricModal(false)}
+                  className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 font-bold text-xs"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Listeye Kaydet</span>
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Gönderi Tablosu */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
@@ -520,6 +740,13 @@ export function SocialIntelligenceCockpit() {
       {/* SEKME 3: RAKİP YORUM ANALİZİ & SICAK MÜŞTERİ HAVUZU */}
       {activeTab === 'competitor_intel' && (
         <div className="space-y-4">
+          {transferredNotice && (
+            <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{transferredNotice}</span>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -528,10 +755,88 @@ export function SocialIntelligenceCockpit() {
                   Rakip vinç ve inşaat firmalarının sayfalarına yorum atan veya kentsel dönüşüm gruplarında teklif isteyenler otomatik ayrıştırılır.
                 </p>
               </div>
-              <span className="text-xs px-3 py-1 rounded-lg bg-amber-500/10 text-amber-400 font-bold border border-amber-500/30">
-                {competitorLeads.length} Müşteri İletişim Bekliyor
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 font-bold border border-amber-500/30">
+                  {competitorLeads.length} Müşteri İletişim Bekliyor
+                </span>
+                <button
+                  onClick={() => setShowAddLeadModal(true)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Manuel Yorum / Talep Ekle</span>
+                </button>
+              </div>
             </div>
+
+            {/* Manuel Yorum Ekleme Kutusu */}
+            {showAddLeadModal && (
+              <form onSubmit={handleAddNewCompetitorLead} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs mt-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="font-bold text-white">Sosyal Medyadan Yeni Rakip Yorumu / Fiyat Talebi Kaydet</span>
+                  <button type="button" onClick={() => setShowAddLeadModal(false)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="text-slate-400 block mb-1">Müşteri / Hesap Adı</label>
+                    <input
+                      type="text"
+                      placeholder="Örn: Mimar Selim Bey"
+                      value={newLeadName}
+                      onChange={e => setNewLeadName(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 block mb-1">Telefon / Instagram Kullanıcı Adı</label>
+                    <input
+                      type="text"
+                      placeholder="Örn: 0532 *** 22 11 veya @selim_mimarlik"
+                      value={newLeadPhone}
+                      onChange={e => setNewLeadPhone(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 block mb-1">Kaynak Platform</label>
+                    <input
+                      type="text"
+                      value={newLeadSource}
+                      onChange={e => setNewLeadSource(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Yazdığı Yorum / Fiyat Sorusu</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Örn: Tozkoparan'da 5. kata ytong aktarımı kaça yapılır acil fiyat alabilir miyim..."
+                    value={newLeadSnippet}
+                    onChange={e => setNewLeadSnippet(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white"
+                    required
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLeadModal(false)}
+                    className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 font-bold text-xs"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Havuzuna Ekle</span>
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
               {competitorLeads.map(lead => (
@@ -549,18 +854,31 @@ export function SocialIntelligenceCockpit() {
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                    <span className="text-[10px] text-emerald-400 font-mono font-semibold">{lead.phoneOrHandle}</span>
-                    <button
-                      onClick={() => {
-                        setOutreachRecipient(lead.phoneOrHandle);
-                        setActiveTab('outreach_engine');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1"
-                    >
-                      <span>Teklif Yaz</span>
-                      <ArrowUpRight className="w-3 h-3" />
-                    </button>
+                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-emerald-400 font-mono font-semibold">{lead.phoneOrHandle}</span>
+                      <button
+                        onClick={() => handleTransferToInvestorCrm(lead)}
+                        className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+                        title="Bu müşteriyi sermaye ve kâr portföyüne aktar"
+                      >
+                        <ShieldCheck className="w-3 h-3 text-amber-400" />
+                        <span>CRM'e Aktar</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={() => {
+                          setOutreachRecipient(lead.phoneOrHandle);
+                          setActiveTab('outreach_engine');
+                        }}
+                        className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow"
+                      >
+                        <span>Özel Teklif Yaz & Gönder</span>
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
