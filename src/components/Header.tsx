@@ -20,19 +20,20 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
   const navItems = [
     { id: 'gbp', label: '1. Google GBP & Yerel SEO' },
-    { id: 'creative', label: '🎨 2. Esprili Meme, Çevreci Kimlik & Özel Günler' },
-    { id: 'executive', label: '⭐ 3. Yönetici Komuta, Günlük Bülten & AI Bot' },
-    { id: 'hunter', label: '4. Şantiye Avcısı & İş Bulma' },
-    { id: 'reels', label: '5. Viral Reels & Video Senaryoları' },
-    { id: 'leads', label: '6. Şantiye & İş Takip CRM' },
-    { id: 'quote', label: '7. 30sn Teklif & WhatsApp' },
-    { id: 'twopage', label: '8. 2-Sayfalı Site & Search Console' },
-    { id: 'districts', label: '9. İlçe Pazar Alanları (SEO)' },
-    { id: 'instagram', label: '10. Instagram & Post Rehberi' },
-    { id: 'calendar', label: '11. Haftalık İçerik Planı' },
-    { id: 'website', label: '12. Web Site SEO & Schema' },
-    { id: 'generator', label: '13. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '14. Görev & Sorumluluklar' }
+    { id: 'contracts', label: '📑 2. Şantiye İSG & Hukuki Sözleşmeler' },
+    { id: 'creative', label: '🎨 3. Esprili Meme, Çevreci Kimlik & Özel Günler' },
+    { id: 'executive', label: '⭐ 4. Yönetici Komuta, Günlük Bülten & AI Bot' },
+    { id: 'hunter', label: '5. Şantiye Avcısı & İş Bulma' },
+    { id: 'reels', label: '6. Viral Reels & Video Senaryoları' },
+    { id: 'leads', label: '7. Şantiye & İş Takip CRM' },
+    { id: 'quote', label: '8. 30sn Teklif & WhatsApp' },
+    { id: 'twopage', label: '9. 2-Sayfalı Site & Search Console' },
+    { id: 'districts', label: '10. İlçe Pazar Alanları (SEO)' },
+    { id: 'instagram', label: '11. Instagram & Post Rehberi' },
+    { id: 'calendar', label: '12. Haftalık İçerik Planı' },
+    { id: 'website', label: '13. Web Site SEO & Schema' },
+    { id: 'generator', label: '14. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '15. Görev & Sorumluluklar' }
   ];
 
   return (
