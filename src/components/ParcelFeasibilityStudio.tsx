@@ -1,27 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Building2, 
   MapPin, 
-  Search, 
   Sparkles, 
-  Layers, 
-  CheckCircle2, 
   Send, 
-  Download, 
-  Calculator, 
-  FileText, 
   Maximize2,
   Phone,
   ShieldCheck,
   TrendingUp,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RotateCw,
+  Eye,
+  Layers,
+  Users,
+  Box,
+  Truck,
+  CheckCircle,
+  HelpCircle,
+  Flame,
+  Info
 } from 'lucide-react';
 import { BUSINESS_INFO } from '../data/marketingData';
 
 interface DistrictZoningPreset {
   district: string;
   taks: number; // Taban Alanı Katsayısı (örn. 0.40)
-  kaks: number; // Emsal (örn. 2.07)
+  kaks: number; // Emsal (örn. 2.20)
   maxFloors: number;
   roadSetback: number;
   sideSetback: number;
@@ -92,7 +96,12 @@ export function ParcelFeasibilityStudio() {
   const [currentApartmentCount, setCurrentApartmentCount] = useState<number>(10);
   const [sharePercent, setSharePercent] = useState<number>(50); // Müteahhit %50 / Arsa Sahibi %50
 
-  const [activeArchitecturalStyle, setActiveArchitecturalStyle] = useState<'modern_residence' | 'boutique_wood_composite' | 'minimalist_grey'>('modern_residence');
+  // 3D Toplantı & Çalışma Masası Etkileşim State'leri
+  const [activeViewMode, setActiveViewMode] = useState<'3d_isometric' | 'floor_plan' | 'satellite'>('3d_isometric');
+  const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
+  const [rotationAngle, setRotationAngle] = useState<number>(15);
+  const [showManitouLogistics, setShowManitouLogistics] = useState<boolean>(true);
+  const [showSetbacks, setShowSetbacks] = useState<boolean>(true);
   const [copiedProposal, setCopiedProposal] = useState(false);
 
   const preset = ZONING_PRESETS[selectedPresetKey] || ZONING_PRESETS['Güngören - Tozkoparan (Kentsel Dönüşüm Rezervi)'];
@@ -110,7 +119,6 @@ export function ParcelFeasibilityStudio() {
 
   // Finansal Değerleme
   const projectedPropertyValue = totalConstructionArea * preset.marketSqmPrice;
-  const estimatedBuildCost = grossConstructionArea * 21000; // C35, 1. sınıf işçilik ve asansörlü m² maliyeti
   const landOwnerValueAdded = landOwnerApartments * (preset.averageFlatSqm * preset.marketSqmPrice);
 
   const proposalWhatsAppText = `🏢 EMBAY YAPI | ARSA & KENTSEL DÖNÜŞÜM ÖN FİZİBİLİTE RAPORU
@@ -135,9 +143,9 @@ export function ParcelFeasibilityStudio() {
 ✅ C35 Yüksek Dayanımlı Hazır Beton & Nervürlü Çelik Donatı
 ✅ Kapalı/Açık Otopark, Çift Hızlı Modern Asansör
 ✅ A Sınıfı Taşyünü Dış Cephe Isı ve Ses Yalıtımı
-✅ Şantiye Lojistiğinde Şahin Manitou ile Sıfır Zayiat
+✅ Şantiye Lojistiğinde Şahin Manitou ile Dar Sokakta Sıfır Zayiat
 
-📞 Ücretsiz Yerinde Keşif & Proje Sunumu:
+📞 3D Proje Toplantısı & Yerinde Keşif:
 Embay Yapı: ${BUSINESS_INFO.phone} (Samet Bey)
 Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
 
@@ -154,14 +162,14 @@ Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold border border-emerald-500/30 mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Ada/Parsel Akıllı Fizibilite & Temsili Mimari 3D Motoru
+              <Box className="w-3.5 h-3.5 text-emerald-400" />
+              Ada/Parsel 3D İnteraktif Şantiye & Toplantı Masası
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white">
-              Arsa Sahibine 30 Saniyede Özel Kentsel Dönüşüm Raporu & Mimari Proje Sunumu
+              Arsa Sahibine 3D Temsili Parsel Çalışma Alanı Üzerinde Proje Sunumu
             </h2>
             <p className="text-slate-300 text-sm mt-1 max-w-3xl">
-              Güngören, Tozkoparan, Bağcılar ve Bakırköy’de arsa sahibinin veya bina yöneticisinin ada/parsel bilgisini ve m² alanını girin; sistem imar emsalini otomatik hesaplasın, kaç daire çıkacağını simüle etsin ve 3D temsili proje kartıyla anında WhatsApp teklifine dönüştürsün.
+              Arsa sahibiyle masaya oturduğunuzda sadece sayılarla konuşmayın! Ada/parsel ve m² bilgisini girin; ekranda <strong>parsel sınırları, çekme mesafeleri, kat kat kütle yerleşimi ve Manitou dar sokak lojistiği</strong> 3D izometrik çalışma alanı olarak canlansın.
             </p>
           </div>
 
@@ -208,7 +216,7 @@ Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
                   type="text"
                   value={ada}
                   onChange={e => setAda(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500 font-mono font-bold"
                 />
               </div>
               <div>
@@ -217,7 +225,7 @@ Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
                   type="text"
                   value={parsel}
                   onChange={e => setParsel(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500 font-mono font-bold"
                 />
               </div>
             </div>
@@ -282,66 +290,175 @@ Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
                 <span className="text-xs font-bold text-white">{preset.maxFloors} Kat</span>
               </div>
             </div>
+
+            {/* Toplantı Modu Kontrolleri */}
+            <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/20 space-y-2">
+              <span className="text-[11px] font-bold text-emerald-300 block">
+                🎯 3D Toplantı Görünüm Ayarları:
+              </span>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showManitouLogistics}
+                    onChange={e => setShowManitouLogistics(e.target.checked)}
+                    className="rounded text-emerald-500"
+                  />
+                  <span>Teleskopik Manitou Yükleme Sahası</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showSetbacks}
+                    onChange={e => setShowSetbacks(e.target.checked)}
+                    className="rounded text-emerald-500"
+                  />
+                  <span>Çekme Mesafeleri & Yol Payı</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* SAĞ PANEL: Temsili 3D Mimari Proje Görseli & Rapor Kartı */}
-        <div className="lg:col-span-7 rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-5 flex flex-col justify-between shadow-xl">
-          <div className="space-y-4">
-            {/* Temsili Mimari Görsel ve Katman Seçimi */}
-            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative">
-              <div className="aspect-video w-full bg-gradient-to-br from-slate-900 via-slate-950 to-emerald-950/40 relative flex flex-col items-center justify-center p-6 text-center">
-                {/* Temsili Mimari Çizim / Mockup Tasarımı */}
-                <div className="w-full max-w-md p-5 rounded-2xl border border-emerald-500/40 bg-slate-900/90 backdrop-blur-md shadow-2xl space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-emerald-400" />
-                      <span className="font-bold text-white text-xs">EMBAY YAPI | PRESTİJ PROJESİ</span>
+        {/* SAĞ PANEL: 3D İZOMETRİK PARSEL ÇALIŞMA ALANI & TOPLANTI MASASI */}
+        <div className="lg:col-span-7 rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4 flex flex-col justify-between shadow-xl">
+          <div className="space-y-3">
+            {/* Toplantı Başlığı & Kamera Açı Butonları */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
+                  Ada: {ada} / Parsel: {parsel}
+                </span>
+                <span className="text-xs text-slate-400">({landArea} m² Arsa)</span>
+              </div>
+
+              {/* Kamera / Açı Döndürme */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setRotationAngle((prev) => (prev === 15 ? 45 : prev === 45 ? -15 : 15))}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 cursor-pointer transition"
+                  title="Perspektifi Döndür"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Açıyı Çevir ({rotationAngle}°)</span>
+                </button>
+                <button
+                  onClick={() => setSelectedFloor(null)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer"
+                >
+                  Tüm Kütle
+                </button>
+              </div>
+            </div>
+
+            {/* 3D İZOMETRİK VİRTÜEL ŞANTİYE ALANI */}
+            <div className="w-full h-80 rounded-2xl bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 relative overflow-hidden flex items-center justify-center p-4 select-none">
+              {/* Izgara Zemin (Grid / Arsa Sınırları) */}
+              <div 
+                className="absolute inset-0 opacity-20"
+                style={{
+                  backgroundImage: 'radial-gradient(circle, #10b981 1px, transparent 1px)',
+                  backgroundSize: '24px 24px'
+                }}
+              />
+
+              {/* Çevre Yol ve Sokak Çizgileri */}
+              <div className="absolute inset-x-4 top-2 text-[10px] font-mono text-slate-500 flex justify-between border-b border-dashed border-slate-800 pb-1">
+                <span>🚧 CEVAT AÇIKALIN CADDESİ (İmar Yolu / Tır Girişi)</span>
+                <span>Yol Payı: {preset.roadSetback}m</span>
+              </div>
+
+              {/* 3D KÜTLE & PARSEL MODELLEMESİ (CSS Isometric 3D) */}
+              <div 
+                className="relative transition-transform duration-500 ease-out flex flex-col items-center justify-center"
+                style={{
+                  transform: `perspective(900px) rotateX(45deg) rotateZ(${rotationAngle}deg)`,
+                  transformStyle: 'preserve-3d'
+                }}
+              >
+                {/* 1. Parsel Tabanı (Tapu Alanı m²) */}
+                <div 
+                  className="w-56 h-56 rounded-xl border-2 border-emerald-500/60 bg-emerald-950/20 relative shadow-2xl flex items-center justify-center"
+                  style={{
+                    boxShadow: '0 25px 50px -12px rgba(16, 185, 129, 0.25)'
+                  }}
+                >
+                  {/* Arsa Köşe Kazıkları */}
+                  <span className="absolute top-1 left-1 text-[9px] font-mono text-emerald-400">Köşe A (Ada:{ada})</span>
+                  <span className="absolute bottom-1 right-1 text-[9px] font-mono text-emerald-400">Köşe C (Parsel:{parsel})</span>
+
+                  {/* Çekme Mesafesi Kesikli Çizgisi */}
+                  {showSetbacks && (
+                    <div className="absolute inset-4 rounded-lg border border-dashed border-amber-400/50 flex items-center justify-center">
+                      <span className="text-[8px] text-amber-300 font-bold bg-slate-950/80 px-1 rounded">
+                        İnşaat İmar Oturumu: {baseFloorArea} m²
+                      </span>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      Zemin + {preset.maxFloors - 1} Kat
-                    </span>
+                  )}
+
+                  {/* 2. Kat Kat 3D Kütle Yükselişi */}
+                  <div className="w-36 h-36 flex flex-col-reverse relative" style={{ transformStyle: 'preserve-3d' }}>
+                    {Array.from({ length: preset.maxFloors }).map((_, floorIdx) => {
+                      const floorNum = floorIdx + 1;
+                      const isSelected = selectedFloor === floorNum;
+                      const isRoof = floorNum === preset.maxFloors;
+                      const isGround = floorNum === 1;
+
+                      return (
+                        <div
+                          key={floorIdx}
+                          onClick={() => setSelectedFloor(isSelected ? null : floorNum)}
+                          className={`w-full h-7 rounded border transition-all duration-300 cursor-pointer flex items-center justify-between px-2 text-[10px] font-bold ${
+                            isSelected
+                              ? 'bg-amber-500 text-slate-950 border-amber-300 scale-105 shadow-lg'
+                              : isRoof
+                              ? 'bg-emerald-600/90 text-white border-emerald-400'
+                              : isGround
+                              ? 'bg-blue-600/90 text-white border-blue-400'
+                              : 'bg-slate-800/90 text-slate-200 border-slate-600 hover:bg-slate-700'
+                          }`}
+                          style={{
+                            transform: `translateZ(${floorIdx * 14}px)`,
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)'
+                          }}
+                        >
+                          <span>{isGround ? 'Zemin + Dükkan' : isRoof ? `Çatı Katı (${floorNum}. Kat)` : `${floorNum}. Normal Kat`}</span>
+                          <span className="text-[9px] font-mono opacity-80">
+                            {isGround ? '2 Dükkan' : '2-3 Daire'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-left text-xs">
-                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Yeni Daire Kapasitesi</span>
-                      <span className="text-sm font-black text-emerald-400">{newApartmentCount} Adet Lüks Daire</span>
-                      <span className="text-[10px] text-slate-500">Ort. {preset.averageFlatSqm} m² Brüt</span>
+                  {/* 3. Manitou Teleskopik Bom Uzanma Simülasyonu */}
+                  {showManitouLogistics && (
+                    <div 
+                      className="absolute -right-12 top-6 flex items-center gap-1 bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded shadow-lg animate-pulse"
+                      style={{ transform: 'translateZ(40px)' }}
+                    >
+                      <Truck className="w-3 h-3" />
+                      <span>Şahin Manitou Yük Boşaltma</span>
                     </div>
-                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Hak Sahiplerine Verilen</span>
-                      <span className="text-sm font-black text-amber-400">{landOwnerApartments} Bağımsız Bölüm</span>
-                      <span className="text-[10px] text-slate-500">Kendi Daireleri Büyüyor</span>
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-left space-y-1">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Statik Standart: C35 Beton + Nervürlü Çelik + Radye Temel</span>
-                    </div>
-                    <div className="text-slate-400">
-                      Teleskopik Manitou ile dar sokakta sıfır gürültü ve hızlı kat lojistiği.
-                    </div>
-                  </div>
+                  )}
                 </div>
+              </div>
 
-                {/* Mimari Stil Değiştirme Sekmeleri */}
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400 flex items-center gap-1 font-semibold">
-                    <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-                    Temsili Mimari Konsept
-                  </span>
-                  <div className="flex gap-1.5">
-                    <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700 font-medium">
-                      Modern Antrasit Cephe
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700 font-medium">
-                      Geniş Balkonlu
-                    </span>
-                  </div>
+              {/* Katman Bilgi Kutusu (Floating Overlay) */}
+              <div className="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur-md border border-slate-800 p-2.5 rounded-xl text-left text-xs max-w-xs shadow-xl">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{selectedFloor ? `${selectedFloor}. Kat Detayı` : 'Toplam Proje Kütlesi'}</span>
                 </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {selectedFloor 
+                    ? `Bu katta 2 adet lüks bağımsız bölüm planlanmaktadır. Balkonlar geniş, güney cepheli.`
+                    : `Toplam ${preset.maxFloors} Kat, ${newApartmentCount} Daire (${landOwnerApartments} Daire Hak Sahibi / ${embayApartments} Daire Embay Yapı)`}
+                </p>
+              </div>
+
+              <div className="absolute bottom-3 right-3 text-[10px] text-slate-500 bg-slate-950/80 px-2 py-1 rounded border border-slate-800">
+                💡 Katlara tıklayarak arsa sahibine kat bazlı daire sunumu yapabilirsiniz.
               </div>
             </div>
 
@@ -371,23 +488,22 @@ Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
             </div>
           </div>
 
-          {/* Aksiyon Butonları */}
+          {/* Alt Hızlı Aksiyon */}
           <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-slate-400">
-              📍 Bu raporu arsa sahibiyle toplantıdayken WhatsApp'tan tek tıkla paylaşabilirsiniz.
+            <div className="text-xs text-slate-400 flex items-center gap-1">
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Samet Bey ile yerinde 3D mimari keşif için: <strong>0531 436 29 04</strong></span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(proposalWhatsAppText)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition shadow-lg shadow-emerald-950/40"
-              >
-                <Send className="w-4 h-4" />
-                <span>WhatsApp İle Arsa Sahibine Gönder</span>
-              </a>
-            </div>
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(proposalWhatsAppText)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition shadow-lg shadow-emerald-950/40"
+            >
+              <Send className="w-4 h-4" />
+              <span>WhatsApp İle Arsa Sahibine Rapor Gönder</span>
+            </a>
           </div>
         </div>
       </div>
