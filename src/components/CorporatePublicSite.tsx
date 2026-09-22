@@ -393,6 +393,93 @@ export function CorporatePublicSite() {
             </section>
           </div>
         )}
+        {/* CANLI INSTAGRAM @embayyapi ŞANTİYE VİTRİNİ & ÖNİZLEME */}
+        <section className="mt-16 rounded-3xl border border-pink-100 bg-gradient-to-b from-pink-50/40 via-white to-white p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-100 text-pink-700 text-xs font-bold mb-2">
+                <Instagram className="w-3.5 h-3.5" />
+                <span>Canlı Instagram Şantiye Akışı: @embayyapi</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                Şantiyelerimizden Güncel Fotoğraf & Reels Videoları
+              </h2>
+              <p className="text-slate-600 text-xs sm:text-sm mt-1">
+                Tozkoparan ve çevre ilçelerdeki kentsel dönüşüm, C35 beton dökümleri ve Manitou dar sokak sevkiyatlarını anlık takip edin.
+              </p>
+            </div>
+
+            <a
+              href="https://www.instagram.com/embayyapi?stkn=c2tsMjF1aHN1dzg2"
+              target="_blank"
+              rel="noreferrer"
+              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-rose-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-pink-500/20 hover:opacity-95 transition shrink-0"
+            >
+              <Instagram className="w-4 h-4" />
+              <span>Instagram'da Takip Et (@embayyapi)</span>
+            </a>
+          </div>
+
+          {/* 4'lü Gerçekçi Instagram Gönderi Grid Önizlemesi */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm flex flex-col justify-between hover:shadow-md transition">
+              <div className="aspect-square bg-slate-900 relative flex flex-col items-center justify-center p-4 text-center text-white">
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-pink-600 text-[10px] font-bold">REELS</div>
+                <span className="text-3xl mb-2">🚜</span>
+                <span className="font-black text-xs">VİNÇ GİREMEZ DEDİLER!</span>
+                <span className="text-[11px] text-slate-400 mt-1">Tozkoparan Dar Sokak Sevkiyatı</span>
+              </div>
+              <div className="p-3 text-xs text-slate-700 space-y-1">
+                <span className="font-bold block text-slate-900">@embayyapi</span>
+                <p className="line-clamp-2 text-slate-500">Tırdan aldık, 4. kata sıfır zayiatla verdik. Dar sokaklar bizim işimiz.</p>
+                <span className="text-[10px] text-pink-600 font-bold block pt-1">#manitoukiralama #tozkoparan</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm flex flex-col justify-between hover:shadow-md transition">
+              <div className="aspect-square bg-emerald-950 relative flex flex-col items-center justify-center p-4 text-center text-white">
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-emerald-600 text-[10px] font-bold">PROJE</div>
+                <span className="text-3xl mb-2">🏗️</span>
+                <span className="font-black text-xs">C35 RADYE TEMEL ATILDI</span>
+                <span className="text-[11px] text-emerald-300 mt-1">Güngören Modern Dönüşüm</span>
+              </div>
+              <div className="p-3 text-xs text-slate-700 space-y-1">
+                <span className="font-bold block text-slate-900">@embayyapi</span>
+                <p className="line-clamp-2 text-slate-500">Statik hesaptan taviz yok. Deprem yönetmeliğine tam uyumlu yeni yuvalar yükseliyor.</p>
+                <span className="text-[10px] text-emerald-700 font-bold block pt-1">#kentseldönüşüm #embayyapi</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm flex flex-col justify-between hover:shadow-md transition">
+              <div className="aspect-square bg-slate-950 relative flex flex-col items-center justify-center p-4 text-center text-white">
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-amber-600 text-[10px] font-bold">BÜLTEN</div>
+                <span className="text-3xl mb-2">📊</span>
+                <span className="font-black text-xs">HAFTANIN ŞANTİYE ENLERİ</span>
+                <span className="text-[11px] text-amber-300 mt-1">142 Palet Malzeme Sevk Edildi</span>
+              </div>
+              <div className="p-3 text-xs text-slate-700 space-y-1">
+                <span className="font-bold block text-slate-900">@embayyapi</span>
+                <p className="line-clamp-2 text-slate-500">Haftalık inşaat demiri piyasa raporumuz ve biten şantiye etaplarımız yayında!</p>
+                <span className="text-[10px] text-blue-600 font-bold block pt-1">#şantiyebülteni #finans</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm flex flex-col justify-between hover:shadow-md transition">
+              <div className="aspect-square bg-amber-950 relative flex flex-col items-center justify-center p-4 text-center text-white">
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-purple-600 text-[10px] font-bold">MEME</div>
+                <span className="text-3xl mb-2">😂</span>
+                <span className="font-black text-xs">ŞANTİYE GERÇEKLERİ</span>
+                <span className="text-[11px] text-amber-300 mt-1">Vinç Sokağa Sığmayınca...</span>
+              </div>
+              <div className="p-3 text-xs text-slate-700 space-y-1">
+                <span className="font-bold block text-slate-900">@embayyapi</span>
+                <p className="line-clamp-2 text-slate-500">Güngören sokaklarında şantiye yönetmek sabır işidir. Çözüm: Şahin Manitou!</p>
+                <span className="text-[10px] text-fuchsia-600 font-bold block pt-1">#şantiyemizahı #inşaat</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
 
       {/* 3. KURUMSAL FOOTER (NAP TUTARLILIĞI) */}

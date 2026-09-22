@@ -3,6 +3,7 @@ import { CorporatePublicSite } from './components/CorporatePublicSite';
 import { Header } from './components/Header';
 import { MobileQuickActions } from './components/MobileQuickActions';
 import { GbpSeoSection } from './components/GbpSeoSection';
+import { ParcelFeasibilityStudio } from './components/ParcelFeasibilityStudio';
 import { LegalContractStudio } from './components/LegalContractStudio';
 import { CustomerLeadHub } from './components/CustomerLeadHub';
 import { CreativeBrandStudio } from './components/CreativeBrandStudio';
@@ -89,6 +90,7 @@ export default function App() {
               <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
               <span className="text-white font-medium capitalize">
                 {activeTab === 'gbp' && 'Google İşletme Profili (GBP), Hizmetler & Yerel SEO'}
+                {activeTab === 'feasibility' && 'Ada / Parsel İmar Hesaplama, Simülasyon & Temsili 3D Mimari Proje Kartı'}
                 {activeTab === 'contracts' && 'Şantiye İSG & İş Makinesi Kiralama Sözleşmesi / Kentsel Dönüşüm Ön Protokolü'}
                 {activeTab === 'creative' && 'Esprili Şantiye Mizahı (Meme), Sıfır Atık & Özel Gün Duyarlılığı'}
                 {activeTab === 'executive' && 'Yönetici Komuta Merkezi, Günlük Bülten & AI Bot Paylaşım Çizelgesi'}
@@ -107,6 +109,7 @@ export default function App() {
             </div>
 
             {activeTab === 'gbp' && <GbpSeoSection />}
+            {activeTab === 'feasibility' && <ParcelFeasibilityStudio />}
             {activeTab === 'contracts' && <LegalContractStudio />}
             {activeTab === 'creative' && <CreativeBrandStudio />}
             {activeTab === 'executive' && <ExecutiveCommandCenter />}

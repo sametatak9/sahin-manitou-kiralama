@@ -20,20 +20,21 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
   const navItems = [
     { id: 'gbp', label: '1. Google GBP & Yerel SEO' },
-    { id: 'contracts', label: '📑 2. Şantiye İSG & Hukuki Sözleşmeler' },
-    { id: 'creative', label: '🎨 3. Esprili Meme, Çevreci Kimlik & Özel Günler' },
-    { id: 'executive', label: '⭐ 4. Yönetici Komuta, Günlük Bülten & AI Bot' },
-    { id: 'hunter', label: '5. Şantiye Avcısı & İş Bulma' },
-    { id: 'reels', label: '6. Viral Reels & Video Senaryoları' },
-    { id: 'leads', label: '7. Şantiye & İş Takip CRM' },
-    { id: 'quote', label: '8. 30sn Teklif & WhatsApp' },
-    { id: 'twopage', label: '9. 2-Sayfalı Site & Search Console' },
-    { id: 'districts', label: '10. İlçe Pazar Alanları (SEO)' },
-    { id: 'instagram', label: '11. Instagram & Post Rehberi' },
-    { id: 'calendar', label: '12. Haftalık İçerik Planı' },
-    { id: 'website', label: '13. Web Site SEO & Schema' },
-    { id: 'generator', label: '14. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '15. Görev & Sorumluluklar' }
+    { id: 'feasibility', label: '📐 2. Ada/Parsel Sorgu & Mimari Fizibilite' },
+    { id: 'contracts', label: '📑 3. Şantiye İSG & Hukuki Sözleşmeler' },
+    { id: 'creative', label: '🎨 4. Esprili Meme, Çevreci Kimlik & Özel Günler' },
+    { id: 'executive', label: '⭐ 5. Yönetici Komuta, Günlük Bülten & AI Bot' },
+    { id: 'hunter', label: '6. Şantiye Avcısı & İş Bulma' },
+    { id: 'reels', label: '7. Viral Reels & Video Senaryoları' },
+    { id: 'leads', label: '8. Şantiye & İş Takip CRM' },
+    { id: 'quote', label: '9. 30sn Teklif & WhatsApp' },
+    { id: 'twopage', label: '10. 2-Sayfalı Site & Search Console' },
+    { id: 'districts', label: '11. İlçe Pazar Alanları (SEO)' },
+    { id: 'instagram', label: '12. Instagram & Post Rehberi' },
+    { id: 'calendar', label: '13. Haftalık İçerik Planı' },
+    { id: 'website', label: '14. Web Site SEO & Schema' },
+    { id: 'generator', label: '15. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '16. Görev & Sorumluluklar' }
   ];
 
   return (
