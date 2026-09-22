@@ -22,6 +22,7 @@ import { QuickFieldGenerator } from './components/QuickFieldGenerator';
 import { RoleMatrixSection } from './components/RoleMatrixSection';
 import { MapPin, ShieldCheck, ChevronRight, LogOut, Lock } from 'lucide-react';
 import { BUSINESS_INFO } from './data/marketingData';
+import { supabase } from './lib/supabase';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -35,7 +36,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<string>('intelligence');
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase?.auth.signOut();
     localStorage.removeItem('embay_auth_session_v1');
     setIsAuthenticated(false);
   };

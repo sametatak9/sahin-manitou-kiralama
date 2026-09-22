@@ -1,7 +1,7 @@
 import { PostTemplate, KeywordCategory, DayPlan } from '../types';
 
 export const BUSINESS_INFO = {
-  name: 'Şahin Manitou Kiralama & Embay Yapı',
+  name: 'Embay Yapı ve Kiralık İş Makineleri',
   phone: '0531 436 29 04',
   phoneRaw: '05314362904',
   instagram: '@embayyapi',
