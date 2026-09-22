@@ -16,6 +16,7 @@ import { QuickQuoteCalculator } from './components/QuickQuoteCalculator';
 import { TwoPageSiteKit } from './components/TwoPageSiteKit';
 import { DistrictPagesSection } from './components/DistrictPagesSection';
 import { SocialSection } from './components/SocialSection';
+import { SocialPortfolioPlanner } from './components/SocialPortfolioPlanner';
 import { WeeklyPlanSection } from './components/WeeklyPlanSection';
 import { SiteSeoSection } from './components/SiteSeoSection';
 import { QuickFieldGenerator } from './components/QuickFieldGenerator';
@@ -96,6 +97,7 @@ export default function App() {
             {activeTab === 'twopage' && '2-Sayfalı Site Mimarisi, Search Console & Instagram Embed'}
             {activeTab === 'districts' && 'İstanbul İlçe İlçe Manitou & İnşaat Sayfaları'}
             {activeTab === 'instagram' && 'Instagram Keşfet, Reels Kancaları & @embayyapi'}
+            {activeTab === 'social-planner' && 'Sosyal Portföy, Uygulama Önizlemesi, Arşiv & Etiketli Metrikler'}
             {activeTab === 'calendar' && '7 Günlük İnteraktif Yayın & Aksiyon Çizelgesi'}
             {activeTab === 'website' && 'Web Sitesi Meta Etiketleri & JSON-LD Yapısal Verisi'}
             {activeTab === 'generator' && 'Şantiye İşinden Anında 3 Platformlu İçerik Üretici'}
@@ -117,6 +119,7 @@ export default function App() {
         {activeTab === 'twopage' && <TwoPageSiteKit />}
         {activeTab === 'districts' && <DistrictPagesSection />}
         {activeTab === 'instagram' && <SocialSection />}
+        {activeTab === 'social-planner' && <SocialPortfolioPlanner />}
         {activeTab === 'calendar' && <WeeklyPlanSection />}
         {activeTab === 'website' && <SiteSeoSection />}
         {activeTab === 'generator' && <QuickFieldGenerator />}

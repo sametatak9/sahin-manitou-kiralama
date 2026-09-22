@@ -33,10 +33,11 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
     { id: 'twopage', label: '12. 2-Sayfalı Site & Search Console' },
     { id: 'districts', label: '13. İlçe Pazar Alanları (SEO)' },
     { id: 'instagram', label: '14. Instagram & Post Rehberi' },
-    { id: 'calendar', label: '15. Haftalık İçerik Planı' },
-    { id: 'website', label: '16. Web Site SEO & Schema' },
-    { id: 'generator', label: '17. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '18. Görev & Sorumluluklar' }
+    { id: 'social-planner', label: '15. Sosyal Portföy, Arşiv & Planlama' },
+    { id: 'calendar', label: '16. Haftalık İçerik Planı' },
+    { id: 'website', label: '17. Web Site SEO & Schema' },
+    { id: 'generator', label: '18. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '19. Görev & Sorumluluklar' }
   ];
 
   return (
