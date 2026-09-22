@@ -20,22 +20,23 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
   const navItems = [
     { id: 'intelligence', label: '📊 1. Sosyal Medya İstihbaratı, Bütçe & Müşteri Avcısı' },
-    { id: 'feasibility', label: '📐 2. Ada/Parsel Sorgu & Mimari Fizibilite' },
-    { id: 'contracts', label: '📑 3. Şantiye İSG & Hukuki Sözleşmeler' },
-    { id: 'creative', label: '🎨 4. Esprili Meme, Çevreci Kimlik & Özel Günler' },
-    { id: 'executive', label: '⭐ 5. Yönetici Komuta, Günlük Bülten & AI Bot' },
-    { id: 'hunter', label: '6. Şantiye Avcısı & İş Bulma' },
-    { id: 'reels', label: '7. Viral Reels & Video Senaryoları' },
-    { id: 'leads', label: '8. Şantiye & İş Takip CRM' },
-    { id: 'gbp', label: '9. Google GBP & Yerel SEO' },
-    { id: 'quote', label: '10. 30sn Teklif & WhatsApp' },
-    { id: 'twopage', label: '11. 2-Sayfalı Site & Search Console' },
-    { id: 'districts', label: '12. İlçe Pazar Alanları (SEO)' },
-    { id: 'instagram', label: '13. Instagram & Post Rehberi' },
-    { id: 'calendar', label: '14. Haftalık İçerik Planı' },
-    { id: 'website', label: '15. Web Site SEO & Schema' },
-    { id: 'generator', label: '16. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '17. Görev & Sorumluluklar' }
+    { id: 'investors', label: '💼 2. Müşteri & Sermaye Portföyü, Kâr & Reklam Planı (Supabase)' },
+    { id: 'feasibility', label: '📐 3. Ada/Parsel Sorgu & Mimari Fizibilite' },
+    { id: 'contracts', label: '📑 4. Şantiye İSG & Hukuki Sözleşmeler' },
+    { id: 'creative', label: '🎨 5. Esprili Meme, Çevreci Kimlik & Özel Günler' },
+    { id: 'executive', label: '⭐ 6. Yönetici Komuta, Günlük Bülten & AI Bot' },
+    { id: 'hunter', label: '7. Şantiye Avcısı & İş Bulma' },
+    { id: 'reels', label: '8. Viral Reels & Video Senaryoları' },
+    { id: 'leads', label: '9. Şantiye & İş Takip CRM' },
+    { id: 'gbp', label: '10. Google GBP & Yerel SEO' },
+    { id: 'quote', label: '11. 30sn Teklif & WhatsApp' },
+    { id: 'twopage', label: '12. 2-Sayfalı Site & Search Console' },
+    { id: 'districts', label: '13. İlçe Pazar Alanları (SEO)' },
+    { id: 'instagram', label: '14. Instagram & Post Rehberi' },
+    { id: 'calendar', label: '15. Haftalık İçerik Planı' },
+    { id: 'website', label: '16. Web Site SEO & Schema' },
+    { id: 'generator', label: '17. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '18. Görev & Sorumluluklar' }
   ];
 
   return (

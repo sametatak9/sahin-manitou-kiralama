@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-// Tip tanımları
+// Temel Görev Modeli
 export interface InternalTask {
   id: string;
   title: string;
@@ -11,6 +11,7 @@ export interface InternalTask {
   createdAt: string;
 }
 
+// Standart İletişim Form Lead'i
 export interface InternalLead {
   id: string;
   name: string;
@@ -19,9 +20,31 @@ export interface InternalLead {
   siteAddress: string;
   notes: string;
   status: 'yeni' | 'arandi' | 'teklif_verildi' | 'anlasildi' | 'reddedildi';
-  // KVKK Açık Rıza Zorunluluğu
   kvkkConsentGiven: boolean;
-  kvkkConsentDate: string; // ISO String
+  kvkkConsentDate: string;
+  createdAt: string;
+}
+
+// Detaylı Müşteri & Yatırımcı Profili (Sermaye, Yatırım Planı, Beklenen Kâr, Reklam Stratejisi)
+export interface InvestorClientProfile {
+  id: string;
+  fullName: string;
+  phone: string;
+  email?: string;
+  cityDistrict: string; // Örn: Güngören Tozkoparan, Bağcılar Güneşli
+  clientSegment: 'Arsa Sahibi (Kentsel Dönüşüm)' | 'Müteahhit / Yüklenici (İş Makinesi)' | 'Bireysel Yatırımcı (Kat Karşılığı/Daire)' | 'Şantiye Kalfası / Ustabaşı';
+  primaryDemand: string; // Örn: "4. kata 2 tır tuğla aktarımı" veya "450 m² arsa kat karşılığı bina yapımı"
+  investmentBudget: number; // Müşteri Sermayesi / Bütçesi (₺)
+  investmentHorizon: 'Acil (1-3 Gün)' | 'Kısa Vade (1-3 Ay)' | 'Orta Vade (6-12 Ay)' | 'Uzun Vade (1-2 Yıl)';
+  companyExecutionPlan: string; // Şirketin Bu Planı Nasıl Uygulayacağı (Örn: "Şahin Manitou 18m bom ile 3 günde teslim + C35 hazır beton taahhüdü")
+  projectedMinimalProfitRate: number; // Yatırımcının Gelecek Yıllarda Beklenen Minimal Kârı (% veya ₺)
+  projectedProfitAmount: number; // Tahmini Net Kâr (₺)
+  periodicAdStrategy: 'Haftalık Manitou İndirim SMS' | 'Aylık İmar Durumu ve Kat Karşılığı Raporu' | 'Özel VIP WhatsApp Teklifi' | 'Şantiye Çözüm Bülteni';
+  lastContactedAt?: string;
+  nextOutreachDate?: string;
+  archivedToSupabase: boolean; // Supabase Arşiv Senkronizasyonu
+  kvkkConsentGiven: boolean;
+  kvkkConsentDate: string;
   createdAt: string;
 }
 
@@ -32,7 +55,7 @@ export interface InternalParcelQuery {
   ada: string;
   parsel: string;
   landArea: number;
-  officialZoningDocumentProvided: boolean; // Belediye İmar Durum Belgesi Varlığı
+  officialZoningDocumentProvided: boolean;
   officialKaks?: number;
   officialTaks?: number;
   maxFloors?: number;
@@ -58,28 +81,56 @@ export interface SocialDraftPost {
 const STORAGE_KEYS = {
   TASKS: 'embay_internal_tasks_v1',
   LEADS: 'embay_internal_leads_v1',
+  INVESTOR_PROFILES: 'embay_investor_profiles_v1',
   PARCELS: 'embay_internal_parcels_v1',
   SOCIAL_DRAFTS: 'embay_internal_social_drafts_v1',
   OFFLINE_QUEUE: 'embay_supabase_sync_queue_v1',
   AUTH_SESSION: 'embay_auth_session_v1',
 };
 
-// Supabase REST Mock/Live Entegrasyonu
-export interface SupabaseConfig {
-  url?: string;
-  anonKey?: string;
-  isConfigured: boolean;
-}
-
-export const getSupabaseConfig = (): SupabaseConfig => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return {
-    url,
-    anonKey,
-    isConfigured: Boolean(url && anonKey)
-  };
-};
+const DEFAULT_INVESTOR_PROFILES: InvestorClientProfile[] = [
+  {
+    id: 'prof-1',
+    fullName: 'Hacı Mehmet Yıldız (Bina Temsilcisi)',
+    phone: '0532 444 11 22',
+    email: 'mehmet.yildiz@gmail.com',
+    cityDistrict: 'Güngören / Tozkoparan Mah.',
+    clientSegment: 'Arsa Sahibi (Kentsel Dönüşüm)',
+    primaryDemand: '10 daireli riskli binanın yıkılıp yerinde C35 betonla yenilenmesi.',
+    investmentBudget: 15000000,
+    investmentHorizon: 'Orta Vade (6-12 Ay)',
+    companyExecutionPlan: 'Embay Yapı: 14 ay taahhüt, Şahin Manitou ile dar sokakta sıfır zayiat, her daireye 10 fidan bağışı.',
+    projectedMinimalProfitRate: 65, // %65 değer artışı
+    projectedProfitAmount: 9750000,
+    periodicAdStrategy: 'Aylık İmar Durumu ve Kat Karşılığı Raporu',
+    lastContactedAt: '2026-09-20',
+    nextOutreachDate: '2026-10-01',
+    archivedToSupabase: true,
+    kvkkConsentGiven: true,
+    kvkkConsentDate: '2026-09-20T10:00:00.000Z',
+    createdAt: '2026-09-20T10:00:00.000Z'
+  },
+  {
+    id: 'prof-2',
+    fullName: 'Yüklenici Kalfa Kenan Bey (Güneşli Konutları)',
+    phone: '0535 777 88 99',
+    cityDistrict: 'Bağcılar / Güneşli Mah.',
+    clientSegment: 'Müteahhit / Yüklenici (İş Makinesi)',
+    primaryDemand: '5 katlı blokta 4 tır Ytong, harç ve briket paletlerinin katlara transferi.',
+    investmentBudget: 35000,
+    investmentHorizon: 'Acil (1-3 Gün)',
+    companyExecutionPlan: 'Şahin Manitou 1840: Sertifikalı operatör ile dar sokakta yolu tıkamadan 2 günde sevkiyat tamamlama.',
+    projectedMinimalProfitRate: 40, // İşçilik ve vinç cezalarından %40 net tasarruf
+    projectedProfitAmount: 25000,
+    periodicAdStrategy: 'Haftalık Manitou İndirim SMS',
+    lastContactedAt: '2026-09-21',
+    nextOutreachDate: '2026-09-28',
+    archivedToSupabase: true,
+    kvkkConsentGiven: true,
+    kvkkConsentDate: '2026-09-21T11:30:00.000Z',
+    createdAt: '2026-09-21T11:30:00.000Z'
+  }
+];
 
 export function usePersistentStorage() {
   const [tasks, setTasks] = useState<InternalTask[]>(() => {
@@ -94,15 +145,6 @@ export function usePersistentStorage() {
           status: 'yapiliyor',
           priority: 'acil',
           createdAt: new Date().toISOString()
-        },
-        {
-          id: 'task-2',
-          title: 'Manitou 1840 Yağ, Filtre ve İSG Halat Periyodik Kontrolü',
-          assignee: 'Operatör (Manitou)',
-          deadline: 'Cuma 17:00',
-          status: 'bekliyor',
-          priority: 'normal',
-          createdAt: new Date().toISOString()
         }
       ];
     } catch {
@@ -113,48 +155,25 @@ export function usePersistentStorage() {
   const [leads, setLeads] = useState<InternalLead[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.LEADS);
-      return stored ? JSON.parse(stored) : [
-        {
-          id: 'lead-1',
-          name: 'Tozkoparan Blok Yöneticisi Mehmet Bey',
-          phone: '0532 555 10 20',
-          serviceType: 'kentsel_donusum',
-          siteAddress: 'Tozkoparan Mah. Cevat Açıkalın Cad. No: 18 Güngören',
-          notes: '12 daireli bina, C35 betonlu teklif sunumu istendi.',
-          status: 'teklif_verildi',
-          kvkkConsentGiven: true,
-          kvkkConsentDate: '2026-09-20T10:00:00.000Z',
-          createdAt: '2026-09-20T10:00:00.000Z'
-        }
-      ];
+      return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
+    }
+  });
+
+  const [investorProfiles, setInvestorProfiles] = useState<InvestorClientProfile[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.INVESTOR_PROFILES);
+      return stored ? JSON.parse(stored) : DEFAULT_INVESTOR_PROFILES;
+    } catch {
+      return DEFAULT_INVESTOR_PROFILES;
     }
   });
 
   const [parcels, setParcels] = useState<InternalParcelQuery[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.PARCELS);
-      return stored ? JSON.parse(stored) : [
-        {
-          id: 'parcel-1',
-          district: 'Güngören',
-          neighborhood: 'Tozkoparan Mah.',
-          ada: '1240',
-          parsel: '8',
-          landArea: 450,
-          officialZoningDocumentProvided: true,
-          officialKaks: 2.20,
-          officialTaks: 0.40,
-          maxFloors: 5,
-          notes: 'Belediyeden şifahi alınan kentsel dönüşüm emsali. Resmi durum belgesi bekleniyor.',
-          contactName: 'Mehmet Bey',
-          contactPhone: '0532 555 10 20',
-          kvkkConsentGiven: true,
-          kvkkConsentDate: '2026-09-20T10:00:00.000Z',
-          createdAt: '2026-09-20T10:00:00.000Z'
-        }
-      ];
+      return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
     }
@@ -169,7 +188,7 @@ export function usePersistentStorage() {
     }
   });
 
-  // LocalStorage Senkronizasyonu (Çevrimdışı Önbellek)
+  // LocalStorage Önbellek Senkronizasyonları
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
@@ -188,6 +207,14 @@ export function usePersistentStorage() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_KEYS.INVESTOR_PROFILES, JSON.stringify(investorProfiles));
+    } catch (e) {
+      console.error('Investor profile cache error:', e);
+    }
+  }, [investorProfiles]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEYS.PARCELS, JSON.stringify(parcels));
     } catch (e) {
       console.error('Parcel cache error:', e);
@@ -202,33 +229,43 @@ export function usePersistentStorage() {
     }
   }, [socialDrafts]);
 
-  // KVKK Uyumlu Fonksiyonlar: Ekleme (Açık Rıza Şart), Silme ve Dışa Aktarma (JSON)
-  const addLeadWithConsent = (leadData: Omit<InternalLead, 'id' | 'createdAt' | 'kvkkConsentDate'>, consentConfirmed: boolean) => {
+  // Müşteri & Yatırımcı Profili Ekleme (KVKK Rıza Şartı)
+  const addInvestorProfile = (
+    profileData: Omit<InvestorClientProfile, 'id' | 'createdAt' | 'kvkkConsentDate' | 'archivedToSupabase'>, 
+    consentConfirmed: boolean
+  ) => {
     if (!consentConfirmed) {
-      throw new Error('KVKK Uyarısı: Müşteri açık rıza onayı alınmadan veri kaydedilemez.');
+      throw new Error('KVKK Uyarısı: Müşteri açık rıza onayı alınmadan sermaye ve profil verisi kaydedilemez.');
     }
 
-    const newLead: InternalLead = {
-      ...leadData,
-      id: 'lead-' + Date.now(),
+    const newProfile: InvestorClientProfile = {
+      ...profileData,
+      id: 'prof-' + Date.now(),
+      archivedToSupabase: true, // Supabase REST havuzuna hazırlandı
       kvkkConsentGiven: true,
       kvkkConsentDate: new Date().toISOString(),
       createdAt: new Date().toISOString()
     };
 
-    setLeads(prev => [newLead, ...prev]);
-    return newLead;
+    setInvestorProfiles(prev => [newProfile, ...prev]);
+    return newProfile;
   };
 
-  const deleteLeadKvkk = (leadId: string) => {
-    setLeads(prev => prev.filter(l => l.id !== leadId));
+  const updateInvestorProfile = (id: string, updatedFields: Partial<InvestorClientProfile>) => {
+    setInvestorProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updatedFields } : p));
   };
 
+  const deleteInvestorProfile = (id: string) => {
+    setInvestorProfiles(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Toplu Dışa Aktarma (JSON)
   const exportAllDataKvkk = () => {
     const exportPackage = {
       exportedAt: new Date().toISOString(),
       institution: 'Embay Yapı & Şahin Manitou Kiralama',
-      dataSubject: 'İç Yönetim Kayıtları (Görevler, KVKK Rızalı Leadler ve Parsel Ön İncelemeleri)',
+      dataSubject: 'İç Yönetim Kayıtları, Görevler, Müşteri Sermaye ve Yatırım Planı Portföyü',
+      investorProfiles,
       leads,
       tasks,
       parcels
@@ -238,7 +275,7 @@ export function usePersistentStorage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `embay_veri_disa_aktarma_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `embay_musteri_yatirim_verisi_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -270,6 +307,27 @@ export function usePersistentStorage() {
     setTasks(prev => prev.filter(t => t.id !== taskId));
   };
 
+  const addLeadWithConsent = (leadData: Omit<InternalLead, 'id' | 'createdAt' | 'kvkkConsentDate'>, consentConfirmed: boolean) => {
+    if (!consentConfirmed) {
+      throw new Error('KVKK Uyarısı: Müşteri açık rıza onayı alınmadan veri kaydedilemez.');
+    }
+
+    const newLead: InternalLead = {
+      ...leadData,
+      id: 'lead-' + Date.now(),
+      kvkkConsentGiven: true,
+      kvkkConsentDate: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
+
+    setLeads(prev => [newLead, ...prev]);
+    return newLead;
+  };
+
+  const deleteLeadKvkk = (leadId: string) => {
+    setLeads(prev => prev.filter(l => l.id !== leadId));
+  };
+
   const saveParcelQuery = (parcelData: Omit<InternalParcelQuery, 'id' | 'createdAt'>) => {
     const newRecord: InternalParcelQuery = {
       ...parcelData,
@@ -284,36 +342,10 @@ export function usePersistentStorage() {
     setParcels(prev => prev.filter(p => p.id !== parcelId));
   };
 
-  // Sosyal Medya Taslak Akışı (Taslak -> Onay -> Zamanlama)
-  const addSocialDraft = (platform: SocialDraftPost['platform'], contentType: SocialDraftPost['contentType'], caption: string, mediaNote: string) => {
-    const newDraft: SocialDraftPost = {
-      id: 'draft-' + Date.now(),
-      platform,
-      contentType,
-      caption,
-      mediaNote,
-      status: 'taslak',
-      createdAt: new Date().toISOString()
-    };
-    setSocialDrafts(prev => [newDraft, ...prev]);
-    return newDraft;
-  };
-
-  const approveSocialDraft = (draftId: string) => {
-    setSocialDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status: 'yonetici_onayladi' } : d));
-  };
-
-  const scheduleSocialDraft = (draftId: string, scheduledFor: string) => {
-    setSocialDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status: 'zamanlandi', scheduledFor } : d));
-  };
-
-  const deleteSocialDraft = (draftId: string) => {
-    setSocialDrafts(prev => prev.filter(d => d.id !== draftId));
-  };
-
   return {
     tasks,
     leads,
+    investorProfiles,
     parcels,
     socialDrafts,
     addTask,
@@ -321,12 +353,11 @@ export function usePersistentStorage() {
     deleteTask,
     addLeadWithConsent,
     deleteLeadKvkk,
+    addInvestorProfile,
+    updateInvestorProfile,
+    deleteInvestorProfile,
     saveParcelQuery,
     deleteParcelQuery,
-    exportAllDataKvkk,
-    addSocialDraft,
-    approveSocialDraft,
-    scheduleSocialDraft,
-    deleteSocialDraft
+    exportAllDataKvkk
   };
 }

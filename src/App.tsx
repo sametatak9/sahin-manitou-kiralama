@@ -3,6 +3,7 @@ import { SupabaseAuthGate } from './components/SupabaseAuthGate';
 import { Header } from './components/Header';
 import { MobileQuickActions } from './components/MobileQuickActions';
 import { SocialIntelligenceCockpit } from './components/SocialIntelligenceCockpit';
+import { ClientInvestorCrm } from './components/ClientInvestorCrm';
 import { GbpSeoSection } from './components/GbpSeoSection';
 import { ParcelFeasibilityStudio } from './components/ParcelFeasibilityStudio';
 import { LegalContractStudio } from './components/LegalContractStudio';
@@ -80,6 +81,7 @@ export default function App() {
           <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
           <span className="text-white font-medium capitalize">
             {activeTab === 'intelligence' && 'Sosyal Medya İstihbaratı, Gönderi Etiket Analizi, Pazarlama Maliyeti & Müşteri Avcısı'}
+            {activeTab === 'investors' && 'Müşteri & Sermaye Portföyü, Yatırım Planı, Kâr Analizi & Otomatik Reklam Stratejisi (Supabase)'}
             {activeTab === 'feasibility' && 'Ada / Parsel İmar Hesaplama, Simülasyon & Temsili 3D Mimari Proje Kartı'}
             {activeTab === 'contracts' && 'Şantiye İSG & İş Makinesi Kiralama Sözleşmesi / Kentsel Dönüşüm Ön Protokolü'}
             {activeTab === 'creative' && 'Esprili Şantiye Mizahı (Meme), Sıfır Atık & Özel Gün Duyarlılığı'}
@@ -100,6 +102,7 @@ export default function App() {
         </div>
 
         {activeTab === 'intelligence' && <SocialIntelligenceCockpit />}
+        {activeTab === 'investors' && <ClientInvestorCrm />}
         {activeTab === 'feasibility' && <ParcelFeasibilityStudio />}
         {activeTab === 'contracts' && <LegalContractStudio />}
         {activeTab === 'creative' && <CreativeBrandStudio />}
