@@ -95,6 +95,9 @@ export function ParcelFeasibilityStudio() {
   const [landArea, setLandArea] = useState<number>(450); // m²
   const [currentApartmentCount, setCurrentApartmentCount] = useState<number>(10);
   const [sharePercent, setSharePercent] = useState<number>(50); // Müteahhit %50 / Arsa Sahibi %50
+  const [hasOfficialDocument, setHasOfficialDocument] = useState<boolean>(false);
+  const [userCustomKaks, setUserCustomKaks] = useState<number | ''>('');
+  const [userCustomTaks, setUserCustomTaks] = useState<number | ''>('');
 
   // 3D Toplantı & Çalışma Masası Etkileşim State'leri
   const [activeViewMode, setActiveViewMode] = useState<'3d_isometric' | 'floor_plan' | 'satellite'>('3d_isometric');
@@ -106,9 +109,13 @@ export function ParcelFeasibilityStudio() {
 
   const preset = ZONING_PRESETS[selectedPresetKey] || ZONING_PRESETS['Güngören - Tozkoparan (Kentsel Dönüşüm Rezervi)'];
 
+  // Kural 6: Emsal/TAKS uydurma yok; kullanıcı resmi belge girmişse onu, yoksa belediye bölge planını uygula
+  const effectiveKaks = userCustomKaks ? Number(userCustomKaks) : preset.kaks;
+  const effectiveTaks = userCustomTaks ? Number(userCustomTaks) : preset.taks;
+
   // İmar ve Mimari Matematik Hesaplamaları
-  const baseFloorArea = Math.round(landArea * preset.taks); // Taban alanı
-  const totalConstructionArea = Math.round(landArea * preset.kaks); // Emsale dahil inşaat alanı
+  const baseFloorArea = Math.round(landArea * effectiveTaks); // Taban alanı
+  const totalConstructionArea = Math.round(landArea * effectiveKaks); // Emsale dahil inşaat alanı
   const grossConstructionArea = Math.round(totalConstructionArea * 1.30); // Ortak alanlar, sığınak, otopark ile brüt alan
   const newApartmentCount = Math.floor(totalConstructionArea / preset.averageFlatSqm);
   const commercialShopCount = landArea >= 400 ? 2 : 1;
@@ -122,13 +129,15 @@ export function ParcelFeasibilityStudio() {
   const landOwnerValueAdded = landOwnerApartments * (preset.averageFlatSqm * preset.marketSqmPrice);
 
   const proposalWhatsAppText = `🏢 EMBAY YAPI | ARSA & KENTSEL DÖNÜŞÜM ÖN FİZİBİLİTE RAPORU
+⚠️ YASAL UYARI: Bu hesaplama ön fizibilite mahiyetinde olup resmi değildir; ilgili belediyeden alınacak güncel İmar Durum Belgesi esastır.
 
 📍 Konum: ${district} / ${neighborhood}
 📌 Ada: ${ada} | Parsel: ${parsel}
 📐 Arsa Alanı: ${landArea} m²
+📄 Resmi İmar Belgesi Durumu: ${hasOfficialDocument ? 'Resmi Belge İbraz Edildi' : 'Bölge Tip İmar Planı Esas Alındı (Ön Taslak)'}
 ---------------------------------------------
-📐 İMAR & PROJE KAPASİTESİ:
-• Emsal (KAKS): ${preset.kaks} | Taban Alanı: ${baseFloorArea} m²
+📐 İMAR & PROJE KAPASİTESİ (ÖN TAHMİN):
+• Emsal (KAKS): ${effectiveKaks} | Taban Alanı: ${baseFloorArea} m²
 • Toplam Emsal İnşaat Alanı: ${totalConstructionArea} m²
 • Kat Adedi: Zemin + ${preset.maxFloors - 1} Kat (Toplam ${preset.maxFloors} Kat)
 • Üretilecek Bağımsız Bölüm: ${newApartmentCount} Lüks Daire (${preset.averageFlatSqm} m²) + ${commercialShopCount} Dükkan
@@ -249,6 +258,46 @@ Adres: Cevat Açıkalın Cad. Tozkoparan Mah. Güngören / İstanbul`;
                   className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500 font-mono"
                 />
               </div>
+            </div>
+
+            {/* Resmi Belediye İmar Durum Belgesi Onayı & Manuel Emsal Girişi */}
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={hasOfficialDocument}
+                  onChange={e => setHasOfficialDocument(e.target.checked)}
+                  className="rounded text-emerald-500"
+                />
+                <span>Belediye Resmi İmar Durum Belgesi Mevcut</span>
+              </label>
+
+              {hasOfficialDocument && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-[10px] text-emerald-400 block mb-0.5">Resmi Emsal (KAKS)</label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      placeholder={String(preset.kaks)}
+                      value={userCustomKaks}
+                      onChange={e => setUserCustomKaks(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-emerald-400 block mb-0.5">Resmi Taban (TAKS)</label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      placeholder={String(preset.taks)}
+                      value={userCustomTaks}
+                      onChange={e => setUserCustomTaks(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Paylaşım Oranı Slider */}

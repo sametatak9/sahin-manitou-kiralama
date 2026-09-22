@@ -51,7 +51,10 @@ export function LegalContractStudio() {
   const urbanContractId = useId();
 
   // 1. MANİTOU ŞANTİYE İŞ MAKİNESİ KİRALAMA & İSG SÖZLEŞMESİ METNİ
-  const manitouContractText = `İŞ MAKİNESİ KİRALAMA VE İSG UYGULAMA SÖZLEŞMESİ
+  const manitouContractText = `⚠️ TASLAK — AVUKAT VE İSG UZMANI ONAYI OLMADAN İMZALANMAZ ⚠️
+[Bu belge bir ön çalışma taslağıdır; şantiye başlangıcında A/B/C sınıfı yetkili İSG Uzmanı ve şirket avukatı onayı esastır.]
+
+İŞ MAKİNESİ KİRALAMA VE İSG UYGULAMA TAAHHÜTNAMESİ (TASLAK)
 
 1. TARAFLAR:
 KİRAYA VEREN: Şahin Manitou Kiralama & Embay Yapı (Tel: ${BUSINESS_INFO.phone})
@@ -70,21 +73,24 @@ Operatör Durumu: ${operatorIncluded ? 'Sertifikalı G Sınıfı Ehliyetli Şahi
 Yakıt Durumu: ${fuelIncluded ? 'Yakıt Kiraya Verene Aittir' : 'Yakıt Kiralayana Aittir'}
 Kiralama Bedeli & Şartı: ${rentalRate}
 
-4. İŞ SAĞLIĞI VE GÜVENLİĞİ (İSG) TAAHHÜTNAMESİ:
+4. İŞ SAĞLIĞI VE GÜVENLİĞİ (İSG) TAAHHÜTNAMESİ (İSG UZMANI ONAYI GEREKİR):
 a) Şantiye alanında çalışma bölgesinin emniyet şeritleriyle çevrilmesi, yayaların ve çevre araç trafiğinin güvenliğinin sağlanması KİRALAYAN şantiye sorumluluğundadır.
 b) Tır veya kamyondan malzeme alınırken dar sokak trafiğinin yönlendirilmesi için KİRALAYAN sahada en az bir işaretçi/sapancı personel bulunduracaktır.
 c) KİRAYA VEREN operatörü, makine kaldırma kapasite tablosunu aşan veya can/mal güvenliğini tehlikeye atan riskli operasyonları durdurma yetkisine sahiptir.
-d) Makine periyodik muayenesi ve operatör İSG belgeleri tamdır.
+d) Makine periyodik muayenesi ve operatör İSG belgeleri tamdır; sahada görevli İSG Uzmanı çalışma izni verecektir.
 
 5. İMZA VE KABUL:
-İşbu sözleşme taraflarca okunup dijital/ıslak onay ile yürürlüğe girmiştir.
+İşbu taslak taraflarca okunup yetkili hukuk ve İSG onaylarını müteakip yürürlüğe girer.
 
 KİRAYA VEREN                          KİRALAYAN
 Şahin Manitou Kiralama                ${customerName}
 İmza / Kaşe                           İmza / Kaşe`;
 
   // 2. EMBAY YAPI KENTSEL DÖNÜŞÜM ÖN PROTOKOLÜ
-  const urbanTransformationText = `KENTSEL DÖNÜŞÜM VE YERİNDE YENİLEME ÖN PROTOKOLÜ
+  const urbanTransformationText = `⚠️ TASLAK — AVUKAT ONAYI OLMADAN İMZALANMAZ ⚠️
+[Bu belge ön iyi niyet protokolü taslağıdır; noter huzurunda Kat Karşılığı İnşaat Sözleşmesi yapılmadan bağlayıcı kesin hak doğurmaz.]
+
+KENTSEL DÖNÜŞÜM VE YERİNDE YENİLEME ÖN İLKELER PROTOKOLÜ (TASLAK)
 
 1. TARAFLAR:
 YÜKLENİCİ MÜTEAHHİT: Embay Yapı (Tel: ${BUSINESS_INFO.phone})
@@ -102,7 +108,7 @@ c) Tahmini İnşaat ve Anahtar Teslim Süresi: İnşaat ruhsatının alınmasın
 d) Hak sahipleriyle resmi noter sözleşmesi öncesi statik avan proje ve daire paylaşım krokisi karşılıklı mutabakatla kesinleştirilecektir.
 
 4. HUKUKİ NİTELİK:
-İşbu belge, resmi noter kat karşılığı veya taahhüt sözleşmesine esas teşkil eden iyi niyet ve prensip protokolüdür.
+İşbu belge, resmi noter kat karşılığı veya taahhüt sözleşmesine esas teşkil eden iyi niyet ve prensip protokolü taslağıdır.
 
 YÜKLENİCİ FİRMA                      HAK SAHİBİ / BİNA TEMSİLCİSİ
 Embay Yapı İnşaat Taahhüt             ${landOwnerName}

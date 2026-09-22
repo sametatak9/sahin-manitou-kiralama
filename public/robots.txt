@@ -1,6 +1,2 @@
-# robots.txt for https://sahin-manitou-kiralama.vercel.app/
 User-agent: *
-Allow: /
-
-# Sitemap
-Sitemap: https://sahin-manitou-kiralama.vercel.app/sitemap.xml
+Disallow: /
