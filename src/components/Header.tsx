@@ -20,17 +20,18 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
   const navItems = [
     { id: 'gbp', label: '1. Google GBP & Yerel SEO' },
-    { id: 'hunter', label: '2. Şantiye Avcısı & İş Bulma' },
-    { id: 'reels', label: '3. Viral Reels & Video Senaryoları' },
-    { id: 'leads', label: '4. Şantiye & İş Takip CRM' },
-    { id: 'quote', label: '5. 30sn Teklif & WhatsApp' },
-    { id: 'twopage', label: '6. 2-Sayfalı Site & Search Console' },
-    { id: 'districts', label: '7. İlçe Pazar Alanları (SEO)' },
-    { id: 'instagram', label: '8. Instagram & Post Rehberi' },
-    { id: 'calendar', label: '9. Haftalık İçerik Planı' },
-    { id: 'website', label: '10. Web Site SEO & Schema' },
-    { id: 'generator', label: '11. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '12. Görev & Sorumluluklar' }
+    { id: 'executive', label: '⭐ 2. Yönetici Komuta, Günlük Bülten & AI Bot' },
+    { id: 'hunter', label: '3. Şantiye Avcısı & İş Bulma' },
+    { id: 'reels', label: '4. Viral Reels & Video Senaryoları' },
+    { id: 'leads', label: '5. Şantiye & İş Takip CRM' },
+    { id: 'quote', label: '6. 30sn Teklif & WhatsApp' },
+    { id: 'twopage', label: '7. 2-Sayfalı Site & Search Console' },
+    { id: 'districts', label: '8. İlçe Pazar Alanları (SEO)' },
+    { id: 'instagram', label: '9. Instagram & Post Rehberi' },
+    { id: 'calendar', label: '10. Haftalık İçerik Planı' },
+    { id: 'website', label: '11. Web Site SEO & Schema' },
+    { id: 'generator', label: '12. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '13. Görev & Sorumluluklar' }
   ];
 
   return (
