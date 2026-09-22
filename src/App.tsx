@@ -5,6 +5,7 @@ import { MobileQuickActions } from './components/MobileQuickActions';
 import { GbpSeoSection } from './components/GbpSeoSection';
 import { CustomerLeadHub } from './components/CustomerLeadHub';
 import { ProjectHunterHub } from './components/ProjectHunterHub';
+import { ViralSocialEngine } from './components/ViralSocialEngine';
 import { QuickQuoteCalculator } from './components/QuickQuoteCalculator';
 import { TwoPageSiteKit } from './components/TwoPageSiteKit';
 import { DistrictPagesSection } from './components/DistrictPagesSection';
@@ -100,6 +101,7 @@ export default function App() {
 
             {activeTab === 'gbp' && <GbpSeoSection />}
             {activeTab === 'hunter' && <ProjectHunterHub />}
+            {activeTab === 'reels' && <ViralSocialEngine />}
             {activeTab === 'leads' && <CustomerLeadHub />}
             {activeTab === 'quote' && <QuickQuoteCalculator />}
             {activeTab === 'twopage' && <TwoPageSiteKit />}
