@@ -19,7 +19,7 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
   };
 
   const navItems = [
-    { id: 'gbp', label: '1. Google GBP & Yerel SEO' },
+    { id: 'intelligence', label: '📊 1. Sosyal Medya İstihbaratı, Bütçe & Müşteri Avcısı' },
     { id: 'feasibility', label: '📐 2. Ada/Parsel Sorgu & Mimari Fizibilite' },
     { id: 'contracts', label: '📑 3. Şantiye İSG & Hukuki Sözleşmeler' },
     { id: 'creative', label: '🎨 4. Esprili Meme, Çevreci Kimlik & Özel Günler' },
@@ -27,14 +27,15 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
     { id: 'hunter', label: '6. Şantiye Avcısı & İş Bulma' },
     { id: 'reels', label: '7. Viral Reels & Video Senaryoları' },
     { id: 'leads', label: '8. Şantiye & İş Takip CRM' },
-    { id: 'quote', label: '9. 30sn Teklif & WhatsApp' },
-    { id: 'twopage', label: '10. 2-Sayfalı Site & Search Console' },
-    { id: 'districts', label: '11. İlçe Pazar Alanları (SEO)' },
-    { id: 'instagram', label: '12. Instagram & Post Rehberi' },
-    { id: 'calendar', label: '13. Haftalık İçerik Planı' },
-    { id: 'website', label: '14. Web Site SEO & Schema' },
-    { id: 'generator', label: '15. Anlık Şantiye Post Üretici' },
-    { id: 'boundaries', label: '16. Görev & Sorumluluklar' }
+    { id: 'gbp', label: '9. Google GBP & Yerel SEO' },
+    { id: 'quote', label: '10. 30sn Teklif & WhatsApp' },
+    { id: 'twopage', label: '11. 2-Sayfalı Site & Search Console' },
+    { id: 'districts', label: '12. İlçe Pazar Alanları (SEO)' },
+    { id: 'instagram', label: '13. Instagram & Post Rehberi' },
+    { id: 'calendar', label: '14. Haftalık İçerik Planı' },
+    { id: 'website', label: '15. Web Site SEO & Schema' },
+    { id: 'generator', label: '16. Anlık Şantiye Post Üretici' },
+    { id: 'boundaries', label: '17. Görev & Sorumluluklar' }
   ];
 
   return (

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SupabaseAuthGate } from './components/SupabaseAuthGate';
 import { Header } from './components/Header';
 import { MobileQuickActions } from './components/MobileQuickActions';
+import { SocialIntelligenceCockpit } from './components/SocialIntelligenceCockpit';
 import { GbpSeoSection } from './components/GbpSeoSection';
 import { ParcelFeasibilityStudio } from './components/ParcelFeasibilityStudio';
 import { LegalContractStudio } from './components/LegalContractStudio';
@@ -31,7 +32,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<string>('feasibility');
+  const [activeTab, setActiveTab] = useState<string>('intelligence');
 
   const handleLogout = () => {
     localStorage.removeItem('embay_auth_session_v1');
@@ -78,6 +79,7 @@ export default function App() {
           <span className="text-emerald-400 font-semibold">Aktif İç Panel Modülü:</span>
           <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
           <span className="text-white font-medium capitalize">
+            {activeTab === 'intelligence' && 'Sosyal Medya İstihbaratı, Gönderi Etiket Analizi, Pazarlama Maliyeti & Müşteri Avcısı'}
             {activeTab === 'feasibility' && 'Ada / Parsel İmar Hesaplama, Simülasyon & Temsili 3D Mimari Proje Kartı'}
             {activeTab === 'contracts' && 'Şantiye İSG & İş Makinesi Kiralama Sözleşmesi / Kentsel Dönüşüm Ön Protokolü'}
             {activeTab === 'creative' && 'Esprili Şantiye Mizahı (Meme), Sıfır Atık & Özel Gün Duyarlılığı'}
@@ -97,6 +99,7 @@ export default function App() {
           </span>
         </div>
 
+        {activeTab === 'intelligence' && <SocialIntelligenceCockpit />}
         {activeTab === 'feasibility' && <ParcelFeasibilityStudio />}
         {activeTab === 'contracts' && <LegalContractStudio />}
         {activeTab === 'creative' && <CreativeBrandStudio />}
