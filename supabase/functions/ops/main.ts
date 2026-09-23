@@ -532,7 +532,11 @@ Deno.serve(async (req) => {
       const out: Record<string, unknown> = {};
       for (const p of ['anthropic', 'gemini', 'openai'] as const) {
         const key = await getAiKey(p);
-        out[p] = key ? { source: panel.has(p) ? 'panel' : 'sunucu', last4: key.slice(-4), ...(await liveKeyTest(p, key)) } : { source: null };
+        if (!key) { out[p] = { source: null }; continue; }
+        const body = await req.clone().json().catch(() => ({}));
+        const models: string[] = Array.isArray(body?.models?.[p]) ? body.models[p].slice(0, 6) : [];
+        out[p] = { source: panel.has(p) ? 'panel' : 'sunucu', last4: key.slice(-4), ...(await liveKeyTest(p, key)),
+          ...(models.length ? { models: Object.fromEntries(await Promise.all(models.map(async (m) => [m, (await liveKeyTest(p, key, m)).detail]))) } : {}) };
       }
       return json(out);
     }
