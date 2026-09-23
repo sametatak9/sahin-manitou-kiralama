@@ -11,6 +11,7 @@ export function SupabaseAuthGate({ onAuthenticated }: AuthGateProps) {
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -54,6 +55,20 @@ export function SupabaseAuthGate({ onAuthenticated }: AuthGateProps) {
     setIsLoading(false);
   };
 
+  const handlePasswordReset = async () => {
+    setErrorMsg('');
+    setResetSent(false);
+    if (!supabase || !email.trim()) {
+      setErrorMsg('Şifre sıfırlama bağlantısı için önce e-posta adresinizi yazın.');
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/?reset=1`,
+    });
+    if (error) setErrorMsg('Şifre sıfırlama e-postası gönderilemedi. E-posta adresini kontrol edin.');
+    else setResetSent(true);
+  };
+
   if (isLoading) {
     return <div className="min-h-screen bg-slate-950 text-slate-300 flex items-center justify-center text-sm">Oturum kontrol ediliyor...</div>;
   }
@@ -73,6 +88,8 @@ export function SupabaseAuthGate({ onAuthenticated }: AuthGateProps) {
           <label className="block"><span className="text-slate-300 font-semibold block mb-1.5">Şifre</span><input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500" /></label>
           {errorMsg && <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0 text-rose-400" /><span>{errorMsg}</span></div>}
           <button type="submit" disabled={isLoading} className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition disabled:opacity-50"><ShieldCheck className="w-4 h-4" /><span>Güvenli Giriş Yap</span><ArrowRight className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={handlePasswordReset} className="w-full text-xs text-slate-400 hover:text-emerald-300 transition">Şifremi sıfırlama bağlantısı gönder</button>
+          {resetSent && <p className="text-center text-xs text-emerald-300">Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.</p>}
         </form>
         <div className="pt-4 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-center gap-2"><ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /><span>Supabase Auth ile korunan yönetici oturumu</span></div>
       </div>
