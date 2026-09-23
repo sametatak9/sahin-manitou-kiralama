@@ -30,6 +30,14 @@ Sosyal yönetim sekmesi; Instagram, Facebook, X, YouTube, WhatsApp Business ve G
 
 Grok veya başka bir model yalnızca izinli connector verisini sınıflandırma, özetleme, içerik varyantı, lead önceliklendirme ve reklam önerisi için kullanacaktır. Model doğrudan yayınlama, fiyat taahhüdü, hukuki beyan, müşteri adına mesaj gönderme veya hassas kişisel veri kararı veremeyecek; her çıktı audit kaydı ve approval kuyruğundan geçecektir.
 
+## Gelecek faz: AI görüşleri ve platform bot orkestrasyonu
+
+Yönetici ekranında seçilen platforma göre değişen bir **AI Görüşleri** alanı bulunacaktır. Bu alan güncel sektör gündemi, izinli trend verileri, memeler, özel günler, çevre/farkındalık projeleri ve inşaat/iş makinesi içerik fırsatlarını özetleyecek; gönderi paylaşma, düzenleme, bekletme veya iptal yönlendirmesi sunacaktır. Son karar yönetici onayında kalacaktır.
+
+Her platform botu kendi günlük listesini ve görev kuyruğunu oluşturacaktır: içerik önerileri, izinli etkileşim adayları, gelen yorum/mesaj sınıflandırması, profil/lead adayı ve takip sonucu ayrı tutulacaktır. İnşaat ve iş makinesi gruplarındaki etkileşimlerden kişi/profil tespiti yalnızca resmi API, açıkça izinli veri akışı veya kullanıcının sağladığı kayıtlar üzerinden yapılacak; gizli profil taraması, otomatik takip, izinsiz beğeni/yorum ve toplu tanıtım mesajı yapılmayacaktır. Tanıtım iletişimi için iletişim izni, KVKK dayanağı, son temas tarihi, frekans sınırı, opt-out ve insan onayı saklanacaktır.
+
+Telegram fazı, platformlar arasında bilgi alışverişi ve yönetici bildirimleri için değerlendirilecektir; bot gruplara otomatik katılmayacak, özel mesaj başlatmayacak veya izinsiz veri toplamayacaktır. İzinli kaynaklardan gelen görevler, müşteri portföyü adayları ve AI önerileri ortak bir olay/audit kuyruğunda birleştirilecek; gerektiğinde bu veri sağlayan sistem ayrı bir kurumsal hizmet paketi olarak sunulabilecek, ancak her müşteri için tenant ayrımı, veri sahipliği, silme/export ve erişim kayıtları zorunlu olacaktır.
+
 ## Marka ve içerik sınırı
 
 Public tarafta müşteri ve arama motorlarının görmesi gereken marka/hizmet içeriği bulunacak; yapay zeka talimatları, iç operasyon notları, promptlar, test PIN'leri, yönetici açıklamaları ve panel verileri public sayfaya taşınmayacaktır. İçerik etik, gerçek ve doğrulanabilir olacak; sahte yorum, spam, otomatik arama sorgusu ve manipülatif SEO kullanılmayacaktır.
