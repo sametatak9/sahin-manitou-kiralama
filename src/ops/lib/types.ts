@@ -61,7 +61,7 @@ export interface ConnectorStatus {
   capabilities: { publish: boolean; metrics: boolean; messaging: boolean; design: boolean }; docsUrl: string; note: string; status: string;
   accounts: Array<{ id: string; platform: string; connection_status: string; external_account_name: string | null; token_expires_at: string | null; last_verified_at: string | null; last_error: string | null }>;
 }
-export interface OpsStatus { ai: { anthropic: boolean; openai: boolean; gemini: boolean }; connectors: ConnectorStatus[]; worker_last_seen: string | null; canva_connected: boolean; redirect_uri: string }
+export interface OpsStatus { ai: { anthropic: boolean; openai: boolean; gemini: boolean; groq?: boolean }; connectors: ConnectorStatus[]; worker_last_seen: string | null; canva_connected: boolean; redirect_uri: string }
 
 export interface MissionFinding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;

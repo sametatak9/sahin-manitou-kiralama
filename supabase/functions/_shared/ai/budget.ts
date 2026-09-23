@@ -12,6 +12,7 @@ const PRICE: Array<{ match: RegExp; inp: number; out: number }> = [
   { match: /^gpt-4o-mini|^gpt-4\.1-nano|^gpt-5-nano/, inp: 0.15, out: 0.6 },
   { match: /^gpt-/, inp: 2.5, out: 10 },
   { match: /^gemini/, inp: 0.3, out: 2.5 }, // ücretsiz katmanda 0; ücretli olursa üst sınır tahmini
+  { match: /^(groq\/|llama|openai\/gpt-oss|qwen|moonshot)/, inp: 0.15, out: 0.6 }, // Groq ücretsiz katmanda 0; ücretli üst sınır tahmini
 ];
 const WEB_SEARCH_USD = 0.01; // Anthropic web araması: 1000 aramada 10 $
 

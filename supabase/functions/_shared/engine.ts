@@ -138,11 +138,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
         const errStr = String((agentErr as Error)?.message || agentErr);
         const isQuota = /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing/i.test(errStr);
         if (isQuota) {
-          const fallbacks: Array<'gemini' | 'anthropic' | 'openai'> = ctx.agent!.provider === 'anthropic'
-            ? ['gemini', 'openai']
-            : ctx.agent!.provider === 'gemini'
-            ? ['anthropic', 'openai']
-            : ['anthropic', 'gemini'];
+          const fallbacks = (['anthropic', 'gemini', 'groq', 'openai'] as const).filter((p) => p !== ctx.agent!.provider);
           let recovered = false;
           for (const fallback of fallbacks) {
             try {
@@ -150,7 +146,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
               const altAgent = {
                 ...ctx.agent!,
                 provider: fallback,
-                model: fallback === 'gemini' ? 'gemini-flash-latest' : fallback === 'openai' ? 'gpt-4o-mini' : 'claude-sonnet-5'
+                model: fallback === 'gemini' ? 'gemini-flash-latest' : fallback === 'openai' ? 'gpt-4o-mini' : fallback === 'groq' ? 'llama-3.3-70b-versatile' : 'claude-sonnet-5'
               };
               res = await getProvider(fallback).runAgent(altAgent, {
                 system, prompt, maxTurns: 8,

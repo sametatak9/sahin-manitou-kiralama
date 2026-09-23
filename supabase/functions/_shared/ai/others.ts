@@ -1,6 +1,6 @@
 // OpenAI ve Gemini adaptörleri (resmi REST uçları). Anahtar yoksa CONFIGURATION_REQUIRED.
 import { ConfigurationRequiredError, extractJson } from './types.ts';
-import { getAiKey } from './keys.ts';
+import { getAiKey, GROQ_URL, type KeyProvider } from './keys.ts';
 import type { AgentConfig, AgentRunInput, AgentRunResult, AIProvider, CompleteInput, CompleteResult } from './types.ts';
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown) {
@@ -11,21 +11,23 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
 }
 
 // ── OpenAI (Chat Completions + function calling) ─────────────────────────────
-async function openaiKey() {
-  const k = await getAiKey('openai');
-  if (!k) throw new ConfigurationRequiredError('OPENAI_API_KEY');
-  return k;
-}
-
-export const openaiProvider: AIProvider = {
-  name: 'openai',
+/** OpenAI ve OpenAI uyumlu sağlayıcılar (Groq) için ortak adaptör. */
+function openAiCompatible(name: 'openai' | 'groq', url: string, envName: string): AIProvider {
+  const openaiKey = async () => {
+    const k = await getAiKey(name as KeyProvider);
+    if (!k) throw new ConfigurationRequiredError(envName);
+    return k;
+  };
+  return {
+  name,
   async complete(agent: AgentConfig, input: CompleteInput): Promise<CompleteResult> {
     const body: Record<string, unknown> = {
       model: agent.model, max_completion_tokens: agent.max_tokens,
       messages: [{ role: 'system', content: input.system }, { role: 'user', content: input.prompt }],
     };
-    if (input.schema) body.response_format = { type: 'json_schema', json_schema: { name: 'output', schema: input.schema, strict: false } };
-    const data = await postJson('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${await openaiKey()}` }, body);
+    // Groq her modelde json_schema desteklemiyor: orada JSON metinden ayrıştırılır
+    if (input.schema && name === 'openai') body.response_format = { type: 'json_schema', json_schema: { name: 'output', schema: input.schema, strict: false } };
+    const data = await postJson(url, { authorization: `Bearer ${await openaiKey()}` }, body);
     const text = data.choices?.[0]?.message?.content ?? '';
     return { text, json: input.schema ? extractJson(text) : null, usage: { tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }, stopReason: data.choices?.[0]?.finish_reason ?? '' };
   },
@@ -38,7 +40,7 @@ export const openaiProvider: AIProvider = {
     let turns = 0; let toolCalls = 0; let finalText = ''; let stopReason = '';
     while (turns < input.maxTurns) {
       turns++;
-      const data = await postJson('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${key}` }, { model: agent.model, max_completion_tokens: agent.max_tokens, messages, tools });
+      const data = await postJson(url, { authorization: `Bearer ${key}` }, { model: agent.model, max_completion_tokens: agent.max_tokens, messages, tools });
       usage.tokensIn += data.usage?.prompt_tokens ?? 0; usage.tokensOut += data.usage?.completion_tokens ?? 0;
       const msg = data.choices?.[0]?.message; stopReason = data.choices?.[0]?.finish_reason ?? '';
       messages.push(msg);
@@ -55,6 +57,10 @@ export const openaiProvider: AIProvider = {
     return { finalText, turns, toolCalls, stopReason, usage };
   },
 };
+}
+
+export const openaiProvider = openAiCompatible('openai', 'https://api.openai.com/v1/chat/completions', 'OPENAI_API_KEY');
+export const groqProvider = openAiCompatible('groq', GROQ_URL, 'GROQ_API_KEY');
 
 // ── Google Gemini (generateContent + functionDeclarations) ──────────────────
 async function geminiKey() {

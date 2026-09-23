@@ -62,6 +62,7 @@ export async function loadAgent(db: Db, agentId: string | null, fallbackKey = 'c
   if (!(await getAiKey(agent.provider))) {
     if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-sonnet-5' };
     if (agent.provider !== 'gemini' && (await getAiKey('gemini'))) return { ...agent, provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest' };
+    if (agent.provider !== 'groq' && (await getAiKey('groq'))) return { ...agent, provider: 'groq', model: Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile' };
   }
   return agent;
 }

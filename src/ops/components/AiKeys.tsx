@@ -7,10 +7,11 @@ import { fmtDateTime } from '../lib/format';
 import { useSession } from '../session';
 import { Button, Notice, Panel, Pill } from '../ui';
 
-interface KeyRow { provider: 'anthropic' | 'gemini' | 'openai'; last4: string; updated_at: string; verified_at: string | null; verify_error: string | null }
+interface KeyRow { provider: 'anthropic' | 'gemini' | 'openai' | 'groq'; last4: string; updated_at: string; verified_at: string | null; verify_error: string | null }
 const PROVIDERS = [
   { id: 'anthropic' as const, name: 'Anthropic Claude', note: 'Varsayılan. Web araması ve sayfa okuma ile en iyi araştırma.', url: 'https://console.anthropic.com/settings/keys', prefix: 'sk-ant-' },
-  { id: 'gemini' as const, name: 'Google Gemini', note: 'Yedek & Failover sağlayıcı (Google arama ile). Claude limiti dolunca anında devreye girer.', url: 'https://aistudio.google.com/app/apikey', prefix: 'AIza' },
+  { id: 'gemini' as const, name: 'Google Gemini', note: 'ÜCRETSİZ (kart gerekmez, günlük sınırlı). Google arama ile araştırır. Claude çalışmazsa otomatik devreye girer.', url: 'https://aistudio.google.com/app/apikey', prefix: 'AIza' },
+  { id: 'groq' as const, name: 'Groq (Llama)', note: 'ÜCRETSİZ yedek (kart gerekmez, e-posta ile üyelik). Web araması yapabilir. Claude ve Gemini çalışmazsa devreye girer.', url: 'https://console.groq.com/keys', prefix: 'gsk_' },
   { id: 'openai' as const, name: 'OpenAI GPT-4o', note: 'Alternatif sağlayıcı (Yedek analitik ve içerik motoru).', url: 'https://platform.openai.com/api-keys', prefix: 'sk-' },
 ];
 
@@ -19,10 +20,10 @@ export function AiKeysPanel({ compact = false }: { compact?: boolean }) {
   const q = useQuery(async () => {
     const [{ data }, env] = await Promise.all([
       db().from('ai_provider_keys').select('provider,last4,updated_at,verified_at,verify_error'),
-      callMissions<{ anthropic: boolean; gemini: boolean; openai: boolean }>('ai_status').catch(() => null),
+      callMissions<{ anthropic: boolean; gemini: boolean; openai: boolean; groq?: boolean }>('ai_status').catch(() => null),
     ]);
     return { rows: (data ?? []) as KeyRow[], active: env };
-  }, { rows: [] as KeyRow[], active: null as { anthropic: boolean; gemini: boolean; openai: boolean } | null }, []);
+  }, { rows: [] as KeyRow[], active: null as { anthropic: boolean; gemini: boolean; openai: boolean; groq?: boolean } | null }, []);
   const [val, setVal] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -47,7 +48,7 @@ export function AiKeysPanel({ compact = false }: { compact?: boolean }) {
       <div className="mb-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 flex items-start gap-2">
         <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
         <p className="text-[11px] text-ink-300">
-          <b className="text-emerald-700">Otomatik yedekleme (failover):</b> Claude’un kredisi/limiti dolarsa görevler, anahtarı tanımlı olan yedek sağlayıcıyla (<b>Gemini</b>; içerik botlarında <b>OpenAI</b> de) devam eder. Yedek anahtar tanımlı değilse görev “kredi bitti” hatasıyla durur.
+          <b className="text-emerald-700">Otomatik yedekleme (failover):</b> Claude’un kredisi/limiti dolarsa görevler sırayla <b>Gemini</b> ve <b>Groq</b> ile (içerik botlarında <b>OpenAI</b> de) devam eder. Yedek anahtar tanımlı değilse görev “kredi bitti” hatasıyla durur.
         </p>
       </div>
       <div className="space-y-3">

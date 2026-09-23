@@ -4,7 +4,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 import { budgetBlock, recordUsage } from './ai/budget.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, extractJson } from './ai/types.ts';
-import { getAiKey } from './ai/keys.ts';
+import { getAiKey, GROQ_URL } from './ai/keys.ts';
 
 type Db = SupabaseClient;
 
@@ -138,7 +138,7 @@ export const ERROR_KIND: Record<string, string> = {
 };
 
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
-interface AiChoice { provider: 'anthropic' | 'gemini'; model: string; system: string; key: string }
+interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq'; model: string; system: string; key: string }
 async function chooseAi(db: Db, botId: string | null, preferred?: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
   if (botId) {
@@ -151,6 +151,8 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
   if (ak) return { provider: 'anthropic', model: preferred?.startsWith('claude-') ? preferred : agent?.provider === 'anthropic' ? agent.model : 'claude-sonnet-5', system: base, key: ak };
   const gk = await getAiKey('gemini');
   if (gk) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base, key: gk };
+  const qk = await getAiKey('groq');
+  if (qk) return { provider: 'groq', model: GROQ_RESEARCH_MODEL(), system: base, key: qk };
   return null;
 }
 
@@ -221,35 +223,58 @@ async function geminiResearch(key: string, model: string, system: string, prompt
   return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0, searches: data.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length ?? 0, model, provider: 'gemini' };
 }
 
-async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
-  try {
-    if (c.provider === 'anthropic') {
-      return await anthropicResearch(c.key, c.model, c.system, prompt);
-    } else {
-      return await geminiResearch(c.key, c.model, c.system, prompt);
-    }
-  } catch (err) {
-    const errStr = String((err as Error)?.message || err);
+const GROQ_RESEARCH_MODEL = () => Deno.env.get('GROQ_MODEL') || 'groq/compound';
 
-    if (isQuotaOrRateLimit(err)) {
-      if (c.provider === 'anthropic') {
-        const gk = await getAiKey('gemini');
-        if (gk) {
-          if (onFailover) await onFailover(`Claude kullanılamadı (${errStr.slice(0, 80)}) — yedek Gemini ile devam ediliyor.`);
-          try { return await geminiResearch(gk, Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', c.system, prompt); }
-          catch (e2) { throw new AiFatalError(err instanceof AiFatalError ? err.kind : 'ai_credit', `${errStr.slice(0, 120)} · yedek Gemini de çalışmadı: ${String((e2 as Error).message).slice(0, 120)}`); }
-        }
-      } else if (c.provider === 'gemini') {
-        const ak = await getAiKey('anthropic');
-        if (ak) {
-          if (onFailover) await onFailover(`Gemini kullanılamadı (${errStr.slice(0, 80)}) — yedek Claude ile devam ediliyor.`);
-          try { return await anthropicResearch(ak, 'claude-opus-5', c.system, prompt); }
-          catch (e2) { throw new AiFatalError(err instanceof AiFatalError ? err.kind : 'ai_credit', `${errStr.slice(0, 120)} · yedek Claude da çalışmadı: ${String((e2 as Error).message).slice(0, 120)}`); }
-        }
-      }
-    }
-    throw err;
+/** Groq (ücretsiz katman): compound modeli web aramasını kendi içinde yapar; kaynak adresleri çalıştırılan araç çıktılarından alınır. */
+async function groqResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+  if (!key) throw new ConfigurationRequiredError('GROQ_API_KEY');
+  const res = await fetch(GROQ_URL, {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_completion_tokens: 3000 }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = JSON.stringify(data).slice(0, 300);
+    if (res.status === 401 || res.status === 403) throw new AiFatalError('ai_auth', `Groq anahtarı reddedildi (${res.status})`);
+    if (res.status === 429) throw new AiFatalError('ai_credit', 'Groq ücretsiz kullanım sınırı doldu (rate_limit) — biraz sonra tekrar dener');
+    throw new Error(`Groq ${res.status}: ${detail}`);
   }
+  const msg = data.choices?.[0]?.message ?? {};
+  const text = String(msg.content ?? '');
+  // deno-lint-ignore no-explicit-any
+  const tools: any[] = Array.isArray(msg.executed_tools) ? msg.executed_tools : [];
+  const sources: Source[] = [];
+  const seen = new Set<string>();
+  for (const u of JSON.stringify(tools).match(/https?:\/\/[^\s"'\\<>)]+/g) ?? []) { const c = u.replace(/[.,;]+$/, ''); if (!seen.has(c)) { seen.add(c); sources.push({ url: c }); } }
+  return { text, sources: sources.slice(0, 40), tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0,
+    searches: tools.filter((t) => /search/i.test(String(t?.type ?? t?.name ?? ''))).length, model, provider: 'groq' };
+}
+
+const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', groq: 'Groq' };
+function research(provider: string, key: string, model: string, system: string, prompt: string) {
+  if (provider === 'anthropic') return anthropicResearch(key, model, system, prompt);
+  if (provider === 'gemini') return geminiResearch(key, model, system, prompt);
+  return groqResearch(key, model, system, prompt);
+}
+const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p === 'gemini' ? (Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest') : GROQ_RESEARCH_MODEL());
+
+/** Sırayla dener: seçilen sağlayıcı → diğerleri (Claude, Gemini, Groq). Kredi/anahtar/limit hatasında bir sonrakine geçer. */
+async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
+  const chain = [c.provider, ...['anthropic', 'gemini', 'groq'].filter((p) => p !== c.provider)];
+  const errors: string[] = [];
+  let firstErr: unknown = null; let prev: string = c.provider;
+  for (const p of chain) {
+    const key = p === c.provider ? c.key : await getAiKey(p as 'anthropic' | 'gemini' | 'groq');
+    if (!key) continue;
+    if (p !== c.provider) {
+      if (!isQuotaOrRateLimit(firstErr)) break; // ilk hata kredi/anahtar/limit değilse yedeğe geçme
+      if (onFailover) await onFailover(`${AI_LABEL[prev]} kullanılamadı (${String((firstErr as Error)?.message || firstErr).slice(0, 80)}) — yedek ${AI_LABEL[p]} ile devam ediliyor.`);
+    }
+    try { return await research(p, key, p === c.provider ? c.model : defaultModel(p), c.system, prompt); }
+    catch (e) { errors.push(`${AI_LABEL[p]}: ${String((e as Error).message || e).slice(0, 140)}`); firstErr ??= e; prev = p; }
+  }
+  if (errors.length <= 1 && firstErr) throw firstErr;
+  throw new AiFatalError(firstErr instanceof AiFatalError ? firstErr.kind : 'ai_credit', errors.join(' · '));
 }
 
 function isQuotaOrRateLimit(err: unknown): boolean {

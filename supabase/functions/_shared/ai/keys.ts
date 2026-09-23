@@ -1,8 +1,10 @@
 // AI sağlayıcı anahtar çözümleyici: önce panelden girilip Vault'ta saklanan anahtar, yoksa Edge Function Secrets.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 
-export type KeyProvider = 'anthropic' | 'gemini' | 'openai';
-const ENV: Record<KeyProvider, string> = { anthropic: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY' };
+export type KeyProvider = 'anthropic' | 'gemini' | 'openai' | 'groq';
+const ENV: Record<KeyProvider, string> = { anthropic: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', groq: 'GROQ_API_KEY' };
+/** Groq (ücretsiz katman, kart gerekmez): OpenAI uyumlu uç. compound modeli kendi içinde web araması yapar. */
+export const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 let db: SupabaseClient | null = null;
 const cache = new Map<KeyProvider, { v: string | null; at: number }>();
 
@@ -23,8 +25,8 @@ export async function getAiKey(p: KeyProvider): Promise<string | null> {
 }
 
 export async function aiKeyAvailability() {
-  const [anthropic, gemini, openai] = await Promise.all([getAiKey('anthropic'), getAiKey('gemini'), getAiKey('openai')]);
-  return { anthropic: Boolean(anthropic), gemini: Boolean(gemini), openai: Boolean(openai) };
+  const [anthropic, gemini, openai, groq] = await Promise.all([getAiKey('anthropic'), getAiKey('gemini'), getAiKey('openai'), getAiKey('groq')]);
+  return { anthropic: Boolean(anthropic), gemini: Boolean(gemini), openai: Boolean(openai), groq: Boolean(groq) };
 }
 
 export async function markAiKey(p: KeyProvider, ok: boolean, error?: string) {
@@ -41,8 +43,8 @@ export async function liveKeyTest(p: KeyProvider, key: string, model?: string): 
       : p === 'gemini'
         ? await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model || Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest')}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
             body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ok' }] }], generationConfig: { maxOutputTokens: 5 } }) })
-        : await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-            body: JSON.stringify({ model: model || 'gpt-4o-mini', max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }) });
+        : await fetch(p === 'groq' ? GROQ_URL : 'https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ model: model || (p === 'groq' ? 'llama-3.1-8b-instant' : 'gpt-4o-mini'), max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }) });
     if (r.ok) return { ok: true, detail: 'Çalışıyor (gerçek cevap üretti)' };
     const t = (await r.text()).slice(0, 500);
     const why = /credit balance|billing|insufficient_quota|exceeded your current quota/i.test(t) ? 'hesapta bakiye/kredi yok — sağlayıcı hesabına bakiye yükleyin'

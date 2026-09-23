@@ -2,7 +2,7 @@
 
 export interface AgentConfig {
   id?: string;
-  provider: 'anthropic' | 'openai' | 'gemini';
+  provider: 'anthropic' | 'openai' | 'gemini' | 'groq';
   model: string;
   temperature: number;
   max_tokens: number;
