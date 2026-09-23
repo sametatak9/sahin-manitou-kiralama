@@ -100,7 +100,14 @@ function CredentialsPanel() {
       for (const f of entries) unwrap(await db().rpc('set_app_credential', { p_name: f.name, p_value: vals[f.name].trim() }));
       await callOps('reload_secrets');
       setVals((v) => { const n = { ...v }; entries.forEach((f) => delete n[f.name]); return n; });
-      setMsg({ tone: 'ok', text: `${g.title}: ${entries.length} bilgi şifreli olarak kaydedildi. Artık Uygulamalar sekmesinden “Bağla” diyebilirsiniz.` });
+      // Meta / Google: kaydedilen bilgiler hemen gerçek sağlayıcıya sorularak test edilir
+      if (g.id === 'meta' || g.id === 'google') {
+        const v = await callOps<{ checks: Array<{ state: string; label: string; detail: string; fix?: string }> }>('verify_app', { provider: g.id });
+        const bad = v.checks.filter((c) => c.state !== 'ok');
+        setMsg(bad.length
+          ? { tone: 'error', text: `${g.title}: kaydedildi ama canlı test başarısız — ${bad.map((c) => `${c.label}: ${c.detail}${c.fix ? ` → ${c.fix}` : ''}`).join(' · ')}` }
+          : { tone: 'ok', text: `${g.title}: kaydedildi ve canlı test geçti (${v.checks.map((c) => c.label).join(', ')}). Artık Uygulamalar sekmesinden “Hesabımla bağla” diyebilirsiniz.` });
+      } else setMsg({ tone: 'ok', text: `${g.title}: ${entries.length} bilgi şifreli olarak kaydedildi. Artık Uygulamalar sekmesinden “Bağla” diyebilirsiniz.` });
       saved.reload(); status.reload();
     } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };

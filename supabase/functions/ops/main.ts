@@ -10,7 +10,7 @@ import { aiComplete, loadAgent, serviceClient, type Db, type EngineCtx, type Tas
 import { executeTask } from '../_shared/engine.ts';
 import { CONNECTORS, connectorByKey, publicConnectorInfo } from '../_shared/connectors/registry.ts';
 import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
-import { metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
+import { graphVersion, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { processDueApprovals, publishContent, syncMetrics } from '../_shared/publisher.ts';
@@ -95,6 +95,56 @@ async function status(db: Db) {
   return { ai: await providerAvailability(), connectors, worker_last_seen: lastRun?.created_at ?? null, canva_connected: Boolean(canva?.length), redirect_uri: REDIRECT_URI() };
 }
 
+// ── Uygulama giriş bilgilerinin canlı doğrulaması: Meta / Google'a gerçekten sorulur (secret döndürülmez) ──
+async function verifyApp(provider: 'meta' | 'google'): Promise<Check[]> {
+  const out: Check[] = [];
+  const host = new URL(REDIRECT_URI()).hostname;
+  if (provider === 'meta') {
+    const id = secret('META_APP_ID'); const sec = secret('META_APP_SECRET');
+    if (!id || !sec) return [{ key: 'verify:meta', group: 'Uygulamalar', label: 'Meta uygulama bilgileri (canlı test)', state: 'warn', detail: 'Uygulama Kimliği / Gizli Anahtar girilmemiş', fix: 'Uygulamalar → Giriş bilgileri → Meta' }];
+    try {
+      const r = await fetch(`https://graph.facebook.com/${graphVersion()}/oauth/access_token?grant_type=client_credentials&client_id=${encodeURIComponent(id)}&client_secret=${encodeURIComponent(sec)}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.access_token) {
+        out.push({ key: 'verify:meta', group: 'Uygulamalar', label: 'Meta Uygulama Kimliği + Gizli Anahtar', state: 'fail', detail: `Facebook reddetti: ${d.error?.message ?? `HTTP ${r.status}`}`, fix: 'developers.facebook.com → Uygulama Ayarları → Temel → “Uygulama Gizli Anahtarı”nı “Göster” ile açıp tamamını (32 karakter) kopyalayın' });
+        return out;
+      }
+      out.push({ key: 'verify:meta', group: 'Uygulamalar', label: 'Meta Uygulama Kimliği + Gizli Anahtar', state: 'ok', detail: 'Facebook doğruladı' });
+      const a = await fetch(`https://graph.facebook.com/${graphVersion()}/${encodeURIComponent(id)}?fields=name,app_domains,website_url&access_token=${encodeURIComponent(d.access_token)}`);
+      const app = await a.json().catch(() => ({}));
+      const domains: string[] = app.app_domains ?? [];
+      const okDomain = domains.some((x) => x.replace(/^https?:\/\//, '').replace(/\/.*$/, '') === host);
+      out.push({ key: 'verify:meta:domain', group: 'Uygulamalar', label: `Meta uygulama alan adı${app.name ? ` (${app.name})` : ''}`, state: okDomain ? 'ok' : 'fail',
+        detail: okDomain ? `${host} ekli` : `“Uygulama Alan Adları”nda ${host} yok (şu an: ${domains.join(', ') || 'boş'}). Facebook “URL Yüklenemedi” hatası bundan çıkar.`,
+        fix: okDomain ? undefined : 'Uygulamalar sayfasının altındaki kutudan adresleri kopyalayıp Meta ayarlarına yapıştırın' });
+    } catch (e) { out.push({ key: 'verify:meta', group: 'Uygulamalar', label: 'Meta (canlı test)', state: 'warn', detail: `Bağlantı hatası: ${String(e).slice(0, 120)}` }); }
+    return out;
+  }
+  const cid = secret('GOOGLE_CLIENT_ID'); const csec = secret('GOOGLE_CLIENT_SECRET');
+  if (!cid || !csec) return [{ key: 'verify:google', group: 'Uygulamalar', label: 'Google uygulama bilgileri (canlı test)', state: 'warn', detail: 'İstemci kimliği / gizli anahtar girilmemiş', fix: 'Uygulamalar → Giriş bilgileri → Google' }];
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ code: 'embay-dogrulama', client_id: cid, client_secret: csec, redirect_uri: REDIRECT_URI(), grant_type: 'authorization_code' }) });
+    const d = await r.json().catch(() => ({}));
+    const credOk = d.error === 'invalid_grant';
+    out.push({ key: 'verify:google', group: 'Uygulamalar', label: 'Google istemci kimliği + gizli anahtar', state: credOk ? 'ok' : 'fail',
+      detail: credOk ? 'Google doğruladı' : `Google reddetti: ${d.error_description ?? d.error ?? `HTTP ${r.status}`}`,
+      fix: credOk ? undefined : 'Google Cloud → Kimlik bilgileri → OAuth istemcisi: “İstemci gizli anahtarı” GOCSPX- ile başlar; istemci kimliği ile karıştırmayın' });
+    const u = new URL(googleAuthorizeUrl('embay-dogrulama', REDIRECT_URI()));
+    const a = await fetch(u, { redirect: 'manual' });
+    const loc = a.headers.get('location') ?? '';
+    let mismatch = false;
+    if (loc.includes('/signin/oauth/error')) {
+      const raw = new URL(loc).searchParams.get('authError') ?? '';
+      try { mismatch = atob(raw.replace(/-/g, '+').replace(/_/g, '/')).includes('redirect_uri_mismatch'); } catch { mismatch = true; }
+    }
+    const bad = loc.includes('/signin/oauth/error');
+    out.push({ key: 'verify:google:redirect', group: 'Uygulamalar', label: 'Google yönlendirme adresi', state: bad ? 'fail' : 'ok',
+      detail: bad ? (mismatch ? 'Google Cloud’da “Yetkili yönlendirme URI’leri”ne bizim adres eklenmemiş (redirect_uri_mismatch)' : 'Google giriş ekranı hata veriyor') : 'Google giriş ekranı açılıyor',
+      fix: bad ? 'Uygulamalar sayfasının altındaki kutudan adresi kopyalayıp Google Cloud → OAuth istemcisi → Yetkili yönlendirme URI’lerine ekleyin' : undefined });
+  } catch (e) { out.push({ key: 'verify:google', group: 'Uygulamalar', label: 'Google (canlı test)', state: 'warn', detail: `Bağlantı hatası: ${String(e).slice(0, 120)}` }); }
+  return out;
+}
+
 // ── Sistem kontrolü: her parça gerçekten çalışıyor mu? (secret değerleri döndürülmez) ──
 type Check = { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail'; detail: string; fix?: string };
 async function systemCheck(db: Db) {
@@ -153,6 +203,8 @@ async function systemCheck(db: Db) {
     }
     checks.push({ key: `app:${k}`, group: 'Uygulamalar', label: def.name, state, detail, fix });
   }
+  if (secret('META_APP_ID') || secret('META_APP_SECRET')) checks.push(...await verifyApp('meta'));
+  if (secret('GOOGLE_CLIENT_ID') || secret('GOOGLE_CLIENT_SECRET')) checks.push(...await verifyApp('google'));
   const summary = { ok: checks.filter((c) => c.state === 'ok').length, warn: checks.filter((c) => c.state === 'warn').length, fail: checks.filter((c) => c.state === 'fail').length };
   return { checked_at: new Date().toISOString(), summary, checks, redirect_uri: REDIRECT_URI() };
 }
@@ -381,6 +433,8 @@ async function api(db: Db, req: Request) {
 
     // Panelden giriş bilgisi girildikten sonra önbelleği yeniler
     case 'reload_secrets': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return { ok: true }; }
+
+    case 'verify_app': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return { checks: await verifyApp(body.provider === 'google' ? 'google' : 'meta') }; }
 
     case 'system_check': { await requireUser(db, req); resetAppSecrets(); await loadAppSecrets(db); return systemCheck(db); }
 
