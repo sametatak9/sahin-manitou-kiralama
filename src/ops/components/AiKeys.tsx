@@ -10,7 +10,7 @@ import { Button, Notice, Panel, Pill } from '../ui';
 interface KeyRow { provider: 'anthropic' | 'gemini' | 'openai' | 'groq'; last4: string; updated_at: string; verified_at: string | null; verify_error: string | null }
 const PROVIDERS = [
   { id: 'anthropic' as const, name: 'Anthropic Claude', note: 'Varsayılan. Web araması ve sayfa okuma ile en iyi araştırma.', url: 'https://console.anthropic.com/settings/keys', prefix: 'sk-ant-' },
-  { id: 'gemini' as const, name: 'Google Gemini', note: 'ÜCRETSİZ (kart gerekmez, günlük sınırlı). Google arama ile araştırır. Claude çalışmazsa otomatik devreye girer.', url: 'https://aistudio.google.com/app/apikey', prefix: 'AIza' },
+  { id: 'gemini' as const, name: 'Google Gemini', note: 'ÜCRETSİZ (kart gerekmez, günlük sınırlı). Google arama ile araştırır. Claude çalışmazsa otomatik devreye girer.', url: 'https://aistudio.google.com/app/apikey', prefix: '' },
   { id: 'groq' as const, name: 'Groq (Llama)', note: 'ÜCRETSİZ yedek (kart gerekmez, e-posta ile üyelik). Web araması yapabilir. Claude ve Gemini çalışmazsa devreye girer.', url: 'https://console.groq.com/keys', prefix: 'gsk_' },
   { id: 'openai' as const, name: 'OpenAI GPT-4o', note: 'Alternatif sağlayıcı (Yedek analitik ve içerik motoru).', url: 'https://platform.openai.com/api-keys', prefix: 'sk-' },
 ];

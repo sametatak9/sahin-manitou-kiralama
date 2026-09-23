@@ -11,7 +11,6 @@ begin
   if length(v_key) < 20 or v_key ~ '\s' then raise exception 'Anahtar biçimi geçersiz'; end if;
   if p_provider = 'anthropic' and v_key !~ '^sk-ant-' then raise exception 'Anthropic anahtarı sk-ant- ile başlamalı'; end if;
   if p_provider = 'groq' and v_key !~ '^gsk_' then raise exception 'Groq anahtarı gsk_ ile başlamalı'; end if;
-  if p_provider = 'gemini' and v_key !~ '^AIza' then raise exception 'Gemini anahtarı AIza ile başlamalı'; end if;
   select secret_id into v_existing from public.ai_provider_keys where provider = p_provider;
   if v_existing is not null then
     perform vault.update_secret(v_existing, v_key);
