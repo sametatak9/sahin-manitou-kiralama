@@ -1,4 +1,4 @@
-// Uygulama giriş bilgileri çözümleyici: önce Edge Function Secrets, yoksa panelden girilip Vault'ta saklanan değer.
+// Uygulama giriş bilgileri çözümleyici: önce panelden girilip Vault'ta saklanan değer, yoksa Edge Function Secrets.
 // İstek başında loadAppSecrets() bir kez çağrılır (60 sn önbellek); sonra secret() senkron okunur.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 
@@ -16,5 +16,6 @@ export async function loadAppSecrets(db: SupabaseClient) {
 export function resetAppSecrets() { loadedAt = 0; }
 
 export function secret(name: string): string | undefined {
-  return Deno.env.get(name) || vaulted[name] || undefined;
+  // Panelden girilen değer önceliklidir (sunucudaki eski değeri ezer)
+  return vaulted[name] || Deno.env.get(name) || undefined;
 }

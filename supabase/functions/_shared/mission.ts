@@ -202,7 +202,12 @@ async function geminiResearch(key: string, model: string, system: string, prompt
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const detail = JSON.stringify(data).slice(0, 300);
-    if (res.status === 401 || res.status === 403 || /API_KEY_INVALID|API key not valid/i.test(detail)) throw new AiFatalError('ai_auth', `Gemini anahtarı reddedildi (${res.status})`);
+    if (res.status === 401 || res.status === 403 || /API_KEY_INVALID|API key not valid/i.test(detail)) {
+      const why = /leaked/i.test(detail) ? 'anahtar sızdırılmış olarak işaretlenmiş — yeni anahtar alın'
+        : /SERVICE_DISABLED|has not been used|is disabled/i.test(detail) ? 'projede Generative Language API kapalı'
+        : /API_KEY_INVALID|not valid/i.test(detail) ? 'anahtar geçersiz' : /referer|referrer|ip address|restrict/i.test(detail) ? 'anahtara kısıtlama konmuş (web sitesi/IP)' : detail.slice(0, 120);
+      throw new AiFatalError('ai_auth', `Gemini anahtarı reddedildi (${res.status}: ${why})`);
+    }
     if (res.status === 429 && /quota|billing/i.test(detail)) throw new AiFatalError('ai_credit', 'Gemini kotası / bakiyesi bitti');
     throw new Error(`Gemini ${res.status}: ${detail}`);
   }

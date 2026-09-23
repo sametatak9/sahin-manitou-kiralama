@@ -1,4 +1,4 @@
-// AI sağlayıcı anahtar çözümleyici: önce Edge Function Secrets, yoksa panelden girilip Vault'ta saklanan anahtar.
+// AI sağlayıcı anahtar çözümleyici: önce panelden girilip Vault'ta saklanan anahtar, yoksa Edge Function Secrets.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 
 export type KeyProvider = 'anthropic' | 'gemini' | 'openai';
@@ -9,13 +9,17 @@ const cache = new Map<KeyProvider, { v: string | null; at: number }>();
 /** Edge function başında service-role istemcisiyle çağrılır. */
 export function initKeyStore(client: SupabaseClient) { db = client; }
 
+/** Öncelik: panelden girilen anahtar (Vault) → yoksa Edge Function Secrets. Panelden girilen, eski/bozuk sunucu anahtarını ezer. */
 export async function getAiKey(p: KeyProvider): Promise<string | null> {
-  const env = Deno.env.get(ENV[p]); if (env) return env;
-  const c = cache.get(p); if (c && Date.now() - c.at < 60_000) return c.v;
-  let v: string | null = null;
-  if (db) { const { data } = await db.rpc('get_ai_key', { p_provider: p }); v = (data as string | null) || null; }
-  cache.set(p, { v, at: Date.now() });
-  return v;
+  const c = cache.get(p);
+  let vaulted: string | null;
+  if (c && Date.now() - c.at < 60_000) vaulted = c.v;
+  else {
+    vaulted = null;
+    if (db) { const { data } = await db.rpc('get_ai_key', { p_provider: p }); vaulted = (data as string | null) || null; }
+    cache.set(p, { v: vaulted, at: Date.now() });
+  }
+  return vaulted || Deno.env.get(ENV[p]) || null;
 }
 
 export async function aiKeyAvailability() {
