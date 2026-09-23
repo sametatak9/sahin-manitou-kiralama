@@ -158,8 +158,8 @@ async function anthropicResearch(key: string, model: string, system: string, pro
   if (!key) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
   const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: 100_000 });
   const tools = [
-    { type: 'web_search_20260209', name: 'web_search', max_uses: 3, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3, blocked_domains: NO_SCRAPE_HOSTS, max_content_tokens: 8000 },
+    { type: 'web_search_20260209', name: 'web_search', max_uses: 5, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 4, blocked_domains: NO_SCRAPE_HOSTS, max_content_tokens: 8000 },
   ];
   // deno-lint-ignore no-explicit-any
   const messages: any[] = [{ role: 'user', content: prompt }];
@@ -294,7 +294,8 @@ export async function stepMission(db: Db, m: MissionRow) {
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,
-        'Bu adımda göreve en çok katkı verecek araştırmayı yap (gerekirse web araması / sayfa okuma). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz. Bilgi bulamazsan boş liste döndür; asla uydurma.',
+        'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 5 web araması ve 4 sayfa okuma hakkın var; hakların bitince araştırmayı bırak ve elindekileri yaz). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
+        'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
         'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
