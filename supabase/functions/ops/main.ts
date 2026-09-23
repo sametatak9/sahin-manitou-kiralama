@@ -4,7 +4,7 @@
 //   GET  /ops/oauth/callback    → Meta / Canva OAuth dönüşü
 import { initKeyStore, providerAvailability } from '../_shared/ai/index.ts';
 import { getAiKey } from '../_shared/ai/keys.ts';
-import { loadAppSecrets, resetAppSecrets, secret } from '../_shared/secrets.ts';
+import { loadAppSecrets, resetAppSecrets, secret, secretSource } from '../_shared/secrets.ts';
 import { googleAuthorizeUrl, googleExchange } from '../_shared/connectors/youtube.ts';
 import { aiComplete, loadAgent, serviceClient, type Db, type EngineCtx, type TaskRow } from '../_shared/context.ts';
 import { executeTask } from '../_shared/engine.ts';
@@ -143,6 +143,75 @@ async function verifyApp(provider: 'meta' | 'google'): Promise<Check[]> {
       fix: bad ? 'Uygulamalar sayfasının altındaki kutudan adresi kopyalayıp Google Cloud → OAuth istemcisi → Yetkili yönlendirme URI’lerine ekleyin' : undefined });
   } catch (e) { out.push({ key: 'verify:google', group: 'Uygulamalar', label: 'Google (canlı test)', state: 'warn', detail: `Bağlantı hatası: ${String(e).slice(0, 120)}` }); }
   return out;
+}
+
+// ── Kayıtlı anahtarlar raporu: her anahtar maskeli (yalnız son 4 hane) + nereden geldiği + canlı test sonucu ──
+type KeyRow = { group: string; name: string; label: string; source: 'panel' | 'sunucu' | null; masked: string | null; saved_at: string | null; state: 'ok' | 'fail' | 'warn' | 'missing'; detail: string; can_clear: boolean };
+const mask = (v?: string | null) => (v ? `••••••${v.slice(-4)}` : null);
+const APP_KEYS: Array<{ group: string; name: string; label: string }> = [
+  { group: 'Instagram', name: 'INSTAGRAM_APP_ID', label: 'Instagram uygulama kimliği' }, { group: 'Instagram', name: 'INSTAGRAM_APP_SECRET', label: 'Instagram gizli anahtarı' },
+  { group: 'Meta (Facebook)', name: 'META_APP_ID', label: 'Facebook uygulama kimliği' }, { group: 'Meta (Facebook)', name: 'META_APP_SECRET', label: 'Facebook gizli anahtarı' },
+  { group: 'Google (YouTube)', name: 'GOOGLE_CLIENT_ID', label: 'Google istemci kimliği' }, { group: 'Google (YouTube)', name: 'GOOGLE_CLIENT_SECRET', label: 'Google gizli anahtarı' },
+  { group: 'Telegram', name: 'TELEGRAM_BOT_TOKEN', label: 'Telegram bot anahtarı' }, { group: 'Telegram', name: 'TELEGRAM_CHAT_ID', label: 'Telegram sohbet kimliği' },
+  { group: 'E-posta', name: 'RESEND_API_KEY', label: 'Resend anahtarı' }, { group: 'E-posta', name: 'EMAIL_FROM', label: 'Gönderen adres' },
+  { group: 'WhatsApp', name: 'WHATSAPP_TOKEN', label: 'WhatsApp erişim anahtarı' }, { group: 'WhatsApp', name: 'WHATSAPP_PHONE_NUMBER_ID', label: 'WhatsApp numara kimliği' },
+  { group: 'Canva', name: 'CANVA_CLIENT_ID', label: 'Canva istemci kimliği' }, { group: 'Canva', name: 'CANVA_CLIENT_SECRET', label: 'Canva gizli anahtarı' },
+];
+
+async function liveAiTest(p: 'anthropic' | 'gemini' | 'openai', key: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const r = p === 'anthropic' ? await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } })
+      : p === 'gemini' ? await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': key } })
+      : await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${key}` } });
+    if (r.ok) return { ok: true, detail: 'Çalışıyor (sağlayıcı anahtarı kabul etti)' };
+    const t = (await r.text()).slice(0, 400);
+    const why = /leaked/i.test(t) ? 'anahtar sızdırılmış diye işaretlenmiş — yeni anahtar alın'
+      : /denied access/i.test(t) ? 'Google bu anahtarın projesini engellemiş — farklı bir Google hesabı/projeyle yeni anahtar alın'
+      : /SERVICE_DISABLED|is disabled|has not been used/i.test(t) ? 'projede API kapalı'
+      : /invalid|not valid|incorrect/i.test(t) ? 'anahtar geçersiz / yanlış kopyalanmış'
+      : r.status === 429 ? 'kota/bakiye bitti' : `HTTP ${r.status}`;
+    return { ok: false, detail: `Reddedildi: ${why}` };
+  } catch (e) { return { ok: false, detail: `Bağlantı hatası: ${String(e).slice(0, 100)}` }; }
+}
+
+async function credentialsReport(db: Db) {
+  const rows: KeyRow[] = [];
+  // 1) Yapay zekâ anahtarları (botların beyni)
+  const { data: aiRows } = await db.from('ai_provider_keys').select('provider,updated_at');
+  const ENVN = { anthropic: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY' } as const;
+  const AIL = { anthropic: 'Claude (Anthropic)', gemini: 'Gemini (Google)', openai: 'OpenAI (ChatGPT)' } as const;
+  for (const p of ['anthropic', 'gemini', 'openai'] as const) {
+    const key = await getAiKey(p);
+    const panelRow = (aiRows || []).find((r: { provider: string }) => r.provider === p) as { updated_at: string } | undefined;
+    const source = panelRow ? 'panel' : Deno.env.get(ENVN[p]) ? 'sunucu' : null;
+    if (!key) { rows.push({ group: 'Yapay zekâ (botlar)', name: `ai:${p}`, label: AIL[p], source: null, masked: null, saved_at: null, state: 'missing', detail: 'Girilmemiş', can_clear: false }); continue; }
+    const t = await liveAiTest(p, key);
+    rows.push({ group: 'Yapay zekâ (botlar)', name: `ai:${p}`, label: AIL[p], source, masked: mask(key), saved_at: panelRow?.updated_at ?? null, state: t.ok ? 'ok' : 'fail',
+      detail: t.ok ? t.detail : `${t.detail}${source === 'sunucu' ? ' · Bu eski sunucu anahtarı; panelden yeni anahtar girince otomatik devre dışı kalır.' : ''}`, can_clear: source === 'panel' });
+  }
+  // 2) Uygulama giriş bilgileri
+  const { data: saved } = await db.from('app_credentials').select('name,updated_at');
+  const savedAt = new Map<string, string>((saved || []).map((r: { name: string; updated_at: string }) => [r.name, r.updated_at]));
+  const live: Record<string, Check[]> = {};
+  if (secret('META_APP_ID') && secret('META_APP_SECRET')) live.meta = await verifyApp('meta');
+  if (secret('GOOGLE_CLIENT_ID') && secret('GOOGLE_CLIENT_SECRET')) live.google = await verifyApp('google');
+  for (const k of APP_KEYS) {
+    const v = secret(k.name);
+    if (!v) { rows.push({ group: k.group, name: k.name, label: k.label, source: null, masked: null, saved_at: null, state: 'missing', detail: 'Girilmemiş', can_clear: false }); continue; }
+    const { data: fmtRaw } = await db.rpc('app_credential_format_error', { p_name: k.name, p_value: v }); const fmt = (fmtRaw as string | null) ?? null;
+    let state: KeyRow['state'] = fmt ? 'fail' : 'ok'; let detail = fmt ? `Biçim hatalı: ${fmt}` : 'Biçim doğru';
+    const credCheck = (arr?: Check[]) => arr?.find((c) => c.key === 'verify:meta' || c.key === 'verify:google');
+    if (!fmt && k.group === 'Meta (Facebook)' && live.meta) { const c = credCheck(live.meta); if (c) { state = c.state === 'ok' ? 'ok' : 'fail'; detail = c.state === 'ok' ? 'Facebook kabul etti' : c.detail; } }
+    if (!fmt && k.group === 'Google (YouTube)' && live.google) { const c = credCheck(live.google); if (c) { state = c.state === 'ok' ? 'ok' : 'fail'; detail = c.state === 'ok' ? 'Google kabul etti' : c.detail; } }
+    if (!fmt && k.name === 'TELEGRAM_BOT_TOKEN') { const r = await fetch(`https://api.telegram.org/bot${v}/getMe`).catch(() => null); state = r?.ok ? 'ok' : 'fail'; detail = r?.ok ? 'Telegram kabul etti' : 'Telegram reddetti'; }
+    if (!fmt && k.name === 'RESEND_API_KEY') { const r = await fetch('https://api.resend.com/domains', { headers: { authorization: `Bearer ${v}` } }).catch(() => null); state = r?.ok ? 'ok' : 'fail'; detail = r?.ok ? 'Resend kabul etti' : 'Resend reddetti'; }
+    if (!fmt && k.group === 'Instagram') detail = 'Biçim doğru · asıl test “Instagram ile giriş yap” sırasında yapılır';
+    const secretLike = /SECRET|TOKEN|API_KEY/.test(k.name);
+    rows.push({ group: k.group, name: k.name, label: k.label, source: secretSource(k.name), masked: secretLike ? mask(v) : v, saved_at: savedAt.get(k.name) ?? null, state, detail, can_clear: secretSource(k.name) === 'panel' });
+  }
+  // Uygulama ayar uyarıları (alan adı / yönlendirme adresi) ayrı satır olarak
+  const extras = [...(live.meta ?? []), ...(live.google ?? [])].filter((c) => c.key.includes(':domain') || c.key.includes(':redirect'));
+  return { checked_at: new Date().toISOString(), rows, settings: extras };
 }
 
 // ── Sistem kontrolü: her parça gerçekten çalışıyor mu? (secret değerleri döndürülmez) ──
@@ -449,6 +518,8 @@ async function api(db: Db, req: Request) {
 
     // Panelden giriş bilgisi girildikten sonra önbelleği yeniler
     case 'reload_secrets': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return { ok: true }; }
+
+    case 'credentials_report': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return credentialsReport(db); }
 
     case 'verify_app': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return { checks: await verifyApp(body.provider === 'google' ? 'google' : 'meta') }; }
 

@@ -175,18 +175,85 @@ function CredentialsPanel() {
   );
 }
 
+interface KeyRow { group: string; name: string; label: string; source: 'panel' | 'sunucu' | null; masked: string | null; saved_at: string | null; state: 'ok' | 'fail' | 'warn' | 'missing'; detail: string; can_clear: boolean }
+interface KeysReport { checked_at: string; rows: KeyRow[]; settings: Check[] }
+
+/** Şu an girili anahtarlar: maskeli değer (son 4 hane), nereden geldiği, canlı test sonucu. Tam değer asla ekrana gelmez. */
+function KeysPanel() {
+  const { go } = useRouter();
+  const session = useSession();
+  const q = useQuery<KeysReport | null>(() => callOps<KeysReport>('credentials_report'), null, []);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (session.role !== 'admin') return <StateView kind="permission" message="Anahtarları yalnızca yönetici görebilir." />;
+  const clear = async (r: KeyRow) => {
+    if (!window.confirm(`${r.label} silinsin mi? Silinince bu bilgiyi kullanan özellik, yenisi girilene kadar çalışmaz.`)) return;
+    setBusy(r.name); setMsg(null);
+    try {
+      if (r.name.startsWith('ai:')) unwrap(await db().rpc('clear_ai_key', { p_provider: r.name.slice(3) }));
+      else unwrap(await db().rpc('clear_app_credential', { p_name: r.name }));
+      await callOps('reload_secrets'); await q.reload();
+    } catch (e) { setMsg(errorText(e)); } finally { setBusy(null); }
+  };
+  const rows = q.data?.rows ?? [];
+  const groups = [...new Set(rows.map((r) => r.group))];
+  const count = { ok: rows.filter((r) => r.state === 'ok').length, fail: rows.filter((r) => r.state === 'fail').length, missing: rows.filter((r) => r.state === 'missing').length };
+  const TONE = { ok: 'text-emerald-700 bg-emerald-50 ring-emerald-200', fail: 'text-rose-700 bg-rose-50 ring-rose-200', warn: 'text-amber-700 bg-amber-50 ring-amber-200', missing: 'text-ink-400 bg-ink-950 ring-ink-800' } as const;
+  const LABEL = { ok: 'Çalışıyor', fail: 'Hatalı', warn: 'Uyarı', missing: 'Girilmemiş' } as const;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-ink-400">Her anahtar şu an gerçek sağlayıcıya sorularak test edildi.{q.data && ` Son test: ${fmtDateTime(q.data.checked_at)}.`} Güvenlik için yalnızca son 4 hane görünür.</p>
+        <Button variant="ghost" loading={q.loading} onClick={q.reload} icon={<RefreshCw className="w-4 h-4" />}>Tekrar test et</Button>
+      </div>
+      {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
+      {msg && <Notice tone="error">{msg}</Notice>}
+      {q.loading && !q.data ? <StateView kind="loading" title="Anahtarlar test ediliyor…" compact /> : q.data && (<>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-2"><div className="text-lg font-bold text-emerald-700">{count.ok}</div><div className="text-[11px] text-emerald-700">Çalışıyor</div></div>
+          <div className="rounded-xl bg-rose-50 ring-1 ring-rose-200 p-2"><div className="text-lg font-bold text-rose-700">{count.fail}</div><div className="text-[11px] text-rose-700">Hatalı</div></div>
+          <div className="rounded-xl bg-ink-950 ring-1 ring-ink-800 p-2"><div className="text-lg font-bold text-ink-300">{count.missing}</div><div className="text-[11px] text-ink-400">Girilmemiş</div></div>
+        </div>
+        {q.data.settings.filter((c) => c.state !== 'ok').map((c) => <Notice key={c.key} tone="error"><b>{c.label}:</b> {c.detail}{c.fix ? ` → ${c.fix}` : ''}</Notice>)}
+        {groups.map((g) => (
+          <Panel key={g} title={g}>
+            <ul className="divide-y divide-ink-800">
+              {rows.filter((r) => r.group === g).map((r) => (
+                <li key={r.name} className="py-2.5 flex flex-wrap items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-ink-100">{r.label}</div>
+                    <div className="text-xs text-ink-300 font-mono break-all">{r.masked ?? '—'}{r.source && <span className="font-sans text-ink-500"> · {r.source === 'panel' ? 'panelden girildi' : 'sunucu ayarında (eski)'}</span>}{r.saved_at && <span className="font-sans text-ink-500"> · {fmtDateTime(r.saved_at)}</span>}</div>
+                    <div className={cx('text-xs mt-0.5', r.state === 'fail' ? 'text-rose-700' : 'text-ink-400')}>{r.detail}</div>
+                  </div>
+                  <span className={cx('text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1', TONE[r.state])}>{LABEL[r.state]}</span>
+                  {r.can_clear && <button type="button" onClick={() => clear(r)} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{busy === r.name ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}Sil</button>}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ))}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => go('system', null, { tab: 'credentials' })} icon={<KeyRound className="w-4 h-4" />}>Uygulama bilgisi gir / düzelt</Button>
+          <Button variant="ghost" onClick={() => go('settings', null, { tab: 'ai' })} icon={<KeyRound className="w-4 h-4" />}>Yapay zekâ anahtarı gir</Button>
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 export function SystemScreen() {
   const { state, go } = useRouter();
-  const tab = (state.params.get('tab') === 'credentials' ? 'credentials' : 'check') as 'check' | 'credentials';
+  const t = state.params.get('tab');
+  const tab = (t === 'credentials' || t === 'keys' ? t : 'check') as 'check' | 'credentials' | 'keys';
   return (
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-xl font-semibold text-ink-100">Bağlantı & Sistem Kontrolü</h1>
         <p className="text-sm text-ink-400">Botlar, yapay zekâ ve uygulama bağlantıları gerçekten çalışıyor mu — tek ekranda. Uygulama giriş bilgileri burada bir kez girilir ve kalıcı saklanır.</p>
       </div>
-      <Tabs value={tab} onChange={(t) => go('system', null, t === 'credentials' ? { tab: 'credentials' } : {})}
-        items={[{ id: 'check', label: 'Sistem kontrolü' }, { id: 'credentials', label: 'Giriş bilgileri' }]} className={cx('')} />
-      {tab === 'check' ? <SystemCheckPanel /> : <CredentialsPanel />}
+      <Tabs value={tab} onChange={(t) => go('system', null, t === 'check' ? {} : { tab: t })}
+        items={[{ id: 'check', label: 'Sistem kontrolü' }, { id: 'keys', label: 'Kayıtlı anahtarlar' }, { id: 'credentials', label: 'Giriş bilgileri' }]} className={cx('')} />
+      {tab === 'check' ? <SystemCheckPanel /> : tab === 'keys' ? <KeysPanel /> : <CredentialsPanel />}
     </div>
   );
 }

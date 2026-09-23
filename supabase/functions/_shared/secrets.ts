@@ -19,3 +19,8 @@ export function secret(name: string): string | undefined {
   // Panelden girilen değer önceliklidir (sunucudaki eski değeri ezer)
   return vaulted[name] || Deno.env.get(name) || undefined;
 }
+
+/** Değer nereden geliyor: panel (Vault) mi, sunucu ayarı (Edge Function Secrets) mı? Değerin kendisi döndürülmez. */
+export function secretSource(name: string): 'panel' | 'sunucu' | null {
+  return vaulted[name] ? 'panel' : Deno.env.get(name) ? 'sunucu' : null;
+}

@@ -62,7 +62,7 @@ export function ConnectionsScreen() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={() => go('system', null, { tab: 'credentials' })} icon={<KeyRound className="w-4 h-4" />}>Giriş bilgileri</Button>
-          <Button variant="ghost" onClick={() => go('system')} icon={<ShieldCheck className="w-4 h-4" />}>Sistem kontrolü</Button>
+          <Button variant="ghost" onClick={() => go('system', null, { tab: 'keys' })} icon={<ShieldCheck className="w-4 h-4" />}>Kayıtlı anahtarlar</Button>
           <Button variant="ghost" onClick={q.reload} icon={q.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}>Yenile</Button>
         </div>
       </div>
