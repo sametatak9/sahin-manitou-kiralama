@@ -3,6 +3,7 @@ import { Archive, MessageCircle, Phone, Plus, Save, Search, Send } from 'lucide-
 import { errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDate, fmtDateTime, relTime, timeOf, type Tone } from '../lib/format';
+import { QuotesSection } from '../components/Quotes';
 import { Button, cx, ErrorState, Field, Modal, Notice, Pill, Stat, StateView, Tabs } from '../ui';
 
 type Module = 'construction' | 'rental';
@@ -142,7 +143,7 @@ function CustomerEditor({ module, row, onClose, onSaved }: { module: Module; row
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [dups, setDups] = useState<Array<{ module: string; id: string; label: string; match_on: string; status: string }>>([]);
-  const [tab, setTab] = useState<'info' | 'activity'>('info');
+  const [tab, setTab] = useState<'info' | 'quotes' | 'activity'>('info');
 
   // Duplicate kontrolü (telefon / e-posta / web / ad)
   useEffect(() => {
@@ -195,7 +196,7 @@ function CustomerEditor({ module, row, onClose, onSaved }: { module: Module; row
   return (
     <Modal open wide onClose={onClose} title={row ? String(f[cfg.nameKeys[0]] || f[cfg.nameKeys[1]] || 'Müşteri') : `Yeni ${module === 'rental' ? 'kiralama' : 'inşaat'} müşterisi`}
       footer={<>{row && <Button variant="danger" loading={busy === 'archive'} onClick={archive} icon={<Archive className="w-4 h-4" />}>Arşivle</Button>}<Button variant="ghost" onClick={onClose}>Kapat</Button><Button variant="primary" loading={busy === 'save'} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button></>}>
-      {row && <Tabs className="mb-4" value={tab} onChange={setTab} items={[{ id: 'info', label: 'Bilgiler' }, { id: 'activity', label: 'Aktivite & takip' }]} />}
+      {row && <Tabs className="mb-4" value={tab} onChange={setTab} items={[{ id: 'info', label: 'Bilgiler' }, { id: 'quotes', label: 'Teklifler' }, { id: 'activity', label: 'Aktivite & takip' }]} />}
       {tab === 'info' ? (
         <div className="space-y-4">
           {dups.length > 0 && <Notice tone="warn">Olası tekrar: {dups.map((d) => `${d.label} (${d.module === 'construction' ? 'inşaat' : d.module === 'rental' ? 'kiralama' : d.module}, ${d.match_on})`).join(' · ')}</Notice>}
@@ -210,7 +211,7 @@ function CustomerEditor({ module, row, onClose, onSaved }: { module: Module; row
           </div>
           {err && <Notice tone="error">{err}</Notice>}
         </div>
-      ) : row && <Activities module={module} row={row} />}
+      ) : row && tab === 'quotes' ? <QuotesSection module={module} customer={{ id: row.id, name: String(row[cfg.nameKeys[0]] || row[cfg.nameKeys[1]] || 'Müşteri'), phone: (row.phone as string) ?? null, email: (row.email as string) ?? null }} /> : row && <Activities module={module} row={row} />}
     </Modal>
   );
 }
