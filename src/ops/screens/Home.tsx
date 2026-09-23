@@ -131,11 +131,9 @@ export function HomeScreen() {
 
       {/* Başlık şeridi */}
       <section className="ops-panel p-5 sm:p-6 relative overflow-hidden">
-        <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full border border-ink-700/60" />
-        <div className="absolute -right-4 -top-4 w-40 h-40 rounded-full border border-ink-700/60" />
         <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-5">
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-brand-green">Live Operations · {new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', weekday: 'long', day: 'numeric', month: 'long' })}</div>
+            <div className="text-xs text-ink-400">{new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', weekday: 'long', day: 'numeric', month: 'long' })}</div>
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-ink-100 mt-1">{hello}, {session.displayName}.</h2>
             <p className="text-sm text-ink-300 mt-1 max-w-2xl">
               Bugün <b className="text-ink-100">{d.tasks.length}</b> planlı bot görevi, <b className="text-ink-100">{d.runs.length}</b> tamamlanan/çalışan koşu ve <b className="text-amber-700">{d.pendingCount}</b> onay bekleyen iş var.
@@ -145,19 +143,19 @@ export function HomeScreen() {
             <Stat label="Çalışan bot" value={running.length} tone={running.length ? 'run' : 'idle'} sub={running.length ? running.map((r) => botById.get(r.bot_id || '')?.name).join(', ') : 'Şu an boşta'} />
             <Stat label="Onay bekleyen" value={d.pendingCount} tone={d.pendingCount ? 'wait' : 'go'} sub="İnsan kararı" />
             <Stat label="Bugünkü lead" value={d.counts.constructionToday + d.counts.rentalToday + d.counts.webToday} tone="go" sub={`${d.counts.webToday} web başvurusu`} />
-            <Stat label="Bağlı platform" value={status.data ? connected : '…'} tone={connected ? 'go' : 'wait'} sub={status.data ? `${status.data.connectors.length} connector` : 'kontrol ediliyor'} />
+            <Stat label="Bağlı platform" value={status.data ? connected : '…'} tone={connected ? 'go' : 'wait'} sub={status.data ? `${status.data.connectors.length} uygulamadan` : 'kontrol ediliyor'} />
           </div>
         </div>
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.55fr_1fr] gap-5">
         {/* BUGÜN BOTLAR NE YAPIYOR */}
-        <Panel kicker="Today · Bot Activity" title="Bugün botlar ne yapıyor?" action={<Button variant="ghost" onClick={() => go('bots')} icon={<Bot className="w-4 h-4" />}>Portföy</Button>}>
+        <Panel kicker="Today · Bot Activity" title="Bugün botlar ne yapıyor?" action={<Button variant="ghost" onClick={() => go('bots')} icon={<Bot className="w-4 h-4" />}>Botlar</Button>}>
           {q.loading ? <StateView kind="loading" compact /> : (
             <>
               <TodayRail items={timeline} />
               {timeline.length === 0 ? (
-                <StateView kind="empty" compact title="Bugün için görev yok" message="Bot Portföyü’nden zamanlanmış görev oluşturduğunuzda burada saat saat görünür." />
+                <StateView kind="empty" compact title="Bugün için görev yok" message="Bot Merkezi’nden görev verdiğinizde burada saat saat görünür." />
               ) : (
                 <ol className="mt-3 space-y-1.5 max-h-[420px] overflow-y-auto ops-scroll pr-1">
                   {timeline.map((it) => (
@@ -208,7 +206,6 @@ export function HomeScreen() {
             <button onClick={() => go('rental')} className="text-left"><Stat label="Kiralama" value={d.counts.rental} sub={`+${d.counts.rentalToday} bugün`} /></button>
             <button onClick={() => go('leads')} className="text-left"><Stat label="Web yeni" value={d.counts.web} tone={d.counts.web ? 'wait' : undefined} sub="işlenmedi" /></button>
           </div>
-          <p className="text-[11px] text-ink-500 mt-3">Kaynak: Supabase canlı kayıtları. Lead Discovery Bot her gün 12:00’de web başvurularını tarar ve dönüştürme onayı açar.</p>
         </Panel>
 
         {/* PLATFORM WALL */}
@@ -225,14 +222,13 @@ export function HomeScreen() {
             </div>
           )}
           {status.data && <div className="mt-3 flex flex-wrap gap-1.5">
-            <Pill tone={aiReady ? 'go' : 'wait'}><Cpu className="w-3 h-3" /> AI {aiReady ? 'HAZIR' : 'YAPILANDIRMA GEREKLİ'}</Pill>
-            <Pill tone="go"><Radar className="w-3 h-3" /> SCHEDULER · pg_cron 1 dk</Pill>
+            <Pill tone={aiReady ? 'go' : 'wait'}><Cpu className="w-3 h-3" /> Yapay zekâ {aiReady ? 'hazır' : 'anahtar gerekli'}</Pill>
           </div>}
         </Panel>
 
         {/* ALERTS */}
         <Panel kicker="Alerts" title="Dikkat gerektirenler" action={<AlertTriangle className="w-5 h-5 text-ink-500" />}>
-          {alerts.length === 0 ? <StateView kind="empty" compact title="Kritik uyarı yok" message="Başarısız görev, süresi dolan token veya engellenen bot yok." /> : (
+          {alerts.length === 0 ? <StateView kind="empty" compact title="Kritik uyarı yok" message="Hata veren görev veya bağlantısı kopan uygulama yok." /> : (
             <ul className="space-y-1.5">
               {alerts.slice(0, 6).map((a, i) => (
                 <li key={i}><button onClick={a.action} className="w-full text-left flex items-start gap-2 rounded-lg bg-ink-900/60 px-2.5 py-2 text-[12px] text-ink-200 hover:bg-ink-800">
@@ -262,7 +258,7 @@ export function HomeScreen() {
 
         {/* PERFORMANS */}
         <Panel kicker="Performance Pulse" title="Ne sonuç verdi? (7 gün)" action={<TrendingUp className="w-5 h-5 text-ink-500" />}>
-          {d.pubs.length === 0 ? <StateView kind="not_connected" compact title="Henüz gerçek yayın yok" message="Metrikler yalnızca platform API’sinden gelen gerçek yayınlar için gösterilir. Sahte veri üretilmez." action={<Button variant="ghost" onClick={() => go('connections')}>Platform bağla</Button>} /> : (
+          {d.pubs.length === 0 ? <StateView kind="not_connected" compact title="Henüz gerçek yayın yok" message="Uygulamalar bağlanıp ilk paylaşım yapıldığında sonuçlar burada görünür." action={<Button variant="ghost" onClick={() => go('connections')}>Platform bağla</Button>} /> : (
             <ul className="space-y-1.5">
               {d.pubs.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 rounded-xl bg-ink-900/60 px-3 py-2">

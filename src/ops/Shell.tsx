@@ -173,7 +173,6 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
           <div className="flex items-center gap-3 px-4 sm:px-6 h-14">
             <button className="lg:hidden p-2 -ml-2 rounded-lg text-ink-300 hover:bg-ink-800" onClick={() => setDrawer(true)}><Menu className="w-5 h-5" /></button>
             <div className="min-w-0">
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-ink-500">{GROUPS.find((g) => g.items.includes(current))?.title}</div>
               <h1 className="font-display text-base font-semibold text-ink-100 truncate -mt-0.5">{current.label}</h1>
             </div>
             <div className="ml-auto flex items-center gap-3 text-xs text-ink-300">

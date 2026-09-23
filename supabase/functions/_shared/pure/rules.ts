@@ -47,8 +47,8 @@ export const APPROVAL_LABELS: Record<ApprovalState, string> = {
 };
 
 export const CONNECTION_LABELS: Record<string, string> = {
-  not_connected: 'BAĞLI DEĞİL', oauth_required: 'OAUTH GEREKLİ', config_required: 'YAPILANDIRMA GEREKLİ', api_key_required: 'API ANAHTARI GEREKLİ',
-  connected: 'BAĞLI', expired: 'SÜRESİ DOLDU', error: 'HATA', manual_only: 'MANUEL YAYIN', api_unavailable: 'RESMİ API YOK',
+  not_connected: 'BAĞLI DEĞİL', oauth_required: 'GİRİŞ GEREKLİ', config_required: 'BİLGİ EKSİK', api_key_required: 'BİLGİ EKSİK',
+  connected: 'BAĞLI', expired: 'OTURUM DOLDU', error: 'HATA', manual_only: 'ELLE PAYLAŞIM', api_unavailable: 'OTOMATİK BAĞLANTI YOK',
 };
 
 /** Eski Türkçe social_drafts.status değerini kanonik akışa eşler. */

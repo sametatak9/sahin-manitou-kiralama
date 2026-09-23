@@ -25,7 +25,6 @@ export function Panel({ children, className = '', title, kicker, action, pad = t
       {(title || action) && (
         <header className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0">
-            {kicker && <div className="text-[10px] font-mono tracking-[0.22em] uppercase text-ink-400">{kicker}</div>}
             {title && <h3 className="font-display text-base sm:text-lg font-semibold text-ink-100 truncate">{title}</h3>}
           </div>
           {action}
@@ -106,7 +105,7 @@ const STATE_META: Record<StateKind, { icon: typeof Bot; title: string; tone: str
   error: { icon: AlertTriangle, title: 'Bir hata oluştu', tone: 'text-rose-700' },
   permission: { icon: Lock, title: 'Yetki gerekli', tone: 'text-amber-700' },
   not_connected: { icon: WifiOff, title: 'BAĞLI DEĞİL', tone: 'text-amber-700' },
-  config: { icon: PlugZap, title: 'YAPILANDIRMA GEREKLİ', tone: 'text-amber-700' },
+  config: { icon: PlugZap, title: 'BİLGİ EKSİK', tone: 'text-amber-700' },
 };
 export function StateView({ kind, title, message, action, compact = false }: { kind: StateKind; title?: string; message?: ReactNode; action?: ReactNode; compact?: boolean }) {
   const m = STATE_META[kind];

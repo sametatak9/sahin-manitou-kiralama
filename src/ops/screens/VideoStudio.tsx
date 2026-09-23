@@ -46,7 +46,6 @@ export function VideoStudioScreen() {
       <section className="ops-panel p-5 relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-brand-green">Medya Stüdyosu</div>
             <h2 className="font-display text-2xl font-bold text-ink-100 mt-1 flex items-center gap-2">
               <Film className="w-6 h-6 text-brand-green" /> Video Havuzu & AI Üretim
             </h2>

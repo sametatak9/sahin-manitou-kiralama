@@ -1,6 +1,7 @@
 // Uygulama detay penceresi: bu platformda hangi botlar görevli, ne yapıyorlar, bağlantı durumu, geçmiş bulgular.
 import { useState } from 'react';
-import { Bot as BotIcon, CalendarClock, ExternalLink, FileText, PlugZap, Target } from 'lucide-react';
+import { Bot as BotIcon, CalendarClock, ExternalLink, FileText, PlugZap, Smartphone, Target } from 'lucide-react';
+import { appUrl, openApp } from '../lib/appLinks';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { BOT_STATUS, connectionLabel, connectionTone, fmtDateTime, relTime, RUN_LABELS, runTone } from '../lib/format';
 import type { Bot, ConnectorStatus, Draft, Mission, Run, Task } from '../lib/types';
@@ -41,9 +42,10 @@ export function AppDetail({ c, allBots, onClose, onConnect, canConnect, busy }: 
   const connected = c.accounts.filter((a) => a.connection_status === 'connected');
 
   return (
-    <Modal open wide onClose={onClose} title={<span className="inline-flex items-center gap-2"><PlatformBadge platform={c.key} /> {c.name} · uygulama merkezi</span>}
+    <Modal open wide onClose={onClose} title={<span className="inline-flex items-center gap-2"><PlatformBadge platform={c.key} /> {c.name}</span>}
       footer={<>
-        {canConnect && onConnect && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy} disabled={c.missing_env.length > 0} onClick={onConnect} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : 'Resmi giriş (OAuth) ile bağla'}</Button>}
+        {canConnect && onConnect && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy} disabled={c.missing_env.length > 0} onClick={onConnect} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : `${c.name} hesabıyla giriş yap`}</Button>}
+        {appUrl(c.key) && <Button variant="ghost" onClick={() => openApp(c.key)} icon={<Smartphone className="w-4 h-4" />}>Uygulamayı aç</Button>}
         <Button variant="primary" onClick={() => setLaunch(true)} icon={<Target className="w-4 h-4" />}>Bu uygulama için görev ver</Button>
         <Button variant="ghost" onClick={onClose}>Kapat</Button></>}>
       <div className="space-y-4">
@@ -52,12 +54,12 @@ export function AppDetail({ c, allBots, onClose, onConnect, canConnect, busy }: 
           <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">BAĞLANTI</div><Pill tone={connectionTone(c.status)}>{connectionLabel(c.status)}</Pill></div>
           <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">HESAP</div><div className="text-ink-100 truncate">{connected[0]?.external_account_name ?? '—'}</div><div className="text-[10px] text-ink-500">{connected[0] ? `doğrulandı ${relTime(connected[0].last_verified_at)}` : 'bağlı hesap yok'}</div></div>
           <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">GÖREVLİ BOT</div><div className="text-lg font-display font-semibold text-ink-100">{bots.length}</div></div>
-          <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">YAYIN (API)</div><div className="text-ink-100"><b>{q.data.published}</b> başarılı · <span className={q.data.failed ? 'text-rose-700' : ''}>{q.data.failed} hatalı</span></div></div>
+          <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">PAYLAŞIMLAR</div><div className="text-ink-100"><b>{q.data.published}</b> başarılı · <span className={q.data.failed ? 'text-rose-700' : ''}>{q.data.failed} hatalı</span></div></div>
         </div>
         {c.status !== 'connected' && <div className="rounded-xl bg-amber-500/10 ring-1 ring-amber-400/30 p-3 text-xs text-amber-800">
-          {c.missing_env.length ? <>Bu uygulamaya giriş için önce Supabase Secrets’a şu anahtarlar eklenmeli: <b className="font-mono">{c.missing_env.join(', ')}</b>. Ardından “Resmi giriş (OAuth) ile bağla” butonu, {c.name}’un kendi giriş ekranını açar; şifreniz panelde saklanmaz.</>
-            : c.implemented ? <>Hesap bağlı değil. “Resmi giriş (OAuth) ile bağla” ile {c.name} giriş ekranına yönlendirilirsiniz; izin verdiğinizde bağlantı API’den doğrulanır.</>
-            : <>{c.name} için resmi API entegrasyonu henüz yok ({c.officialApi ? 'ENTEGRASYON BEKLİYOR' : 'resmi API yok — manuel yayın'}). Botlar yine de içerik hazırlayabilir ve herkese açık sayfaları araştırabilir.</>}
+          {c.missing_env.length ? <>Bağlanmak için önce <button className="underline font-semibold" onClick={() => { onClose(); go('system', null, { tab: 'credentials' }); }}>Bağlantı & Sistem → Giriş bilgileri</button> bölümüne {c.name} uygulama bilgileri girilmeli. Sonra “{c.name} hesabıyla giriş yap” butonu {c.name}’un kendi giriş ekranını açar; bir kez giriş yaparsınız, şifreniz programda tutulmaz.</>
+            : c.implemented ? <>Hesap bağlı değil. “{c.name} hesabıyla giriş yap” ile {c.name}’un giriş ekranı açılır; bir kez izin verdiğinizde botlar bu hesabı programın içinden kullanır.</>
+            : <>{c.name} için otomatik bağlantı henüz yok{c.officialApi ? '' : ' (bu site otomatik paylaşıma izin vermiyor)'}. Botlar içerik hazırlar; paylaşımı “Uygulamayı aç” ile siz yaparsınız.</>}
         </div>}
 
         {/* Görevli botlar */}

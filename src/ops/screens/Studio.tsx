@@ -229,7 +229,7 @@ export function StudioScreen() {
             <Field label="Saat (İstanbul)"><input type="time" className="ops-input" value={brief.time} onChange={(e) => setBrief({ ...brief, time: e.target.value })} /></Field>
             <Field label="Marka kiti"><select className="ops-input" value={brand?.id ?? ''} onChange={(e) => setBrief({ ...brief, brandKitId: e.target.value })}>{refs.data.kits.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}</select></Field>
             <div className="flex items-end">
-              {connector && <Pill tone={connector.status === 'connected' ? 'go' : connector.status === 'manual_only' ? 'info' : 'wait'}>{platformMeta(brief.platform).name}: {connector.status === 'connected' ? 'BAĞLI' : connector.status === 'manual_only' ? 'MANUEL YAYIN' : 'BAĞLI DEĞİL — onaydan sonra yayın beklemede kalır'}</Pill>}
+              {connector && <Pill tone={connector.status === 'connected' ? 'go' : connector.status === 'manual_only' ? 'info' : 'wait'}>{platformMeta(brief.platform).name}: {connector.status === 'connected' ? 'BAĞLI' : connector.status === 'manual_only' ? 'ELLE PAYLAŞIM' : 'BAĞLI DEĞİL — onaydan sonra paylaşım bekler'}</Pill>}
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-2 mt-5">
