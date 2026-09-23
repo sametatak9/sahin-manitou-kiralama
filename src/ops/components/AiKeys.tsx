@@ -10,7 +10,8 @@ import { Button, Notice, Panel, Pill } from '../ui';
 interface KeyRow { provider: 'anthropic' | 'gemini' | 'openai'; last4: string; updated_at: string; verified_at: string | null; verify_error: string | null }
 const PROVIDERS = [
   { id: 'anthropic' as const, name: 'Anthropic Claude', note: 'Varsayılan. Web araması ve sayfa okuma ile en iyi araştırma.', url: 'https://console.anthropic.com/settings/keys', prefix: 'sk-ant-' },
-  { id: 'gemini' as const, name: 'Google Gemini', note: 'Yedek sağlayıcı (Google arama ile).', url: 'https://aistudio.google.com/app/apikey', prefix: 'AIza' },
+  { id: 'gemini' as const, name: 'Google Gemini', note: 'Yedek & Failover sağlayıcı (Google arama ile). Claude limiti dolunca anında devreye girer.', url: 'https://aistudio.google.com/app/apikey', prefix: 'AIza' },
+  { id: 'openai' as const, name: 'OpenAI GPT-4o', note: 'Alternatif sağlayıcı (Yedek analitik ve içerik motoru).', url: 'https://platform.openai.com/api-keys', prefix: 'sk-' },
 ];
 
 export function AiKeysPanel({ compact = false }: { compact?: boolean }) {
@@ -43,6 +44,12 @@ export function AiKeysPanel({ compact = false }: { compact?: boolean }) {
   return (
     <Panel kicker="Botların beyni" title={<span className="inline-flex items-center gap-2"><KeyRound className="w-4 h-4 text-brand-green" /> AI anahtarı</span>}>
       {!compact && <p className="text-xs text-ink-400 mb-3">Anahtarı telefondan kopyalayıp buraya yapıştırmanız yeterli. Anahtar Supabase Vault’ta şifreli saklanır, tarayıcıya geri gönderilmez; yalnızca son 4 hanesi görünür.</p>}
+      <div className="mb-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 flex items-start gap-2">
+        <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+        <p className="text-[11px] text-ink-300">
+          <b className="text-emerald-700">Otomatik Model Yedekleme (Failover) Aktif:</b> Claude (Anthropic) rate limitine veya bakiye sınırına ulaştığında, bot görevleri durdurulmaz; arama ve özet adımları anında <b>Google Gemini</b> veya <b>OpenAI</b> ile devam eder.
+        </p>
+      </div>
       <div className="space-y-3">
         {PROVIDERS.map((p) => {
           const row = q.data.rows.find((r) => r.provider === p.id);

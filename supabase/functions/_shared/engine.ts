@@ -122,11 +122,48 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
       const system = [ctx.agent!.system_prompt, `Bot: ${bot?.name ?? '-'} — ${bot?.instructions ?? ''}`, `Skill: ${skill.display_name} — ${skill.instructions}`,
         'Yalnızca verilen araçları kullan. Onay gerektiren araçlar hemen yürütülmez, onay kuyruğuna düşer. Veri uydurma. Bitince 1-2 cümlelik Türkçe özet yaz.'].join('\n\n');
       const prompt = `Görev: ${task.title ?? skill.display_name}\nPlatform: ${baseInput.platform ?? 'genel'}\nGirdi: ${JSON.stringify(task.input_config ?? {})}\nBugün: ${new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}`;
-      const res = await getProvider(ctx.agent!.provider).runAgent(ctx.agent!, {
-        system, prompt, maxTurns: 8,
-        tools: allowedTools.map((t) => ({ name: t.tool_key, description: t.description, input_schema: t.input_schema })),
-        onToolCall: (name, input) => invoke(name, input),
-      });
+      let res;
+      try {
+        res = await getProvider(ctx.agent!.provider).runAgent(ctx.agent!, {
+          system, prompt, maxTurns: 8,
+          tools: allowedTools.map((t) => ({ name: t.tool_key, description: t.description, input_schema: t.input_schema })),
+          onToolCall: (name, input) => invoke(name, input),
+        });
+      } catch (agentErr) {
+        const errStr = String((agentErr as Error)?.message || agentErr);
+        const isQuota = /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing/i.test(errStr);
+        if (isQuota) {
+          const fallbacks: Array<'gemini' | 'anthropic' | 'openai'> = ctx.agent!.provider === 'anthropic'
+            ? ['gemini', 'openai']
+            : ctx.agent!.provider === 'gemini'
+            ? ['anthropic', 'openai']
+            : ['anthropic', 'gemini'];
+          let recovered = false;
+          for (const fallback of fallbacks) {
+            try {
+              await log('warn', `${ctx.agent!.provider} limiti/hatası nedeniyle ${fallback} modeline otomatik geçiliyor (Failover)...`);
+              const altAgent = {
+                ...ctx.agent!,
+                provider: fallback,
+                model: fallback === 'gemini' ? 'gemini-flash-latest' : fallback === 'openai' ? 'gpt-4o-mini' : 'claude-opus-5'
+              };
+              res = await getProvider(fallback).runAgent(altAgent, {
+                system, prompt, maxTurns: 8,
+                tools: allowedTools.map((t) => ({ name: t.tool_key, description: t.description, input_schema: t.input_schema })),
+                onToolCall: (name, input) => invoke(name, input),
+              });
+              recovered = true;
+              await log('info', `Failover başarılı: ${fallback} modeli ile görev tamamlandı.`);
+              break;
+            } catch {
+              continue;
+            }
+          }
+          if (!recovered) throw agentErr;
+        } else {
+          throw agentErr;
+        }
+      }
       ctx.tokens.in += res.usage.tokensIn; ctx.tokens.out += res.usage.tokensOut;
       summary = res.finalText.slice(0, 500) || `${res.toolCalls} araç çağrısı`;
       await log('info', 'Agent tamamlandı', { turns: res.turns, tool_calls: res.toolCalls, stop: res.stopReason });

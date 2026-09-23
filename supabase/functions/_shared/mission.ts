@@ -214,7 +214,42 @@ async function geminiResearch(key: string, model: string, system: string, prompt
   return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0, searches: data.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length ?? 0 };
 }
 
-const aiCall = (c: AiChoice, prompt: string) => c.provider === 'anthropic' ? anthropicResearch(c.key, c.model, c.system, prompt) : geminiResearch(c.key, c.model, c.system, prompt);
+async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
+  try {
+    if (c.provider === 'anthropic') {
+      return await anthropicResearch(c.key, c.model, c.system, prompt);
+    } else {
+      return await geminiResearch(c.key, c.model, c.system, prompt);
+    }
+  } catch (err) {
+    const errStr = String((err as Error)?.message || err);
+    const isCreditOrRate = (err instanceof AiFatalError && (err.kind === 'ai_credit' || err.kind === 'ai_auth')) ||
+      /credit|balance|quota|rate_limit|too_many_requests|429|overloaded/i.test(errStr);
+
+    if (isQuotaOrRateLimit(err)) {
+      if (c.provider === 'anthropic') {
+        const gk = await getAiKey('gemini');
+        if (gk) {
+          if (onFailover) await onFailover(`Anthropic limiti/bakiyesi (${errStr.slice(0, 80)}) nedeniyle Gemini modeline otomatik geçildi (Failover).`);
+          return await geminiResearch(gk, Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', c.system, prompt);
+        }
+      } else if (c.provider === 'gemini') {
+        const ak = await getAiKey('anthropic');
+        if (ak) {
+          if (onFailover) await onFailover(`Gemini limiti (${errStr.slice(0, 80)}) nedeniyle Claude modeline otomatik geçildi (Failover).`);
+          return await anthropicResearch(ak, 'claude-opus-5', c.system, prompt);
+        }
+      }
+    }
+    throw err;
+  }
+}
+
+function isQuotaOrRateLimit(err: unknown): boolean {
+  if (err instanceof AiFatalError && (err.kind === 'ai_credit' || err.kind === 'ai_auth')) return true;
+  const s = String((err as Error)?.message || err);
+  return /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing/i.test(s);
+}
 
 // ── Yardımcılar ─────────────────────────────────────────────────────────────
 async function logStep(db: Db, m: MissionRow, step: number, action: string, message: string, target?: string | null, data?: unknown, started?: number) {
@@ -302,7 +337,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
       const t0 = Date.now();
-      const r = await aiCall(ai, prompt);
+      const r = await aiCall(ai, prompt, async (msg) => { await logStep(db, m, step, 'ai_failover', msg); });
       tokensIn += r.tokensIn; tokensOut += r.tokensOut;
       for (const s of r.sources) if (!sources.some((x) => canonical(x.url) === canonical(s.url))) sources.push(s);
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
@@ -395,7 +430,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
         `Görev: ${cur.title}\nAmaç: ${cur.goal}${cur.search_for ? `\nAranan: ${cur.search_for}` : ''}${cur.report_spec ? `\nRaporda olması gereken: ${cur.report_spec}` : ''}`,
         `Bulgular:\n${findings.map((f, i) => `${i + 1}. ${f.title} — ${f.detail} (${f.url})`).join('\n').slice(0, 8000)}`,
         'Biçim: 1) 3-6 cümlelik yönetici özeti 2) madde madde sonuçlar 3) önerilen sonraki adım. Markdown başlık kullanma; düz paragraflar ve "- " maddeleri kullan.',
-      ].join('\n\n'));
+      ].join('\n\n'), async (msg) => { await logStep(db, cur, cur.step_count + 1, 'ai_failover', msg); });
       summary = r.text.trim(); tokensIn += r.tokensIn; tokensOut += r.tokensOut;
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
   }
