@@ -5,3 +5,20 @@
   --color-brand-darkgreen: #115A31;
   --color-brand-lightbg: #E7F6EC;
 }
+
+/* The social workspace is an operational surface, not a dark reference page. */
+.social-workspace .bg-slate-950,
+.social-workspace .bg-slate-900,
+.social-workspace .bg-slate-900\/80,
+.social-workspace .bg-slate-950\/80 { background-color: #ffffff !important; }
+.social-workspace .border-slate-800,
+.social-workspace .border-slate-700 { border-color: #d1fae5 !important; }
+.social-workspace .text-white { color: #123026 !important; }
+.social-workspace .text-slate-300,
+.social-workspace .text-slate-400 { color: #5f746b !important; }
+.social-workspace .text-slate-500 { color: #789087 !important; }
+.social-workspace .bg-pink-500\/15 { background-color: #ecfdf5 !important; }
+.social-workspace .bg-pink-500\/10 { background-color: #fce7f3 !important; }
+.social-workspace .bg-amber-950\/20 { background-color: #fffbeb !important; }
+.social-workspace .bg-cyan-500\/10 { background-color: #ecfeff !important; }
+.social-workspace .bg-violet-500\/10 { background-color: #f5f3ff !important; }

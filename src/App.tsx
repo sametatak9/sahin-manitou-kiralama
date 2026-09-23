@@ -21,6 +21,7 @@ import { WeeklyPlanSection } from './components/WeeklyPlanSection';
 import { SiteSeoSection } from './components/SiteSeoSection';
 import { QuickFieldGenerator } from './components/QuickFieldGenerator';
 import { RoleMatrixSection } from './components/RoleMatrixSection';
+import { AdminWorkspacePicker } from './components/AdminWorkspacePicker';
 import { MapPin, ShieldCheck, ChevronRight, LogOut, Lock } from 'lucide-react';
 import { BUSINESS_INFO } from './data/marketingData';
 import { supabase } from './lib/supabase';
@@ -35,7 +36,7 @@ export default function App() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<string>('intelligence');
+  const [activeTab, setActiveTab] = useState<string>('social-planner');
 
   const handleLogout = async () => {
     await supabase?.auth.signOut();
@@ -48,24 +49,24 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950 pb-16 sm:pb-0">
+    <div className="min-h-screen bg-emerald-50/60 text-slate-900 flex flex-col font-sans selection:bg-emerald-200 selection:text-emerald-950 pb-16 sm:pb-0">
       {/* Yönetici Yetkili Üst Bar */}
-      <aside aria-label="Yönetim Çubuğu" className="bg-slate-900 text-white text-xs py-2 px-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50">
+      <aside aria-label="Yönetim Çubuğu" className="bg-white text-slate-800 text-xs py-2 px-4 border-b border-emerald-100 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>EMBAY İÇ YÖNETİM PANELİ (GİZLİ / NOINDEX)</span>
           </div>
-          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
             İç Araçlar: Parsel/İmar, Sözleşme, Kreatif, CRM & Komuta Merkezi
           </span>
         </div>
 
         <div className="flex items-center gap-4 text-xs">
-          <span className="text-slate-400 hidden sm:inline">Yetkili: <strong>Samet Bey</strong></span>
+          <span className="text-slate-500 hidden sm:inline">Yetkili: <strong>Samet Bey</strong></span>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1 text-slate-400 hover:text-rose-400 transition cursor-pointer font-semibold"
+            className="flex items-center gap-1 text-slate-500 hover:text-rose-500 transition cursor-pointer font-semibold"
             title="Güvenli Çıkış Yap"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -78,11 +79,12 @@ export default function App() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
         <MobileQuickActions />
+        <AdminWorkspacePicker activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 w-fit">
-          <span className="text-emerald-400 font-semibold">Aktif İç Panel Modülü:</span>
-          <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-          <span className="text-white font-medium capitalize">
+        <div className="flex items-center gap-2 text-xs text-slate-500 bg-white p-2.5 rounded-xl border border-emerald-100 w-fit">
+          <span className="text-emerald-700 font-semibold">Aktif çalışma alanı:</span>
+          <ChevronRight className="w-3.5 h-3.5 text-emerald-300" />
+          <span className="text-slate-800 font-medium capitalize">
             {activeTab === 'intelligence' && 'Sosyal Medya İstihbaratı, Gönderi Etiket Analizi, Pazarlama Maliyeti & Müşteri Avcısı'}
             {activeTab === 'investors' && 'Müşteri & Sermaye Portföyü, Yatırım Planı, Kâr Analizi & Otomatik Reklam Stratejisi (Supabase)'}
             {activeTab === 'feasibility' && 'Ada / Parsel İmar Hesaplama, Simülasyon & Temsili 3D Mimari Proje Kartı'}
@@ -126,22 +128,21 @@ export default function App() {
         {activeTab === 'boundaries' && <RoleMatrixSection />}
       </main>
 
-      <footer className="border-t border-slate-800/80 bg-slate-900/95 py-6 mt-12">
+      <footer className="border-t border-emerald-100 bg-white py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
-            <div className="flex items-center gap-2 text-white font-bold">
-              <span>🚜 Şahin Manitou Kiralama</span>
-              <span className="text-emerald-400">&</span>
-              <span>🏗️ Embay Yapı</span>
+            <div className="flex items-center gap-2 text-slate-900 font-bold">
+              <img src="/embay-mark.svg" alt="Embay marka logosu" className="w-7 h-7 rounded-lg" />
+              <span>Embay Yapı & Kiralık İş Makineleri</span>
             </div>
-            <span className="hidden sm:inline text-slate-600">|</span>
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline text-emerald-200">|</span>
+            <div className="flex items-center gap-1.5 text-slate-500">
+              <MapPin className="w-3.5 h-3.5 text-emerald-600" />
               <span>{BUSINESS_INFO.address}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] text-slate-500">
+          <div className="flex items-center gap-4 text-[11px] text-slate-400">
             <span>Yetkili İç Panel</span>
             <span>•</span>
             <span>Noindex (SEO Koruma)</span>
