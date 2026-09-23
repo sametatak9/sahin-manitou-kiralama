@@ -16,11 +16,5 @@ export function getProvider(name: AgentConfig['provider']): AIProvider {
   return p;
 }
 
-/** Hangi sağlayıcıların anahtarı tanımlı? (değer döndürmez, sadece var/yok) */
-export function providerAvailability() {
-  return {
-    anthropic: Boolean(Deno.env.get('ANTHROPIC_API_KEY')),
-    openai: Boolean(Deno.env.get('OPENAI_API_KEY')),
-    gemini: Boolean(Deno.env.get('GEMINI_API_KEY')),
-  };
-}
+/** Hangi sağlayıcıların anahtarı tanımlı? (Edge Secrets veya panelden Vault; değer döndürmez, sadece var/yok) */
+export { aiKeyAvailability as providerAvailability, initKeyStore } from './keys.ts';

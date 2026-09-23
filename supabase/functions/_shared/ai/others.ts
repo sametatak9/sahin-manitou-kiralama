@@ -1,5 +1,6 @@
 // OpenAI ve Gemini adaptörleri (resmi REST uçları). Anahtar yoksa CONFIGURATION_REQUIRED.
 import { ConfigurationRequiredError, extractJson } from './types.ts';
+import { getAiKey } from './keys.ts';
 import type { AgentConfig, AgentRunInput, AgentRunResult, AIProvider, CompleteInput, CompleteResult } from './types.ts';
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown) {
@@ -10,8 +11,8 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
 }
 
 // ── OpenAI (Chat Completions + function calling) ─────────────────────────────
-function openaiKey() {
-  const k = Deno.env.get('OPENAI_API_KEY');
+async function openaiKey() {
+  const k = await getAiKey('openai');
   if (!k) throw new ConfigurationRequiredError('OPENAI_API_KEY');
   return k;
 }
@@ -24,12 +25,12 @@ export const openaiProvider: AIProvider = {
       messages: [{ role: 'system', content: input.system }, { role: 'user', content: input.prompt }],
     };
     if (input.schema) body.response_format = { type: 'json_schema', json_schema: { name: 'output', schema: input.schema, strict: false } };
-    const data = await postJson('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${openaiKey()}` }, body);
+    const data = await postJson('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${await openaiKey()}` }, body);
     const text = data.choices?.[0]?.message?.content ?? '';
     return { text, json: input.schema ? extractJson(text) : null, usage: { tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }, stopReason: data.choices?.[0]?.finish_reason ?? '' };
   },
   async runAgent(agent: AgentConfig, input: AgentRunInput): Promise<AgentRunResult> {
-    const key = openaiKey();
+    const key = await openaiKey();
     const tools = input.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
     // deno-lint-ignore no-explicit-any
     const messages: any[] = [{ role: 'system', content: input.system }, { role: 'user', content: input.prompt }];
@@ -56,8 +57,8 @@ export const openaiProvider: AIProvider = {
 };
 
 // ── Google Gemini (generateContent + functionDeclarations) ──────────────────
-function geminiKey() {
-  const k = Deno.env.get('GEMINI_API_KEY');
+async function geminiKey() {
+  const k = await getAiKey('gemini');
   if (!k) throw new ConfigurationRequiredError('GEMINI_API_KEY');
   return k;
 }
@@ -71,13 +72,13 @@ export const geminiProvider: AIProvider = {
       contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
       generationConfig: { temperature: agent.temperature, maxOutputTokens: agent.max_tokens, ...(input.schema ? { responseMimeType: 'application/json' } : {}) },
     };
-    const data = await postJson(geminiUrl(agent.model), { 'x-goog-api-key': geminiKey() }, body);
+    const data = await postJson(geminiUrl(agent.model), { 'x-goog-api-key': await geminiKey() }, body);
     // deno-lint-ignore no-explicit-any
     const text = (data.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('');
     return { text, json: input.schema ? extractJson(text) : null, usage: { tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0 }, stopReason: data.candidates?.[0]?.finishReason ?? '' };
   },
   async runAgent(agent: AgentConfig, input: AgentRunInput): Promise<AgentRunResult> {
-    const key = geminiKey();
+    const key = await geminiKey();
     const tools = [{ functionDeclarations: input.tools.map((t) => ({ name: t.name, description: t.description, parameters: t.input_schema })) }];
     // deno-lint-ignore no-explicit-any
     const contents: any[] = [{ role: 'user', parts: [{ text: input.prompt }] }];

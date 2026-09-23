@@ -1,5 +1,6 @@
 // Connector kayıt defteri. implemented=false olanlar UI'da "YAPILANDIRMA GEREKLİ / ENTEGRASYON BEKLİYOR" görünür.
 import { facebookMetrics, facebookPublish, instagramMetrics, instagramPublish } from './meta.ts';
+import { youtubePublish } from './youtube.ts';
 import type { ConnectorDef } from './types.ts';
 
 const cap = (publish: boolean, metrics: boolean, messaging = false, design = false) => ({ publish, metrics, messaging, design });
@@ -18,8 +19,9 @@ export const CONNECTORS: ConnectorDef[] = [
     docsUrl: 'https://docs.x.com/x-api/posts/creation-of-a-post', note: 'X API ücretli erişim paketi gerektirir.' },
   { key: 'tiktok', name: 'TikTok', category: 'social', authType: 'oauth', officialApi: true, implemented: false, requiredEnv: ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'], capabilities: cap(true, false),
     docsUrl: 'https://developers.tiktok.com/doc/content-posting-api-get-started', note: 'Content Posting API için uygulama denetimi gerekir; yalnızca video.' },
-  { key: 'youtube', name: 'YouTube', category: 'social', authType: 'oauth', officialApi: true, implemented: false, requiredEnv: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'], capabilities: cap(true, true),
-    docsUrl: 'https://developers.google.com/youtube/v3/docs/videos/insert', note: 'Video yükleme; doğrulanmamış uygulamalarda videolar gizli kalır.' },
+  { key: 'youtube', name: 'YouTube', category: 'social', authType: 'oauth', officialApi: true, implemented: true, requiredEnv: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'], capabilities: cap(true, false),
+    docsUrl: 'https://developers.google.com/youtube/v3/docs/videos/insert', note: 'Google hesabıyla (OAuth) bağlanır; video ve Shorts resmi YouTube Data API ile yüklenir. Google doğrulaması tamamlanmamış uygulamada yüklenen videolar gizli kalabilir.',
+    publish: youtubePublish },
   // ── ListingConnector ──
   { key: 'sahibinden', name: 'Sahibinden', category: 'listing', authType: 'manual', officialApi: false, implemented: false, requiredEnv: [], capabilities: cap(false, false),
     docsUrl: 'https://www.sahibinden.com/', note: 'Herkese açık resmi yayın API’si yok. Bot ilan metnini hazırlar, yayın manuel ve onaylıdır.' },

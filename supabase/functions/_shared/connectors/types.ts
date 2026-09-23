@@ -25,6 +25,8 @@ export interface AccountRow {
 export interface PublishInput {
   caption: string;
   mediaUrls: string[];
+  format?: string | null;   // post · reel · story · short · video
+  title?: string | null;
 }
 
 export interface PublishOutput {

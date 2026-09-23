@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
 import type { AgentConfig } from './ai/index.ts';
+import { getAiKey } from './ai/keys.ts';
 
 export type Db = SupabaseClient;
 
@@ -55,7 +56,13 @@ export async function loadAgent(db: Db, agentId: string | null, fallbackKey = 'c
   const q = db.from('ai_agents').select('id,provider,model,temperature,max_tokens,system_prompt').eq('active', true);
   const { data } = agentId ? await q.eq('id', agentId).maybeSingle() : await q.eq('agent_key', fallbackKey).maybeSingle();
   if (!data) throw new Error('Aktif AI agent bulunamadı');
-  return { ...data, temperature: Number(data.temperature) } as AgentConfig & { id: string };
+  const agent = { ...data, temperature: Number(data.temperature) } as AgentConfig & { id: string };
+  // Ajanın sağlayıcısının anahtarı yoksa tanımlı başka sağlayıcıya geç (önce Claude, sonra Gemini)
+  if (!(await getAiKey(agent.provider))) {
+    if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-opus-5' };
+    if (agent.provider !== 'gemini' && (await getAiKey('gemini'))) return { ...agent, provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest' };
+  }
+  return agent;
 }
 
 /** Tek seferlik yapılandırılmış AI çağrısı; her üretim ai_generations'a yazılır. */

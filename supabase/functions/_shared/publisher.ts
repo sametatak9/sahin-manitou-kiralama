@@ -17,7 +17,7 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
   if (!def) throw new ConnectorError(`Bilinmeyen platform: ${platform}`, 'UNKNOWN_PLATFORM');
   if (!def.publish) throw new ConnectorError(`${def.name}: ${def.officialApi ? 'yayın connector’ı henüz yapılandırılmadı' : 'resmi API yok, manuel yayın'}`, def.officialApi ? 'CONFIGURATION_REQUIRED' : 'MANUAL_ONLY');
 
-  const { data: draft } = await ctx.db.from('social_drafts').select('id,title,body,caption,hashtags,media_urls,design_id,workflow_status').eq('id', input.content_id).maybeSingle();
+  const { data: draft } = await ctx.db.from('social_drafts').select('id,title,headline,format,body,caption,hashtags,media_urls,design_id,workflow_status').eq('id', input.content_id).maybeSingle();
   if (!draft) throw new Error('İçerik bulunamadı');
   let media: string[] = Array.isArray(input.media_urls) && input.media_urls.length ? (input.media_urls as string[]) : (draft.media_urls || []);
   if (!media.length && draft.design_id) {
@@ -40,7 +40,7 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
 
   try {
     const token = await tokenFor(ctx.db, account);
-    const out = await def.publish(account, token, { caption, mediaUrls: media });
+    const out = await def.publish(account, token, { caption, mediaUrls: media, format: (input.format as string) || draft.format || null, title: draft.headline || draft.title || null });
     await ctx.db.from('social_publications').update({ status: 'published', published_at: new Date().toISOString(), external_post_id: out.externalPostId, external_url: out.externalUrl, api_response: out.raw }).eq('id', pub.id);
     await ctx.db.from('social_drafts').update({ workflow_status: 'published', status: 'yayinda' }).eq('id', draft.id);
     await ctx.log('info', `${def.name} yayını API ile doğrulandı`, { external_post_id: out.externalPostId });

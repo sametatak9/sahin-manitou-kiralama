@@ -54,8 +54,10 @@ export async function metaExchange(code: string, redirectUri: string): Promise<{
   return { pages, userName: me.name ?? null };
 }
 
-async function waitForContainer(containerId: string, token: string) {
-  for (let i = 0; i < 10; i++) {
+const isVideo = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);
+
+async function waitForContainer(containerId: string, token: string, tries = 10) {
+  for (let i = 0; i < tries; i++) {
     const s = await call('GET', containerId, { fields: 'status_code,status', access_token: token });
     if (s.status_code === 'FINISHED') return;
     if (s.status_code === 'ERROR' || s.status_code === 'EXPIRED') throw new ConnectorError(`Instagram medya işleme hatası: ${s.status || s.status_code}`, 'IG_CONTAINER', s);
@@ -66,10 +68,17 @@ async function waitForContainer(containerId: string, token: string) {
 
 export async function instagramPublish(account: AccountRow, token: string, input: PublishInput): Promise<PublishOutput> {
   if (!account.external_account_id) throw new ConnectorError('Instagram hesap kimliği yok', 'IG_NO_ACCOUNT');
-  const image = input.mediaUrls[0];
-  if (!image) throw new ConnectorError('Instagram API görselsiz gönderi kabul etmez; önce Design Studio’dan PNG dışa aktarın.', 'IG_MEDIA_REQUIRED');
-  const container = await call('POST', `${account.external_account_id}/media`, { image_url: image, caption: input.caption, access_token: token });
-  await waitForContainer(container.id, token);
+  const media = input.mediaUrls[0];
+  if (!media) throw new ConnectorError('Instagram API görselsiz/videosuz gönderi kabul etmez; önce medya yükleyin veya Design Studio’dan PNG dışa aktarın.', 'IG_MEDIA_REQUIRED');
+  const video = isVideo(media);
+  const params: Record<string, string> = { access_token: token };
+  if (input.format === 'story') { params.media_type = 'STORIES'; params[video ? 'video_url' : 'image_url'] = media; }
+  else if (video || input.format === 'reel') {
+    if (!video) throw new ConnectorError('Reels için video (mp4/mov) gerekli', 'IG_REEL_VIDEO_REQUIRED');
+    params.media_type = 'REELS'; params.video_url = media; params.caption = input.caption; params.share_to_feed = 'true';
+  } else { params.image_url = media; params.caption = input.caption; }
+  const container = await call('POST', `${account.external_account_id}/media`, params);
+  await waitForContainer(container.id, token, video ? 40 : 10);
   const published = await call('POST', `${account.external_account_id}/media_publish`, { creation_id: container.id, access_token: token });
   const info = await call('GET', published.id, { fields: 'permalink,timestamp', access_token: token }).catch(() => ({}));
   return { externalPostId: published.id, externalUrl: info.permalink ?? null, raw: { container, published, info } };
@@ -77,10 +86,12 @@ export async function instagramPublish(account: AccountRow, token: string, input
 
 export async function facebookPublish(account: AccountRow, token: string, input: PublishInput): Promise<PublishOutput> {
   if (!account.external_account_id) throw new ConnectorError('Facebook sayfa kimliği yok', 'FB_NO_PAGE');
-  const image = input.mediaUrls[0];
-  const res = image
-    ? await call('POST', `${account.external_account_id}/photos`, { url: image, caption: input.caption, access_token: token })
-    : await call('POST', `${account.external_account_id}/feed`, { message: input.caption, access_token: token });
+  const media = input.mediaUrls[0];
+  const res = media && isVideo(media)
+    ? await call('POST', `${account.external_account_id}/videos`, { file_url: media, description: input.caption, access_token: token })
+    : media
+      ? await call('POST', `${account.external_account_id}/photos`, { url: media, caption: input.caption, access_token: token })
+      : await call('POST', `${account.external_account_id}/feed`, { message: input.caption, access_token: token });
   const postId = res.post_id || res.id;
   const info = await call('GET', postId, { fields: 'permalink_url', access_token: token }).catch(() => ({}));
   return { externalPostId: postId, externalUrl: info.permalink_url ?? null, raw: { res, info } };

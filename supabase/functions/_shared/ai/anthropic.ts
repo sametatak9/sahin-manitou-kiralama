@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 import { AIRefusalError, ConfigurationRequiredError, extractJson } from './types.ts';
+import { getAiKey } from './keys.ts';
 import type { AgentConfig, AgentRunInput, AgentRunResult, AIProvider, CompleteInput, CompleteResult } from './types.ts';
 
 // Opus 5 / Fable ailesi sampling parametrelerini kabul etmez; Haiku 4.5 eder.
@@ -11,8 +12,8 @@ function supportsServerFallback(model: string) {
   return model.startsWith('claude-opus-5') || model.startsWith('claude-fable-5');
 }
 
-function client() {
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+async function client() {
+  const apiKey = await getAiKey('anthropic');
   if (!apiKey) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
   return new Anthropic({ apiKey, maxRetries: 2, timeout: 110_000 });
 }
@@ -35,7 +36,7 @@ export const anthropicProvider: AIProvider = {
   name: 'anthropic',
 
   async complete(agent: AgentConfig, input: CompleteInput): Promise<CompleteResult> {
-    const c = client();
+    const c = await client();
     const params: Record<string, unknown> = {
       ...baseParams(agent),
       system: input.system,
@@ -55,7 +56,7 @@ export const anthropicProvider: AIProvider = {
   },
 
   async runAgent(agent: AgentConfig, input: AgentRunInput): Promise<AgentRunResult> {
-    const c = client();
+    const c = await client();
     const tools = input.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema }));
     // deno-lint-ignore no-explicit-any
     const messages: any[] = [{ role: 'user', content: input.prompt }];
