@@ -4,8 +4,8 @@ import {
   Opportunity,
   Lead,
   PlatformConnection,
-  ContentItem,
   BotTask,
+  ContentItem,
   SEORun,
   TrendItem,
   EmailMessage,
@@ -16,24 +16,19 @@ import {
 export const INITIAL_COMPANIES: Company[] = [
   {
     id: 'comp-1',
-    name: 'Tozkoparan Konut Yapı Kooperatifi',
+    name: 'Embay Yapı & Gayrimenkul Taahhüt',
     city: 'İstanbul',
-    district: 'Güngören',
-    sector: 'Konut İnşaatı / Kentsel Dönüşüm',
-    phone: '0212 555 12 34',
-    email: 'info@tozkoparanyapi.org',
-    address: 'Tozkoparan Mah. Park Cad. No: 14 Güngören / İstanbul',
-    createdAt: '2026-08-10',
+    district: 'Güngören / Tozkoparan',
+    sector: 'Kentsel Dönüşüm & Konut Taahhüt',
+    phone: '0531 436 29 04',
+    email: 'info@embayyapi.com',
+    address: 'Tozkoparan Mah. Güngören / İstanbul',
+    createdAt: '2026-09-20',
     enrichmentHistory: [
       {
-        date: '2026-08-10',
-        source: 'Google Business & İhale Bülteni',
-        addedFields: ['phone', 'district', 'address']
-      },
-      {
-        date: '2026-09-18',
-        source: 'Saha Keşif & Webhook',
-        addedFields: ['sector', 'taxNumber']
+        date: '2026-09-20',
+        source: 'Sistem Kurulumu',
+        addedFields: ['name', 'sector', 'phone', 'city', 'district']
       }
     ]
   },
@@ -41,34 +36,17 @@ export const INITIAL_COMPANIES: Company[] = [
     id: 'comp-2',
     name: 'Marmara Çelik & Endüstriyel Montaj Ltd.',
     city: 'İstanbul',
-    district: 'Esenyurt / Kıraç',
-    sector: 'Çelik Konstrüksiyon & Fabrika',
-    phone: '0212 886 44 20',
-    email: 'operasyon@marmaracelik.com.tr',
-    address: 'Kıraç Sanayi Bölgesi 4. Sok. No: 8 Esenyurt',
-    createdAt: '2026-09-02',
+    district: 'Hadımköy Sanayi Bölgesi',
+    sector: 'Çelik Konstrüksiyon & Lojistik Depo',
+    phone: '0533 412 88 90',
+    email: 'santiye@marmaracelik.com.tr',
+    address: 'Hadımköy Sanayi Bölgesi 4. Cadde No: 18 Arnavutköy',
+    createdAt: '2026-09-21',
     enrichmentHistory: [
       {
-        date: '2026-09-02',
-        source: 'Facebook İş Makineleri Grubu',
-        addedFields: ['phone', 'name']
-      }
-    ]
-  },
-  {
-    id: 'comp-3',
-    name: 'Atlas Prefabrik & Lojistik Yapı',
-    city: 'Tekirdağ',
-    district: 'Çorlu',
-    sector: 'Depo & Lojistik Tesis',
-    phone: '0282 650 90 80',
-    email: 'santiye@atlasprefabrik.com',
-    createdAt: '2026-09-14',
-    enrichmentHistory: [
-      {
-        date: '2026-09-14',
-        source: 'İnşaat Dünyası Haber',
-        addedFields: ['phone', 'city']
+        date: '2026-09-21',
+        source: 'Şantiye Keşif Talebi',
+        addedFields: ['phone', 'email', 'address']
       }
     ]
   }
@@ -78,24 +56,24 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'proj-1',
     companyId: 'comp-1',
-    companyName: 'Tozkoparan Konut Yapı Kooperatifi',
-    title: 'Güngören Tozkoparan 8 Bloklu Kentsel Yenileme',
-    location: 'Güngören / İstanbul',
+    companyName: 'Embay Yapı & Gayrimenkul Taahhüt',
+    title: 'Güngören Tozkoparan Yerinde Kentsel Dönüşüm Projesi',
+    location: 'Tozkoparan Mah. Güngören / İstanbul',
     projectType: 'KENTSEL_DONUSUM',
-    estimatedDurationMonths: 18,
-    stage: 'KABA_YAPI',
-    notes: 'Deprem yönetmeliğine uygun C35 radye temel tamamlandı, kat kolonları dikiliyor.'
+    estimatedDurationMonths: 14,
+    stage: 'PLANLAMA',
+    notes: '24 bağımsız bölüm, radye temel ve C35 hazır beton kullanımı planlandı.'
   },
   {
     id: 'proj-2',
     companyId: 'comp-2',
     companyName: 'Marmara Çelik & Endüstriyel Montaj Ltd.',
-    title: 'Hadımköy 12.000m² Lojistik Depo Çatı ve Cephe Panel Montajı',
-    location: 'Arnavutköy / İstanbul',
-    projectType: 'CEPHE_MONTAJ',
-    estimatedDurationMonths: 4,
-    stage: 'INCE_YAPI',
-    notes: 'Sandviç panel montajı için 18 metre bom uzanımlı teleskopik yükleyici ihtiyacı var.'
+    title: 'Hadımköy 12.000m² Lojistik Depo Çatı & Cephe Paneli Montajı',
+    location: 'Hadımköy Sanayi / İstanbul',
+    projectType: 'LOJISTIK_DEPO',
+    estimatedDurationMonths: 3,
+    stage: 'KABA_YAPI',
+    notes: '18 metre yükseklik için MT-X 1840 teleskopik yükleyici sepetli montaj yapılacak.'
   }
 ];
 
@@ -118,7 +96,7 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
       sourceType: 'FACEBOOK_GROUP',
       title: 'Hadımköy şantiyemize 18m sepetli/çatallı Manitou arıyoruz',
       discoveredAt: '2026-09-20 14:15',
-      evidenceSnippet: 'Hadımköy lojistik depo projemizde 1.5 ay çalışacak operatörlü 18 metre Manitou teleskopik vinç aranıyor. Fatura kesilecek.',
+      evidenceSnippet: 'Hadımköy lojistik depo projemizde 1.5 ay çalışacak operatörlü 18 metre Manitou teleskopik vinç aranıyor.',
       confidenceScore: 94,
       botName: 'Facebook Group Lead Radar Bot',
       query: '18m manitou kiralık şantiye istanbul'
@@ -128,7 +106,7 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
     id: 'opp-2',
     companyId: 'comp-1',
     projectId: 'proj-1',
-    companyName: 'Tozkoparan Konut Yapı Kooperatifi',
+    companyName: 'Embay Yapı & Gayrimenkul Taahhüt',
     projectTitle: 'Güngören Tozkoparan 8 Bloklu Kentsel Yenileme',
     machineRequirement: 'YAPIM_TAAHHUT',
     durationDays: 360,
@@ -142,7 +120,7 @@ export const INITIAL_OPPORTUNITIES: Opportunity[] = [
       sourceType: 'INBOUND_FORM',
       title: 'Web Üzerinden Deprem & Kentsel Dönüşüm Keşif Başvurusu',
       discoveredAt: '2026-09-22 21:15',
-      evidenceSnippet: 'Tozkoparan Mahallesinde 24 daireli riskli binamız için kat karşılığı Embay Yapı ile görüşmek istiyoruz.',
+      evidenceSnippet: 'Tozkoparan Mahallesinde riskli binamız için kat karşılığı Embay Yapı ile görüşmek istiyoruz.',
       confidenceScore: 98,
       botName: 'Inbound Webhook Listener',
       query: 'Direct Form Submission'
@@ -158,45 +136,44 @@ export const INITIAL_LEADS: Lead[] = [
     phone: '0533 412 88 90',
     email: 'santiye@marmaracelik.com.tr',
     status: 'OFFER',
-    opportunitySummary: 'Hadımköy Çatı/Cephe için 18 Metre Manitou MT-X 1840 (45 Gün Operatörlü)',
-    requiresHumanApproval: true,
-    approvalAction: 'SEND_WHATSAPP',
+    opportunitySummary: 'Hadımköy Lojistik Depo Çatı Paneli Montajı - 18 Metre Manitou MT-X 1840 Kiralama',
+    requiresHumanApproval: false,
     sourceEvidence: {
       url: 'https://facebook.com/groups/is.makineleri.turkiye/permalink/918237192',
       domain: 'facebook.com',
       sourceType: 'FACEBOOK_GROUP',
-      title: 'Hadımköy şantiyemize 18m sepetli/çatallı Manitou arıyoruz',
+      title: 'Hadımköy Çatı Montajı Manitou İhtiyacı',
       discoveredAt: '2026-09-20 14:15',
-      evidenceSnippet: '18 metre Manitou teleskopik vinç aranıyor. Fiyat ve operatör bilgisi rica ederiz.',
+      evidenceSnippet: 'Hadımköy şantiyemize 45 gün çalışacak operatörlü 18 metre Manitou teleskopik vinç aranıyor.',
       confidenceScore: 94,
       botName: 'Facebook Group Lead Radar Bot',
-      query: '18m manitou kiralık istanbul'
+      query: '18m manitou kiralık şantiye istanbul'
     },
     history: [
       {
         status: 'DISCOVERED',
         changedAt: '2026-09-20 14:15',
-        note: 'Facebook İş Makineleri grubundan sinyal tespit edildi.'
+        note: 'Piyasa istihbarat radarı sinyali doğruladı.'
       },
       {
         status: 'QUALIFIED',
-        changedAt: '2026-09-20 15:30',
-        note: 'Şantiye Hadımköyde ve iş süresi 45 gün olarak teyit edildi.'
+        changedAt: '2026-09-20 15:00',
+        note: 'Şantiye lokasyonu Hadımköy olarak teyit edildi.'
       },
       {
         status: 'OFFER',
-        changedAt: '2026-09-21 10:00',
-        note: 'Günlük çalışma saatleri ve mazot şartları ile PDF teklif taslağı hazırlandı. Samet Bey onayı bekleniyor.'
+        changedAt: '2026-09-21 11:00',
+        note: '380.000 TL bedelli 45 günlük operatörlü resmi teklif mektubu iletildi.'
       }
     ]
   },
   {
     id: 'lead-2',
     name: 'Mehmet Salih Kaya',
-    companyName: 'Güngören Kat Malikleri Temsilcisi',
+    companyName: 'Tozkoparan Kat Malikleri Temsilcisi',
     phone: '0532 918 22 14',
     status: 'CONTACTABLE',
-    opportunitySummary: 'Tozkoparan 5 Katlı Bina Kentsel Dönüşüm & Güçlendirme Keşfi',
+    opportunitySummary: 'Tozkoparan 5 Katlı Bina Kentsel Dönüşüm & Statik Keşif',
     requiresHumanApproval: true,
     approvalAction: 'CREATE_OFFER',
     sourceEvidence: {
@@ -219,7 +196,7 @@ export const INITIAL_LEADS: Lead[] = [
       {
         status: 'QUALIFIED',
         changedAt: '2026-09-22 20:10',
-        note: 'Lokasyon Güngören merkezde ve mülk sahiplerinin %75 onayı hazır.'
+        note: 'Lokasyon Güngören merkezde ve mülk sahiplerinin onayı hazır.'
       }
     ]
   }
@@ -229,75 +206,68 @@ export const INITIAL_PLATFORMS: PlatformConnection[] = [
   {
     platform: 'INSTAGRAM',
     accountName: '@sahinmanitou_kiralama',
-    status: 'DISCONNECTED',
-    lastSyncAt: null,
-    capabilities: {
-      connect: true,
-      publish: false,
-      readMetrics: false,
-      readComments: false,
-      readMessages: false
-    },
-    authRequiredAction: 'Meta Graph API OAuth izni ve Instagram Business hesabı bağlantısı gereklidir.'
-  },
-  {
-    platform: 'FACEBOOK',
-    accountName: 'Şahin Manitou & Embay Yapı',
-    status: 'DISCONNECTED',
-    lastSyncAt: null,
-    capabilities: {
-      connect: true,
-      publish: false,
-      readMetrics: false,
-      readComments: false,
-      readMessages: false
-    },
-    authRequiredAction: 'Facebook Page Access Token bekleniyor.'
-  },
-  {
-    platform: 'GOOGLE_BUSINESS',
-    accountName: 'Embay Yapı & Şahin Manitou (Güngören)',
-    status: 'DISCONNECTED',
-    lastSyncAt: null,
-    capabilities: {
-      connect: true,
-      publish: false,
-      readMetrics: false,
-      readComments: false,
-      readMessages: false
-    },
-    authRequiredAction: 'Google Business Profile API kimlik doğrulaması gereklidir.'
-  },
-  {
-    platform: 'WHATSAPP_BUSINESS',
-    accountName: '+90 531 436 29 04 (Canlı Hat)',
     status: 'CONNECTED',
-    lastSyncAt: '2026-09-23 06:00',
+    lastSyncAt: 'Bugün 08:30',
     capabilities: {
       connect: true,
       publish: true,
       readMetrics: true,
-      readComments: false,
+      readComments: true,
       readMessages: true
     },
     metrics: {
-      reach: 142,
-      engagementRate: '94%'
+      followers: 2450,
+      reach: 18200,
+      engagementRate: '%4.8'
     }
   },
   {
-    platform: 'X',
-    accountName: '@sahinmanitou',
-    status: 'DISCONNECTED',
-    lastSyncAt: null,
+    platform: 'FACEBOOK',
+    accountName: 'Şahin Manitou & Embay Yapı',
+    status: 'CONNECTED',
+    lastSyncAt: 'Bugün 08:30',
     capabilities: {
       connect: true,
-      publish: false,
-      readMetrics: false,
-      readComments: false,
-      readMessages: false
+      publish: true,
+      readMetrics: true,
+      readComments: true,
+      readMessages: true
     },
-    authRequiredAction: 'X Developer API v2 Bearer Token gereklidir.'
+    metrics: {
+      followers: 3100,
+      reach: 22400,
+      engagementRate: '%3.9'
+    }
+  },
+  {
+    platform: 'GOOGLE_BUSINESS',
+    accountName: 'Embay Yapı & Şahin Manitou (Güngören)',
+    status: 'CONNECTED',
+    lastSyncAt: 'Bugün 09:00',
+    capabilities: {
+      connect: true,
+      publish: true,
+      readMetrics: true,
+      readComments: true,
+      readMessages: true
+    },
+    metrics: {
+      reach: 5400,
+      engagementRate: '%8.2'
+    }
+  },
+  {
+    platform: 'WHATSAPP_BUSINESS',
+    accountName: '0531 436 29 04 (Samet Bey - Operasyon)',
+    status: 'CONNECTED',
+    lastSyncAt: 'Canlı',
+    capabilities: {
+      connect: true,
+      publish: true,
+      readMetrics: false,
+      readComments: true,
+      readMessages: true
+    }
   }
 ];
 
@@ -308,7 +278,7 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     category: 'SEO',
     status: 'TAMAMLANDI',
     schedule: 'Her gün 06:00',
-    lastRunAt: '2026-09-23 06:04',
+    lastRunAt: 'Bugün 06:04',
     duration: '0.9 sn',
     report: 'H1, Meta Description, Schema.org ve sitemap doğrulandı. 3 yeni anahtar kelime fırsatı çıkarıldı.',
     findingsCount: 3,
@@ -320,21 +290,21 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     category: 'LEAD_RADAR',
     status: 'TAMAMLANDI',
     schedule: 'Gerçek zamanlı (Event-driven)',
-    lastRunAt: '2026-09-23 07:15',
+    lastRunAt: 'Bugün 07:15',
     duration: '1.2 sn',
-    report: 'Web form ve WhatsApp senkronizasyonu aktif. 1 yeni kentsel dönüşüm talebi CRM havuzuna eklendi.',
+    report: 'Web form ve WhatsApp senkronizasyonu aktif. Gelen keşif talepleri doğrudan CRM havuzuna aktarılıyor.',
     findingsCount: 1,
     model: 'Edge Webhook Engine'
   },
   {
     id: 'b-3',
-    name: 'Facebook Group Lead Radar',
+    name: 'Facebook Group & Forum Lead Radar',
     category: 'LEAD_RADAR',
     status: 'TAMAMLANDI',
     schedule: 'Günde 3 kez (08:00, 14:00, 20:00)',
-    lastRunAt: '2026-09-23 08:00',
+    lastRunAt: 'Bugün 08:00',
     duration: '2.4 sn',
-    report: 'İş makineleri gruplarından 1 adet 18m teleskopik vinç talebi doğrulandı ve kanıt URL ile bağlandı.',
+    report: 'Hadımköy ve sanayi şantiyelerinden 1 adet 18m teleskopik vinç talebi doğrulandı ve kanıtlandı.',
     findingsCount: 1,
     model: 'Gemini 2.5 Flash Parser'
   },
@@ -342,23 +312,23 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     id: 'b-4',
     name: '30 Günlük AI İçerik Motoru',
     category: 'CONTENT',
-    status: 'PLANLANDI',
+    status: 'TAMAMLANDI',
     schedule: 'İsteğe bağlı / Aylık',
-    lastRunAt: '2026-09-22 18:00',
-    duration: 'Bekliyor',
-    report: 'İçerik takviminde 30 adet çoklu platform taslağı hazır. Samet Bey onayı bekleniyor.',
-    findingsCount: 30,
+    lastRunAt: 'Dün 18:00',
+    duration: '1.4 sn',
+    report: 'İçerik takviminde listeler hazır. Samet Bey onayı ile WhatsApp ve sosyal medyaya sevk edilebiliyor.',
+    findingsCount: 3,
     model: 'Gemini 2.5 Flash'
   },
   {
     id: 'b-5',
     name: 'Fiyat & Teklif Botu (CRM)',
     category: 'CRM',
-    status: 'PLANLANDI',
+    status: 'TAMAMLANDI',
     schedule: 'Tetikleme bazlı',
-    lastRunAt: '2026-09-22 17:30',
-    duration: 'Bekliyor',
-    report: 'Hadımköy projesi için PDF formatında kiralama sözleşmesi ve fiyat teklifi oluşturuldu.',
+    lastRunAt: 'Dün 17:30',
+    duration: '0.8 sn',
+    report: 'Marmara Çelik Hadımköy projesi için antetli Manitou kiralama sözleşmesi hazırlandı.',
     findingsCount: 1,
     model: 'PDF Engine & CRM Calculator'
   },
@@ -368,14 +338,15 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     category: 'FLEET',
     status: 'TAMAMLANDI',
     schedule: 'Haftalık',
-    lastRunAt: '2026-09-23 08:30',
+    lastRunAt: 'Bugün 08:30',
     duration: '1.8 sn',
-    report: 'MT-X 1840 (Makine 02) çalışma saati 1.240 saate ulaştı. 250 saatlik periyodik filtre bakım uyarısı oluşturuldu.',
+    report: 'MT-X 1840 (Makine 02) 250 saatlik periyodik filtre ve hidrolik bakım uyarısı takip listesinde.',
     findingsCount: 1,
     model: 'Fleet Telemetry Worker'
   }
 ];
 
+// Clean initial content items, structured by clear campaign lists
 export const INITIAL_CONTENT_ITEMS: ContentItem[] = [
   {
     id: 'c-1',
@@ -383,13 +354,17 @@ export const INITIAL_CONTENT_ITEMS: ContentItem[] = [
     account: '@sahinmanitou_kiralama',
     plannedAt: '2026-09-24 10:30',
     timezone: 'Europe/Istanbul',
-    title: 'Şantiye Verimliliğinde 18 Metre Manitou Gücü',
-    caption: 'Hadımköy ve Trakya genelindeki sanayi yapılarında 18 metre MT-X 1840 telehandler modelimizle hızlı, güvenli ve operatörlü çözümler sunuyoruz. 4 tona kadar kaldırma kapasitesiyle çatı ve cephe panelleriniz zamanında yerinde.',
-    hashtags: ['#manitou', '#işmakineleri', '#telehandler', '#kiralıkmanitou', '#şantiye', '#embayyapi'],
-    cta: 'Şantiyenize en uygun makine ve fiyat teklifi için: 0531 436 29 04',
-    mediaType: 'CAROUSEL',
-    bot: 'Gemini AI Content Engine',
-    campaign: 'Eylül 2026 Filo Tanıtımı',
+    title: 'Ankomak Fuarı & Şantiye Gücü: 18 Metre Manitou MT-X 1840',
+    caption: 'Hadımköy ve Trakya şantiyelerinde 18 metre bom uzanımı ve 4.000 kg taşıma kapasitesiyle çatı ve cephe panellerinizi güvenle monte ediyoruz.',
+    hashtags: ['#fuar', '#manitoukiralama', '#ankomak', '#şantiye', '#embayyapi'],
+    cta: 'Şantiyenize hızlı sevk ve fiyat teklifi için: 0531 436 29 04',
+    mediaType: 'IMAGE',
+    bot: 'İnsan Planlaması (Samet Bey)',
+    campaign: 'Fuar Paylaşımları',
+    campaignTitle: 'Fuar Paylaşımları',
+    alarmSet: true,
+    alarmNote: 'Fuar standı görseli ile paylaşılacak',
+    recipientPhone: '0531 436 29 04',
     approvalStatus: 'PENDING_APPROVAL',
     publishStatus: 'SCHEDULED'
   },
@@ -399,91 +374,78 @@ export const INITIAL_CONTENT_ITEMS: ContentItem[] = [
     account: 'Embay Yapı & Şahin Manitou (Güngören)',
     plannedAt: '2026-09-25 14:00',
     timezone: 'Europe/Istanbul',
-    title: 'Güngören Tozkoparan’da Depreme Karşı Güvenli Konutlar',
-    caption: 'Embay Yapı olarak Tozkoparan bölgesindeki kentsel dönüşüm projelerimizde radye temel ve C35 beton standartlarından ödün vermiyoruz. Hak sahipleri için şeffaf süreç, zamanında anahtar teslim.',
-    hashtags: ['#kentseldönüşüm', '#güngören', '#tozkoparan', '#depremgüvenliği', '#embayyapi'],
-    cta: 'Ücretsiz yerinde bina zemin ve karot keşfi için arayın: 0531 436 29 04',
+    title: 'Güngören Tozkoparan Yerinde Dönüşüm: Depreme Güvenli Radye Temel',
+    caption: 'Embay Yapı güvencesiyle Tozkoparan kentsel dönüşüm alanında C35 hazır beton ve radye temel ile sağlam yarınlar inşa ediyoruz.',
+    hashtags: ['#kentseldönüşüm', '#tozkoparan', '#güngören', '#depremgüvenliği'],
+    cta: 'Ücretsiz yerinde bina zemin keşfi: 0531 436 29 04',
     mediaType: 'IMAGE',
-    bot: 'SEO & Local Presence Bot',
-    campaign: 'Güngören Kentsel Dönüşüm Bilinirliği',
+    bot: 'İnsan Planlaması (Samet Bey)',
+    campaign: 'Tozkoparan Kentsel Dönüşüm',
+    campaignTitle: 'Tozkoparan Kentsel Dönüşüm',
+    alarmSet: true,
+    alarmNote: 'Kat malikleri toplantısı öncesi paylaşılacak',
+    recipientPhone: '0531 436 29 04',
     approvalStatus: 'APPROVED',
     publishStatus: 'SCHEDULED'
-  },
-  {
-    id: 'c-3',
-    platform: 'FACEBOOK',
-    account: 'Şahin Manitou & Embay Yapı',
-    plannedAt: '2026-09-26 11:15',
-    timezone: 'Europe/Istanbul',
-    title: 'Operatörlü & Operatörsüz Teleskopik Forklift Kiralama',
-    caption: 'Yüksek irtifa montajları, çelik çatı yerleşimleri ve şantiye içi yük taşıma işleriniz için bakımlı, sigortalı Manitou filomuz hizmetinizde. İstanbul içi hızlı şantiye sevkiyatı.',
-    hashtags: ['#forklift', '#manitoukiralama', '#istanbulşantiye', '#teleskopikforklift'],
-    cta: 'WhatsApp Bilgi Hattımız: 0531 436 29 04',
-    mediaType: 'VIDEO',
-    bot: 'Gemini AI Content Engine',
-    campaign: 'Kiralama Hızlı Aksiyon',
-    approvalStatus: 'PENDING_APPROVAL',
-    publishStatus: 'DRAFT'
   }
 ];
 
 export const INITIAL_SEO_REPORT: SEORun = {
   id: 'seo-1',
   url: 'https://sahin-manitou-kiralama.vercel.app/',
-  analyzedAt: '2026-09-23 06:04',
+  analyzedAt: 'Bugün 06:04',
   h1: 'Deprem Yönetmeliğine Uygun Modern Konut İnşaatı & Kentsel Dönüşüm',
   metaTitle: 'Embay Yapı & Şahin Manitou | Güngören Kentsel Dönüşüm & Manitou Kiralama',
   metaDescription: 'Güngören Tozkoparan depreme dayanıklı kentsel dönüşüm projeleri ve İstanbul geneli 14m-18m Manitou teleskopik yükleyici kiralama.',
-  score: 96,
+  score: 98,
   schemaCheck: true,
   sitemapFound: true,
   robotsTxtFound: true,
   recommendations: [
-    'Canonical URL etiketi güncellenmeli (tou-kiralama.vercel.app ve sahin-manitou-kiralama.vercel.app için 301 yönlendirmesi).',
-    'OpenGraph görseline 18m Manitou şantiye aksiyonu eklenerek sosyal tıklanma oranı %30 artırılabilir.',
-    'Google Haritalar (Güngören şube) için haftalık 2 adet post paylaşımı yapılmalı.'
+    'Hadımköy çatı panel montajı üzerine özel bir alt sayfa başlığı güçlendirilebilir.',
+    'Google İşletme profilindeki şantiye çalışma fotoğrafları haftalık güncellenmeli.'
   ],
   opportunities: [
-    '"güngören kentsel dönüşüm müteahhit" aramasında ilk 3 sıraya yükselme potansiyeli yüksek.',
-    '"hadımköy kiralık manitou" bölgesel aramasında doğrudan birinci sıraya yerleşme şansı.',
-    '"18 metre manitou günlük kiralama fiyatı" için zengin snippet soru-cevap schema eklenmeli.'
+    'Hadımköy kiralık manitou (Aylık 1.400 aranma hacmi)',
+    'Güngören Tozkoparan kentsel dönüşüm müteahhit (Aylık 2.200 aranma)',
+    '18 metre telehandler kiralama fiyatları (Aylık 850 aranma)'
   ]
 };
 
 export const INITIAL_TRENDS: TrendItem[] = [
   {
     id: 'tr-1',
-    topic: 'İstanbul Kentsel Dönüşüm Yeni Kira Yardımı & Yarısı Bizden Kampanyası',
+    topic: 'İstanbul’da Kentsel Dönüşüm Kira Yardımı ve Noter Sözleşmeleri',
     relevanceScore: 95,
     brandFit: 'YÜKSEK',
     riskScore: 'GÜVENLİ',
-    suggestedAngle: 'Tozkoparan ve Güngören sakinlerine devlet destekli dönüşümde Embay Yapı’nın sunduğu avantajları anlatan bilgilendirici infografik.',
-    targetPlatform: 'INSTAGRAM',
+    suggestedAngle: 'Tozkoparan halkına kira desteği ve kat mülkiyeti hakları konusunda rehber içerik.',
+    targetPlatform: 'GOOGLE_BUSINESS',
     status: 'NEW'
   },
   {
     id: 'tr-2',
-    topic: 'Büyük Şantiyelerde İş Güvenliği: Sepetli Telehandler Kullanımı Zorunluluğu',
-    relevanceScore: 88,
+    topic: 'Lojistik Depo Çatılarında Güneş Enerjisi (GES) ve Manitou İhtiyacı',
+    relevanceScore: 92,
     brandFit: 'YÜKSEK',
     riskScore: 'GÜVENLİ',
-    suggestedAngle: 'İskele yerine 18m Manitou MT-X kullanımının hem iş güvenliği sertifikasyonuna hem de montaj hızına katkısı.',
-    targetPlatform: 'FACEBOOK',
-    status: 'APPROVED'
+    suggestedAngle: 'Güneş panellerinin çatıya taşınmasında telehandler vinç kullanımının iş güvenliği faydaları.',
+    targetPlatform: 'INSTAGRAM',
+    status: 'NEW'
   }
 ];
 
 export const INITIAL_EMAILS: EmailMessage[] = [
   {
     id: 'em-1',
-    from: 'satinalma@marmaracelik.com.tr',
-    subject: 'Hadımköy Şantiyesi 18m Manitou Teklif Talebi',
-    receivedAt: '2026-09-22 16:45',
+    from: 'santiye@marmaracelik.com.tr',
+    subject: 'Hadımköy Depo Projesi Manitou Kiralama Teklif Talebi',
+    receivedAt: 'Bugün 09:15',
     category: 'PROPOSAL_REQUEST',
-    summary: 'Marmara Çelik Hadımköy şantiyesine 45 gün süreyle 18 metre sepetli Manitou telehandler fiyat teklifi istemiştir.',
+    summary: 'Hadımköy şantiyesinde 45 günlük çalışma için MT-X 1840 fiyat teklifi ve operatör sertifikası isteniyor.',
     matchedCompany: 'Marmara Çelik & Endüstriyel Montaj Ltd.',
-    suggestedAction: 'Hazırlanan PDF teklifinin operatör ve nakliye şartları eklenerek yanıtlanması.',
-    draftReply: 'Sayın Yetkili, Hadımköy şantiyeniz için talep ettiğiniz 18m Manitou MT-X 1840 makinemiz müsait olup günlük çalışma ve operatörlü kiralama şartlarımız ekteki teklifimizde bilgilerinize sunulmuştur. Detaylar için 0531 436 29 04 üzerinden görüşebiliriz.',
+    suggestedAction: 'Kaşeli ve resmi teklif PDF mektubu iletin.',
+    draftReply: 'Sayın Yetkili, Hadımköy şantiyeniz için 45 günlük MT-X 1840 teklifimiz ekte yer almaktadır. Tel: 0531 436 29 04',
     status: 'NEEDS_APPROVAL'
   }
 ];
@@ -491,34 +453,34 @@ export const INITIAL_EMAILS: EmailMessage[] = [
 export const INITIAL_SYSTEM_ERRORS: SystemErrorLog[] = [
   {
     id: 'err-1',
-    service: 'Vercel Environment Sync',
-    bot: 'System Health Checker',
-    timestamp: '2026-09-23 07:41',
-    error: 'Vercel projesinde Environment Variables henüz tanımlanmamış. Production için SUPABASE_URL, GEMINI_API_KEY ve WHATSAPP_TOKEN tanımlanmalıdır.',
+    service: 'Vercel Deployment Webhook',
+    bot: 'System Monitor',
+    timestamp: 'Dün 23:45',
+    error: 'WebSocket bağlantı denemesi (Dev ortamı; Production etkilenmedi)',
     retryCount: 0,
-    status: 'PENDING'
+    status: 'RESOLVED'
   }
 ];
 
 export const INITIAL_AI_COSTS: AICostLog[] = [
   {
-    id: 'cst-1',
+    id: 'cost-1',
     provider: 'GEMINI',
     model: 'gemini-2.5-flash',
-    task: '30 Günlük İçerik Planı Üretimi',
-    tokens: 4200,
-    estimatedCostUSD: 0.0018,
-    bot: 'Gemini AI Content Engine',
-    timestamp: '2026-09-22 18:00'
+    task: 'Pazar İstihbaratı ve Lead Sinyal Ayrıştırma',
+    tokens: 4120,
+    estimatedCostUSD: 0.0012,
+    bot: 'Lead Radar',
+    timestamp: 'Bugün 08:00'
   },
   {
-    id: 'cst-2',
+    id: 'cost-2',
     provider: 'GEMINI',
     model: 'gemini-2.5-pro',
-    task: 'Güngören & Tozkoparan SEO Kod & Schema Analizi',
-    tokens: 6800,
-    estimatedCostUSD: 0.0082,
-    bot: 'SEO Bot',
-    timestamp: '2026-09-23 06:04'
+    task: 'SEO Anahtar Kelime & Rekabet Denetimi',
+    tokens: 8200,
+    estimatedCostUSD: 0.0048,
+    bot: 'SEO Inspector',
+    timestamp: 'Bugün 06:04'
   }
 ];

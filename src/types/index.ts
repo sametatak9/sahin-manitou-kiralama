@@ -87,7 +87,7 @@ export interface Lead {
   approvalAction?: 'SEND_WHATSAPP' | 'SEND_EMAIL' | 'CREATE_OFFER';
 }
 
-export type PlatformType = 'INSTAGRAM' | 'FACEBOOK' | 'X' | 'GOOGLE_BUSINESS' | 'WHATSAPP_BUSINESS';
+export type PlatformType = 'INSTAGRAM' | 'FACEBOOK' | 'X' | 'GOOGLE_BUSINESS' | 'WHATSAPP_BUSINESS' | 'TIKTOK' | 'LINKEDIN' | 'SAHIBINDEN' | 'WEBHOOK' | 'CUSTOM';
 
 export interface PlatformConnection {
   platform: PlatformType;
@@ -123,6 +123,10 @@ export interface ContentItem {
   mediaUrl?: string;
   bot: string;
   campaign: string;
+  campaignTitle?: string; // örn: "Fuar Paylaşımları", "Tozkoparan Kentsel Dönüşüm"
+  alarmSet?: boolean;
+  alarmNote?: string;
+  recipientPhone?: string;
   approvalStatus: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   publishStatus: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
   publishedAt?: string;

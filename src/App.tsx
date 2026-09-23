@@ -52,7 +52,8 @@ import {
   LeadStatus,
   ContentItem,
   BotTask,
-  PlatformConnection
+  PlatformConnection,
+  PlatformType
 } from './types';
 
 import { dbService, isSupabaseConfigured } from './lib/supabase';
@@ -335,6 +336,100 @@ export function App() {
 
     setContentItems(prev => [...newItems, ...prev]);
     showNotification('30 günlük gerçek içerik planı takvime eklendi. Onayınızı bekliyor.');
+  };
+
+  // Add Custom Content Plan
+  const handleAddContent = (item: Omit<ContentItem, 'id' | 'approvalStatus' | 'publishStatus'>) => {
+    const newItem: ContentItem = {
+      ...item,
+      id: `plan-${Date.now()}`,
+      approvalStatus: 'PENDING_APPROVAL',
+      publishStatus: 'DRAFT'
+    };
+    setContentItems(prev => [newItem, ...prev]);
+    showNotification(`"${newItem.title}" planı başarıyla takvime eklendi.`);
+  };
+
+  // Update Content Item
+  const handleUpdateContent = (id: string, updated: Partial<ContentItem>) => {
+    setContentItems(prev =>
+      prev.map(item => (item.id === id ? { ...item, ...updated } : item))
+    );
+    showNotification('İçerik planı güncellendi.');
+  };
+
+  // Delete Content Item
+  const handleDeleteContent = (id: string) => {
+    setContentItems(prev => prev.filter(item => item.id !== id));
+    showNotification('İçerik planı silindi.');
+  };
+
+  // Clear All Plans
+  const handleClearAllPlans = () => {
+    setContentItems([]);
+    showNotification('Tüm deneme planları temizlendi. Takvim sıfırlandı.');
+  };
+
+  // Add Custom Bot
+  const handleAddNewBot = (botData: Omit<BotTask, 'id'>) => {
+    const newBot: BotTask = {
+      ...botData,
+      id: `bot-${Date.now()}`
+    };
+    setBotTasks(prev => [newBot, ...prev]);
+    showNotification(`"${newBot.name}" botu sisteme eklendi ve aktif edildi.`);
+  };
+
+  // Toggle Bot Status
+  const handleToggleBotStatus = (id: string) => {
+    setBotTasks(prev =>
+      prev.map(b => {
+        if (b.id === id) {
+          const nextStatus = b.status === 'BEKLEMEDE' ? 'TAMAMLANDI' : 'BEKLEMEDE';
+          return { ...b, status: nextStatus };
+        }
+        return b;
+      })
+    );
+    showNotification('Bot çalışma durumu güncellendi.');
+  };
+
+  // Delete Bot
+  const handleDeleteBot = (id: string) => {
+    setBotTasks(prev => prev.filter(b => b.id !== id));
+    showNotification('Bot sistemden kaldırıldı.');
+  };
+
+  // Add Platform Connection
+  const handleAddPlatform = (newPlatform: PlatformConnection) => {
+    setPlatforms(prev => [newPlatform, ...prev]);
+    showNotification(`"${newPlatform.platform}" entegrasyonu sisteme kaydedildi.`);
+  };
+
+  // Toggle Platform Connection Status
+  const handleTogglePlatformStatus = (platformName: PlatformType, accountName: string) => {
+    setPlatforms(prev =>
+      prev.map(p => {
+        if (p.platform === platformName && p.accountName === accountName) {
+          const nextStatus = p.status === 'CONNECTED' ? 'DISCONNECTED' : 'CONNECTED';
+          return {
+            ...p,
+            status: nextStatus,
+            lastSyncAt: nextStatus === 'CONNECTED' ? 'Canlı Senkronize' : null
+          };
+        }
+        return p;
+      })
+    );
+    showNotification('Platform bağlantı durumu güncellendi.');
+  };
+
+  // Delete Platform Connection
+  const handleDeletePlatform = (platformName: PlatformType, accountName: string) => {
+    setPlatforms(prev =>
+      prev.filter(p => !(p.platform === platformName && p.accountName === accountName))
+    );
+    showNotification('Platform entegrasyonu kaldırıldı.');
   };
 
   // Schedule Post from Studio
@@ -641,6 +736,10 @@ export function App() {
                 contentItems={contentItems}
                 onApproveContent={handleApproveContent}
                 onGenerate30DayPlan={handleGenerate30DayPlan}
+                onAddContent={handleAddContent}
+                onUpdateContent={handleUpdateContent}
+                onDeleteContent={handleDeleteContent}
+                onClearAllPlans={handleClearAllPlans}
               />
             )}
 
@@ -654,6 +753,9 @@ export function App() {
                 seoReport={seoReport}
                 trends={trends}
                 onTriggerBot={handleTriggerBot}
+                onAddNewBot={handleAddNewBot}
+                onToggleBotStatus={handleToggleBotStatus}
+                onDeleteBot={handleDeleteBot}
                 onApproveTrend={() => {
                   setCurrentTab('studio');
                   showNotification('Trend Post Studio alanına aktarıldı.');
@@ -674,7 +776,12 @@ export function App() {
             )}
 
             {currentTab === 'connections' && (
-              <ConnectionsView platforms={platforms} />
+              <ConnectionsView
+                platforms={platforms}
+                onAddPlatform={handleAddPlatform}
+                onTogglePlatformStatus={handleTogglePlatformStatus}
+                onDeletePlatform={handleDeletePlatform}
+              />
             )}
 
             {currentTab === 'health' && (

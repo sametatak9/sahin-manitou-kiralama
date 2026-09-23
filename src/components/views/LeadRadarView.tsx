@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Radar,
   Search,
@@ -12,7 +12,12 @@ import {
   MessageSquare,
   Send,
   Eye,
-  RotateCw
+  RotateCw,
+  MapPin,
+  Clock,
+  FileText,
+  Filter,
+  Check
 } from 'lucide-react';
 import { SourceEvidence } from '../../types';
 
@@ -23,11 +28,63 @@ interface LeadRadarViewProps {
 export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToLead }) => {
   const [filterType, setFilterType] = useState<'ALL' | 'MANITOU' | 'KENTSEL_DONUSUM'>('ALL');
   const [isScanning, setIsScanning] = useState(false);
+  const [activeHourIndex, setActiveHourIndex] = useState<number>(0);
+
+  // Region Selection for scanning
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([
+    'Hadımköy Sanayi',
+    'Güngören Tozkoparan',
+    'İkitelli OSB',
+    'Çorlu - Çerkezköy'
+  ]);
+
+  const AVAILABLE_REGIONS = [
+    'Hadımköy Sanayi & Lojistik',
+    'Güngören Tozkoparan (Dönüşüm)',
+    'İkitelli OSB & Başakşehir',
+    'Esenyurt & Kıraç Sanayi',
+    'Çorlu & Çerkezköy Hattı',
+    'Tuzla & Gebze Şantiyeleri'
+  ];
+
+  // Hourly Reports (1-hour intervals: filled or empty status)
+  const [hourlyReports, setHourlyReports] = useState([
+    {
+      hour: '07:00 - 08:00',
+      status: 'FILLED',
+      findingsCount: 1,
+      region: 'Hadımköy Sanayi',
+      summary: '18m bomlu Manitou MT-X 1840 çatı panel montajı sinyali doğrulandı.'
+    },
+    {
+      hour: '08:00 - 09:00',
+      status: 'FILLED',
+      findingsCount: 1,
+      region: 'Güngören Tozkoparan',
+      summary: 'Tozkoparan 18 bağımsız bölümlü riskli bina dönüşüm keşif talebi havuza aktarıldı.'
+    },
+    {
+      hour: '09:00 - 10:00',
+      status: 'EMPTY',
+      findingsCount: 0,
+      region: 'İkitelli OSB & Esenyurt',
+      summary: 'Yapılan taramada yeni telehandler veya kentsel dönüşüm ilanı tespit edilmedi (Boş Rapor).'
+    },
+    {
+      hour: '10:00 - 11:00',
+      status: 'FILLED',
+      findingsCount: 1,
+      region: 'Kıraç Sanayi Sitesi',
+      summary: 'Çelik konstrüksiyon yükleme ve sepetli montaj işi için piyasa istihbaratı yakalandı.'
+    }
+  ]);
+
   const [signals, setSignals] = useState([
     {
       id: 'sig-1',
       title: 'Hadımköy Çatı ve Cephe Panel Montajı 18 Metre Manitou Arayışı',
       category: 'MANITOU',
+      region: 'Hadımköy Sanayi & Lojistik',
       domain: 'facebook.com',
       sourceType: 'FACEBOOK_GROUP',
       groupName: 'Türkiye İş Makineleri Kiralama & Satış Platformu',
@@ -44,6 +101,7 @@ export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToL
       id: 'sig-2',
       title: 'Tozkoparan Mahallesi 18 Bağımsız Bölümlü Bina Hak Sahipleri Kentsel Dönüşüm Talebi',
       category: 'KENTSEL_DONUSUM',
+      region: 'Güngören Tozkoparan (Dönüşüm)',
       domain: 'istanbul.gov.tr',
       sourceType: 'SECTOR_PORTAL',
       groupName: 'Kentsel Dönüşüm Hak Sahipleri İletişim Havuzu',
@@ -60,6 +118,7 @@ export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToL
       id: 'sig-3',
       title: 'Esenyurt Kıraç Sanayi Sitesi Çelik Konstrüksiyon Yükleme Operasyonu',
       category: 'MANITOU',
+      region: 'Esenyurt & Kıraç Sanayi',
       domain: 'google.com',
       sourceType: 'WEB_NEWS',
       groupName: 'Sanayi Yatırımları Bülteni',
@@ -74,11 +133,33 @@ export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToL
     }
   ]);
 
+  const toggleRegion = (region: string) => {
+    setSelectedRegions(prev =>
+      prev.includes(region) ? prev.filter(r => r !== region) : [...prev, region]
+    );
+  };
+
   const handleScan = () => {
     setIsScanning(true);
     setTimeout(() => {
       setIsScanning(false);
-    }, 1500);
+      // Add a fresh hourly report dynamically based on selected regions
+      const currentHour = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      const randomFilled = Math.random() > 0.3;
+      const targetRegion = selectedRegions[0] || 'Genel Şantiye Sahası';
+      
+      const newReport = {
+        hour: `${currentHour} Taraması`,
+        status: randomFilled ? 'FILLED' : 'EMPTY',
+        findingsCount: randomFilled ? 1 : 0,
+        region: targetRegion,
+        summary: randomFilled
+          ? `${targetRegion} bölgesinde yeni 18m Manitou kiralama talebi bulundu ve radar listesine eklendi.`
+          : `${targetRegion} bölgesinde bu saat diliminde yeni talep tespit edilmedi (Boş Rapor).`
+      };
+
+      setHourlyReports(prev => [newReport, ...prev]);
+    }, 1200);
   };
 
   const filteredSignals = signals.filter(s => {
@@ -88,30 +169,57 @@ export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToL
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="bg-white border border-emerald-200 rounded-2xl p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Banner with Regional Controls */}
+      <div className="bg-white border border-emerald-200/90 rounded-2xl p-6 shadow-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              PAZAR İSTİHBARATI & SOSYAL MEDYA SİNYAL RADARI
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              BÖLGESEL PAZAR İSTİHBARATI & LEAD RADARI
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-              Kaynak Kanıtlı Fırsat Avcısı
+              Aktif Şantiye Sinyal & Fırsat Avcısı
             </h1>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              İnternetten, Facebook iş makineleri gruplarından ve webden tespit edilen sinyaller kaynak linki, kanıt metni ve güven skoruyla saklanır. Spam ve toplu mesaj kesinlikle yasaktır; her aksiyon Samet Bey onayına tabidir.
+              Radarı çalıştırmadan önce tarama yapılacak şantiye ve dönüşüm bölgelerini seçin. Sistem 1'er saatlik aralıklarla dolu/boş bilgilendirme raporları çıkarır.
             </p>
           </div>
 
           <button
             onClick={handleScan}
             disabled={isScanning}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-xs shrink-0"
+            className="px-5 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-700/20 shrink-0"
           >
             <RotateCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
-            {isScanning ? 'Radar Taranıyor...' : 'Radarı Şimdi Çalıştır'}
+            <span>{isScanning ? 'Seçili Bölgeler Taranıyor...' : 'Radarı Şimdi Çalıştır'}</span>
           </button>
+        </div>
+
+        {/* Region Selector Bar */}
+        <div className="pt-5 border-t border-slate-100 mt-4 space-y-2">
+          <span className="text-xs font-bold text-slate-700 block">
+            📍 Tarama Yapılan Şantiye ve Sanayi Bölgeleri (Tıklayarak Seçin/Kaldırın):
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {AVAILABLE_REGIONS.map(reg => {
+              const isSelected = selectedRegions.includes(reg);
+              return (
+                <button
+                  key={reg}
+                  onClick={() => toggleRegion(reg)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    isSelected
+                      ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold'
+                      : 'bg-slate-100 text-slate-500 border border-transparent hover:bg-slate-200'
+                  }`}
+                >
+                  <MapPin className={`w-3 h-3 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <span>{reg}</span>
+                  {isSelected && <Check className="w-3 h-3 text-emerald-700" />}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Filter Badges - Mobile Horizontal Scrollable */}
@@ -151,84 +259,125 @@ export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToL
         </div>
       </div>
 
+      {/* 1-Hour Interval Periodic Reports Section */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-emerald-700" />
+            <h3 className="font-heading font-extrabold text-sm text-slate-900">
+              1'er Saatlik Periyodik Bilgilendirme Raporu
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-400 font-mono">
+            {hourlyReports.length} Rapor Kaydı
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {hourlyReports.map((rep, idx) => (
+            <div
+              key={idx}
+              className={`p-3.5 rounded-xl border space-y-1.5 text-xs transition-all ${
+                rep.status === 'FILLED'
+                  ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+            >
+              <div className="flex items-center justify-between font-mono font-bold text-[11px]">
+                <span>{rep.hour}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] ${
+                    rep.status === 'FILLED'
+                      ? 'bg-emerald-200 text-emerald-900'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {rep.status === 'FILLED' ? '✓ DOLU RAPOR' : '○ BOŞ RAPOR'}
+                </span>
+              </div>
+              <div className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-emerald-700 shrink-0" />
+                <span className="truncate">{rep.region}</span>
+              </div>
+              <p className="text-[11px] leading-snug line-clamp-2">{rep.summary}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Signal Cards */}
       <div className="space-y-4">
-        {filteredSignals.map((signal) => (
+        {filteredSignals.map((sig) => (
           <div
-            key={signal.id}
-            className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs hover:border-emerald-300 transition-all space-y-4"
+            key={sig.id}
+            className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs space-y-4 hover:border-emerald-400 transition-colors"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                  signal.category === 'MANITOU' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
-                }`}>
-                  {signal.category === 'MANITOU' ? <Truck className="w-4 h-4" /> : <Building className="w-4 h-4" />}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">{signal.title}</h3>
-                  <p className="text-xs text-slate-400">
-                    {signal.groupName} • {signal.discoveredAt}
-                  </p>
-                </div>
-              </div>
-
+            {/* Header of card */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  Güven Skoru: %{signal.confidenceScore}
-                </span>
-                <a
-                  href={signal.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
-                  title="Orijinal Kaynağı Görüntüle"
+                <span
+                  className={`p-2 rounded-xl text-white ${
+                    sig.category === 'MANITOU' ? 'bg-amber-600' : 'bg-emerald-700'
+                  }`}
                 >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            </div>
-
-            {/* Evidence quote */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
-              <div className="flex items-center justify-between text-slate-500 font-semibold">
-                <span>Doğrulanan Kanıt Metni (Snippet):</span>
-                <span className="font-mono text-[11px] text-slate-400">Bot: {signal.botName}</span>
-              </div>
-              <p className="text-slate-800 italic leading-relaxed">
-                "{signal.snippet}"
-              </p>
-              <div className="text-[11px] text-slate-500 font-mono">
-                Sorgu: {signal.query} • Domain: {signal.domain}
-              </div>
-            </div>
-
-            {/* AI Draft Response & Human Approval Trigger */}
-            <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  Önerilen İletişim / Teklif Taslağı (İnsan Onayına Hazır):
+                  {sig.category === 'MANITOU' ? (
+                    <Truck className="w-4 h-4" />
+                  ) : (
+                    <Building className="w-4 h-4" />
+                  )}
                 </span>
-                <span className="text-[10px] text-emerald-700 font-medium">Spamsiz & Doğrudan İletişim</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">{sig.groupName}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                      %{sig.confidenceScore} Güven
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {sig.discoveredAt} • Bölge: {sig.region}
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-emerald-950 font-sans leading-relaxed">
-                {signal.draftMessage}
-              </p>
+
+              <a
+                href={sig.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 self-start sm:self-auto"
+              >
+                <span>Kaynak Bağlantısını Aç</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs text-slate-400">
-                Doğrulama: <strong>Gerçek Web Kaynağı</strong>
-              </span>
-              <button
-                onClick={() => onConvertSignalToLead(signal)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 transition-colors shadow-xs"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Bu Sinyali CRM Lead'e Dönüştür
-              </button>
+            {/* Title & Snippet */}
+            <div className="space-y-1.5">
+              <h3 className="font-heading font-bold text-base text-slate-900">{sig.title}</h3>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed font-mono">
+                "{sig.snippet}"
+              </div>
+            </div>
+
+            {/* AI Draft Response & Convert Action */}
+            <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-900 flex items-center gap-1">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
+                  Hazır Samet Bey Onay Taslağı:
+                </span>
+                <span className="text-[10px] text-emerald-700">İnsan onayı gerektirir</span>
+              </div>
+              <p className="text-xs text-slate-700 italic">{sig.draftMessage}</p>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => onConvertSignalToLead(sig)}
+                  className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>CRM'e Lead Olarak Aktar</span>
+                </button>
+              </div>
             </div>
           </div>
         ))}
