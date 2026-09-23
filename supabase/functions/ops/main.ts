@@ -10,7 +10,7 @@ import { aiComplete, loadAgent, serviceClient, type Db, type EngineCtx, type Tas
 import { executeTask } from '../_shared/engine.ts';
 import { CONNECTORS, connectorByKey, publicConnectorInfo } from '../_shared/connectors/registry.ts';
 import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
-import { graphVersion, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
+import { graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { processDueApprovals, publishContent, syncMetrics } from '../_shared/publisher.ts';
@@ -222,13 +222,17 @@ function safeReturnTo(raw: unknown): string | null {
 }
 
 async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown, switchAccount = false) {
-  const def = connectorByKey(provider === 'meta' ? 'instagram' : provider === 'google' ? 'youtube' : provider);
+  const def = connectorByKey(provider === 'meta' || provider === 'facebook' ? 'facebook' : provider === 'google' ? 'youtube' : provider);
   if (!def) throw new HttpError(400, 'Bilinmeyen sağlayıcı');
   const missing = def.requiredEnv.filter((k) => !secret(k));
   if (missing.length) throw new HttpError(409, `Yapılandırma gerekli: ${missing.join(', ')}`, 'CONFIGURATION_REQUIRED');
   const state = crypto.randomUUID().replace(/-/g, '');
   const return_to = safeReturnTo(returnTo);
-  if (provider === 'meta' || provider === 'instagram' || provider === 'facebook') {
+  if (provider === 'instagram') {
+    await db.from('oauth_states').insert({ state, provider: 'instagram', user_id: userId, return_to });
+    return { url: instagramLoginUrl(state, REDIRECT_URI()) };
+  }
+  if (provider === 'meta' || provider === 'facebook') {
     await db.from('oauth_states').insert({ state, provider: 'meta', user_id: userId, return_to });
     return { url: metaAuthorizeUrl(state, REDIRECT_URI(), switchAccount) };
   }
@@ -276,11 +280,23 @@ async function oauthCallback(db: Db, url: URL) {
       const igCount = pages.filter((p) => p.igId).length;
       // Bu girişte izin verilmeyen eski sayfa/IG hesapları artık kullanılamaz: "bağlı değil" yap (kayıt arşivde kalır)
       const keepIds = [...pages.map((p) => p.pageId), ...pages.filter((p) => p.igId).map((p) => p.igId as string)];
-      await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null }).in('connector_key', ['facebook', 'instagram']).eq('connection_status', 'connected').not('external_account_id', 'in', `(${keepIds.map((i) => `"${i}"`).join(',')})`);
+      await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null }).in('connector_key', ['facebook', 'instagram']).eq('connection_status', 'connected').or('metadata->>login.is.null,metadata->>login.neq.instagram').not('external_account_id', 'in', `(${keepIds.map((i) => `"${i}"`).join(',')})`);
       await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: 'meta', p_summary: `Bağlandı: Facebook ${pages.map((p) => p.pageName).join(', ')}${igCount ? ` · Instagram ${pages.filter((p) => p.igUsername).map((p) => '@' + p.igUsername).join(', ')}` : ''}` });
       await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'facebook').eq('status', 'waiting_connection');
       if (igCount) await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'instagram').eq('status', 'waiting_connection');
       return back(`connected=meta&pages=${pages.length}&ig=${igCount}`);
+    }
+    if (st.provider === 'instagram') {
+      const ig = await instagramLoginExchange(code, REDIRECT_URI());
+      if (ig.accountType && !['BUSINESS', 'MEDIA_CREATOR', 'CREATOR'].includes(ig.accountType)) return back('oauth_error=' + encodeURIComponent('Bu Instagram hesabı kişisel hesap. Instagram → Ayarlar → Hesap türü → Profesyonel hesaba geçip tekrar deneyin.'));
+      await upsertAccount(db, st.user_id, { platform: 'instagram', connector_key: 'instagram', account_name: ig.username, handle: `@${ig.username}`, external_account_id: ig.igId, external_account_name: ig.username,
+        profile_url: `https://instagram.com/${ig.username}`, token_expires_at: new Date(Date.now() + ig.expiresIn * 1000).toISOString(), metadata: { login: 'instagram', account_type: ig.accountType },
+        scopes: ['instagram_business_basic', 'instagram_business_content_publish', 'instagram_business_manage_insights'], capabilities: { publish: true, metrics: true } }, ig.token);
+      // Başka bir Instagram hesabına geçildiyse eskisi "çıkış yapıldı" olur (arşivde kalır)
+      await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null }).eq('connector_key', 'instagram').eq('connection_status', 'connected').neq('external_account_id', ig.igId);
+      await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'instagram').eq('status', 'waiting_connection');
+      await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: ig.igId, p_summary: `Bağlandı: Instagram @${ig.username}` });
+      return back(`connected=instagram&ig_user=${encodeURIComponent(ig.username)}`);
     }
     if (st.provider === 'canva') {
       const tokens = await canvaExchange(code, st.code_verifier, REDIRECT_URI());

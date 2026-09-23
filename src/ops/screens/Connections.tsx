@@ -18,7 +18,7 @@ const CATEGORY: Record<string, { title: string; kicker: string }> = {
   communication: { title: 'İletişim', kicker: 'CommunicationConnector' },
   design: { title: 'Tasarım', kicker: 'DesignConnector' },
 };
-const OAUTH_PROVIDER: Record<string, string> = { instagram: 'meta', facebook: 'meta', canva: 'canva', youtube: 'google' };
+const OAUTH_PROVIDER: Record<string, string> = { instagram: 'instagram', facebook: 'meta', canva: 'canva', youtube: 'google' };
 
 export function ConnectionsScreen() {
   const { state, go } = useRouter();
@@ -30,15 +30,16 @@ export function ConnectionsScreen() {
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(() => {
     const p = state.params;
     if (p.get('connected') === 'meta' && p.get('ig') === '0') return { tone: 'warn', text: `Facebook sayfanız bağlandı (${p.get('pages')} sayfa), ancak sayfaya bağlı bir Instagram profesyonel hesabı bulunamadı. Instagram → Ayarlar → Hesap türü → Profesyonel hesap; ardından Facebook sayfası ayarlarından Instagram hesabını bağlayıp “Yeniden bağla”ya dokunun.` };
+    if (p.get('connected') === 'instagram') return { tone: 'ok', text: `Instagram @${p.get('ig_user')} bağlandı. Instagram botları aktif oldu; Yayın Kuyruğu’ndaki paylaşımlar saatinde gönderilecek.` };
     if (p.get('connected')) return { tone: 'ok', text: `${p.get('connected') === 'meta' ? `Facebook (${p.get('pages')} sayfa) ve Instagram (${p.get('ig')} hesap) bağlandı` : p.get('connected') === 'youtube' ? 'YouTube kanalı bağlandı' : 'Canva bağlandı'}. İlgili botlar aktif oldu; Yayın Kuyruğu’ndaki paylaşımlar saatinde gönderilecek.` };
     if (p.get('oauth_error')) return { tone: 'error', text: `Bağlantı tamamlanamadı: ${p.get('oauth_error')}. Tekrar “Hesabımla bağla”ya dokunabilirsiniz.` };
     return null;
   });
 
-  const connect = async (c: ConnectorStatus, switchAccount = false) => {
+  const connect = async (c: ConnectorStatus, switchAccount = false, provider?: string) => {
     setBusy(c.key); setMsg(null);
     // return_to: giriş sonrası tam bu panel adresine dönülür (oturum burada)
-    try { const r = await callOps<{ url: string }>('oauth_start', { provider: OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount }); window.location.href = r.url; }
+    try { const r = await callOps<{ url: string }>('oauth_start', { provider: provider ?? OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount }); window.location.href = r.url; }
     catch (e) { setMsg({ tone: 'warn', text: errorText(e) }); setBusy(null); }
   };
   const disconnect = async (accountId: string) => {
@@ -88,7 +89,7 @@ export function ConnectionsScreen() {
                       </div>
                     </div>
                   </button>
-                  {c.key === 'instagram' && c.status !== 'connected' && <p className="text-[11px] text-ink-400">Not: Instagram yalnızca <b>profesyonel hesap</b> (İşletme veya İçerik üreticisi) ile ve bir Facebook sayfasına bağlıyken otomatik paylaşıma izin verir. Kişisel hesap: Instagram → Ayarlar → Hesap türü → Profesyonel hesaba geç (ücretsiz).</p>}
+                  {c.key === 'instagram' && c.status !== 'connected' && <p className="text-[11px] text-ink-400">Not: “Instagram ile giriş yap” doğrudan Instagram’ı açar, Facebook sayfası gerekmez. Instagram yalnızca <b>profesyonel hesap</b> (İşletme veya İçerik üreticisi) ile otomatik paylaşıma izin verir. Kişisel hesap: Instagram → Ayarlar → Hesap türü → Profesyonel hesaba geç (ücretsiz).</p>}
                   {c.missing_env.length > 0 && c.implemented && <button type="button" onClick={() => go('system', null, { tab: 'credentials' })} className="text-left text-[11px] text-amber-700 underline">Bağlanmak için giriş bilgileri eksik — tamamla</button>}
                   {connectedAcc.map((a) => (
                     <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-950 px-2.5 py-1.5 text-[11px]">
@@ -98,7 +99,8 @@ export function ConnectionsScreen() {
                   ))}
                   <div className="mt-auto flex flex-wrap gap-2">
                     {canOauth && session.role === 'admin' && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy === c.key}
-                      onClick={() => (c.missing_env.length ? (window.scrollTo({ top: 0, behavior: 'smooth' }), setMsg({ tone: 'warn', text: c.key === 'youtube' ? 'YouTube bağlantısı için Google Cloud’dan alınan “OAuth istemci kimliği” ve “istemci gizli anahtarı” gerekir. Gemini API anahtarı bu işe yaramaz (o yalnızca botların yapay zekâsı içindir). Bağlantı & Sistem → Giriş bilgileri → Google bölümünde adım adım anlatılıyor.' : `${c.name} bağlantısı için önce ${c.key === 'canva' ? 'Canva' : 'Meta (Facebook geliştirici)'} uygulama bilgileri girilmeli. Bağlantı & Sistem → Giriş bilgileri ekranında adım adım anlatılıyor.` })) : connect(c))} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : 'Hesabımla bağla'}</Button>}
+                      onClick={() => (c.missing_env.length ? (window.scrollTo({ top: 0, behavior: 'smooth' }), setMsg({ tone: 'warn', text: c.key === 'instagram' ? 'Instagram ile giriş için önce Instagram uygulama kimliği ve gizli anahtarı girilmeli (Meta geliştirici → uygulamanız → Instagram → API kurulumu). Uygulamalar → Giriş bilgileri → Instagram bölümünde adım adım anlatılıyor.' : c.key === 'youtube' ? 'YouTube bağlantısı için Google Cloud’dan alınan “OAuth istemci kimliği” ve “istemci gizli anahtarı” gerekir. Gemini API anahtarı bu işe yaramaz (o yalnızca botların yapay zekâsı içindir). Bağlantı & Sistem → Giriş bilgileri → Google bölümünde adım adım anlatılıyor.' : `${c.name} bağlantısı için önce ${c.key === 'canva' ? 'Canva' : 'Meta (Facebook geliştirici)'} uygulama bilgileri girilmeli. Bağlantı & Sistem → Giriş bilgileri ekranında adım adım anlatılıyor.` })) : connect(c))} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : c.key === 'instagram' ? 'Instagram ile giriş yap' : 'Hesabımla bağla'}</Button>}
+                    {c.key === 'instagram' && c.status !== 'connected' && session.role === 'admin' && <Button variant="subtle" loading={busy === c.key} onClick={() => connect(c, false, 'meta')} icon={<Link2 className="w-4 h-4" />}>Facebook sayfası üzerinden</Button>}
                     {canOauth && session.role === 'admin' && c.status === 'connected' && <Button variant="subtle" loading={busy === c.key}
                       onClick={() => { if (window.confirm(`${c.name} için başka bir hesap seçilsin mi? Açılan ekranda kullanmak istediğiniz ${c.key === 'youtube' ? 'Google hesabını/kanalı' : c.key === 'canva' ? 'Canva hesabını' : 'Facebook sayfasını ve Instagram hesabını'} seçin; seçmediğiniz eski hesaplar arşive “çıkış yapıldı” olarak düşer.`)) connect(c, true); }} icon={<RefreshCw className="w-4 h-4" />}>Hesap değiştir</Button>}
                     {appUrl(c.key) && <Button variant={c.status === 'connected' ? 'primary' : 'subtle'} onClick={() => openApp(c.key)} icon={<Smartphone className="w-4 h-4" />}>Uygulamayı aç</Button>}

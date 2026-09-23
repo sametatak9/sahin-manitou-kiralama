@@ -4,15 +4,17 @@ import type { AccountRow, MetricsOutput, PublishInput, PublishOutput } from './t
 import { secret as appSecret } from '../secrets.ts';
 
 export const graphVersion = () => Deno.env.get('META_GRAPH_VERSION') || 'v23.0';
-const graph = (path: string) => `https://graph.facebook.com/${graphVersion()}/${path.replace(/^\//, '')}`;
+const graph = (path: string, host = 'graph.facebook.com') => `https://${host}/${graphVersion()}/${path.replace(/^\//, '')}`;
+/** "Instagram ile giriş" ile bağlanan hesaplar graph.instagram.com'u, Facebook sayfası üzerinden bağlananlar graph.facebook.com'u kullanır. */
+const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram' ? 'graph.instagram.com' : 'graph.facebook.com');
 
 export const META_SCOPES = [
   'pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'read_insights',
   'instagram_basic', 'instagram_content_publish', 'instagram_manage_insights', 'business_management',
 ];
 
-async function call(method: 'GET' | 'POST', path: string, params: Record<string, string>) {
-  const url = new URL(graph(path));
+async function call(method: 'GET' | 'POST', path: string, params: Record<string, string>, host?: string) {
+  const url = new URL(graph(path, host));
   const init: RequestInit = { method };
   if (method === 'GET') Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   else init.body = new URLSearchParams(params);
@@ -59,9 +61,9 @@ export async function metaExchange(code: string, redirectUri: string): Promise<{
 
 const isVideo = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);
 
-async function waitForContainer(containerId: string, token: string, tries = 10) {
+async function waitForContainer(containerId: string, token: string, tries = 10, host?: string) {
   for (let i = 0; i < tries; i++) {
-    const s = await call('GET', containerId, { fields: 'status_code,status', access_token: token });
+    const s = await call('GET', containerId, { fields: 'status_code,status', access_token: token }, host);
     if (s.status_code === 'FINISHED') return;
     if (s.status_code === 'ERROR' || s.status_code === 'EXPIRED') throw new ConnectorError(`Instagram medya işleme hatası: ${s.status || s.status_code}`, 'IG_CONTAINER', s);
     await new Promise((r) => setTimeout(r, 2000));
@@ -80,10 +82,11 @@ export async function instagramPublish(account: AccountRow, token: string, input
     if (!video) throw new ConnectorError('Reels için video (mp4/mov) gerekli', 'IG_REEL_VIDEO_REQUIRED');
     params.media_type = 'REELS'; params.video_url = media; params.caption = input.caption; params.share_to_feed = 'true';
   } else { params.image_url = media; params.caption = input.caption; }
-  const container = await call('POST', `${account.external_account_id}/media`, params);
-  await waitForContainer(container.id, token, video ? 40 : 10);
-  const published = await call('POST', `${account.external_account_id}/media_publish`, { creation_id: container.id, access_token: token });
-  const info = await call('GET', published.id, { fields: 'permalink,timestamp', access_token: token }).catch(() => ({}));
+  const host = igHost(account);
+  const container = await call('POST', `${account.external_account_id}/media`, params, host);
+  await waitForContainer(container.id, token, video ? 40 : 10, host);
+  const published = await call('POST', `${account.external_account_id}/media_publish`, { creation_id: container.id, access_token: token }, host);
+  const info = await call('GET', published.id, { fields: 'permalink,timestamp', access_token: token }, host).catch(() => ({}));
   return { externalPostId: published.id, externalUrl: info.permalink ?? null, raw: { container, published, info } };
 }
 
@@ -100,12 +103,13 @@ export async function facebookPublish(account: AccountRow, token: string, input:
   return { externalPostId: postId, externalUrl: info.permalink_url ?? null, raw: { res, info } };
 }
 
-export async function instagramMetrics(_account: AccountRow, token: string, mediaId: string): Promise<MetricsOutput> {
-  const basic = await call('GET', mediaId, { fields: 'like_count,comments_count', access_token: token });
+export async function instagramMetrics(account: AccountRow, token: string, mediaId: string): Promise<MetricsOutput> {
+  const host = igHost(account);
+  const basic = await call('GET', mediaId, { fields: 'like_count,comments_count', access_token: token }, host);
   let insights: Record<string, number> = {};
   let rawInsights: unknown = null;
   try {
-    const ins = await call('GET', `${mediaId}/insights`, { metric: 'reach,saved,shares,views', access_token: token });
+    const ins = await call('GET', `${mediaId}/insights`, { metric: 'reach,saved,shares,views', access_token: token }, host);
     rawInsights = ins;
     // deno-lint-ignore no-explicit-any
     insights = Object.fromEntries((ins.data || []).map((m: any) => [m.name, m.values?.[0]?.value ?? m.total_value?.value ?? null]));
@@ -123,4 +127,41 @@ export async function facebookMetrics(_account: AccountRow, token: string, postI
     likes: d.reactions?.summary?.total_count ?? null, comments: d.comments?.summary?.total_count ?? null, shares: d.shares?.count ?? null,
     reach: null, impressions: null, saves: null, clicks: null, video_views: null, raw: d,
   };
+}
+
+// ── Doğrudan "Instagram ile giriş" (Instagram API with Instagram Login) — Facebook sayfası gerekmez ──
+export const IG_LOGIN_SCOPES = ['instagram_business_basic', 'instagram_business_content_publish', 'instagram_business_manage_insights'];
+
+export function instagramLoginUrl(state: string, redirectUri: string) {
+  const u = new URL('https://www.instagram.com/oauth/authorize');
+  u.searchParams.set('client_id', appSecret('INSTAGRAM_APP_ID') || '');
+  u.searchParams.set('redirect_uri', redirectUri);
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('scope', IG_LOGIN_SCOPES.join(','));
+  u.searchParams.set('state', state);
+  u.searchParams.set('force_reauth', 'true'); // her seferinde hangi Instagram hesabıyla girileceği sorulur
+  return u.toString();
+}
+
+/** code → kısa token → 60 günlük token + profil (kullanıcı adı, hesap türü). */
+export async function instagramLoginExchange(code: string, redirectUri: string) {
+  const res = await fetch('https://api.instagram.com/oauth/access_token', { method: 'POST', body: new URLSearchParams({
+    client_id: appSecret('INSTAGRAM_APP_ID') || '', client_secret: appSecret('INSTAGRAM_APP_SECRET') || '', grant_type: 'authorization_code', redirect_uri: redirectUri, code: code.replace(/#_$/, '') }) });
+  const d = await res.json().catch(() => ({}));
+  const short = d.access_token ?? d.data?.[0]?.access_token;
+  if (!res.ok || !short) throw new ConnectorError(d.error_message || d.error?.message || `Instagram giriş hatası (HTTP ${res.status})`, 'IG_LOGIN', d);
+  const lr = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(appSecret('INSTAGRAM_APP_SECRET') || '')}&access_token=${encodeURIComponent(short)}`);
+  const long = await lr.json().catch(() => ({}));
+  const token: string = long.access_token ?? short;
+  const expiresIn: number = long.expires_in ?? 3600;
+  const me = await call('GET', 'me', { fields: 'user_id,username,account_type,name', access_token: token }, 'graph.instagram.com');
+  return { token, expiresIn, igId: String(me.user_id ?? me.id), username: me.username as string, accountType: (me.account_type ?? null) as string | null, name: (me.name ?? null) as string | null };
+}
+
+/** 60 günlük Instagram token'ını yeniler (en az 24 saatlik token gerekir). */
+export async function instagramRefresh(token: string) {
+  const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.access_token) throw new ConnectorError(d.error?.message || `Instagram token yenilenemedi (HTTP ${r.status})`, 'IG_REFRESH', d);
+  return { token: d.access_token as string, expiresIn: (d.expires_in ?? 5184000) as number };
 }

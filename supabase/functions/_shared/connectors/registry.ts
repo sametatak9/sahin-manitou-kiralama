@@ -7,8 +7,8 @@ const cap = (publish: boolean, metrics: boolean, messaging = false, design = fal
 
 export const CONNECTORS: ConnectorDef[] = [
   // ── SocialConnector ──
-  { key: 'instagram', name: 'Instagram', category: 'social', authType: 'oauth', officialApi: true, implemented: true, requiredEnv: ['META_APP_ID', 'META_APP_SECRET'], capabilities: cap(true, true),
-    docsUrl: 'https://developers.facebook.com/docs/instagram-platform/content-publishing', note: 'Instagram Business/Creator hesabı bir Facebook Sayfasına bağlı olmalı. Canlı modda instagram_content_publish için Meta App Review gerekir; geliştirme modunda uygulama rolündeki test hesaplarıyla çalışır.',
+  { key: 'instagram', name: 'Instagram', category: 'social', authType: 'oauth', officialApi: true, implemented: true, requiredEnv: ['INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET'], capabilities: cap(true, true),
+    docsUrl: 'https://developers.facebook.com/docs/instagram-platform/content-publishing', note: 'Doğrudan “Instagram ile giriş”: profesyonel (İşletme/İçerik üreticisi) hesap yeterli, Facebook sayfası gerekmez. Alternatif: Facebook sayfası üzerinden bağlama. Canlı modda instagram_content_publish için Meta App Review gerekir; geliştirme modunda uygulama rolündeki test hesaplarıyla çalışır.',
     publish: instagramPublish, fetchMetrics: instagramMetrics },
   { key: 'facebook', name: 'Facebook Sayfası', category: 'social', authType: 'oauth', officialApi: true, implemented: true, requiredEnv: ['META_APP_ID', 'META_APP_SECRET'], capabilities: cap(true, true),
     docsUrl: 'https://developers.facebook.com/docs/pages-api/posts', note: 'Sayfa yöneticisi olan hesapla bağlanır; pages_manage_posts izni gerekir.',

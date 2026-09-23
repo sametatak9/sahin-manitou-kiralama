@@ -38,11 +38,12 @@ export function DeveloperSetupValues({ redirectUri }: { redirectUri: string }) {
           <CopyRow label="Uygulama Ayarları → Temel → Uygulama Alan Adları" value={host} />
           <CopyRow label="Temel → + Platform ekle → Web sitesi → Site URL’si" value={panel} />
           <CopyRow label="Facebook Girişi → Ayarlar → Geçerli OAuth Yönlendirme URI’leri" value={redirectUri} />
+          <CopyRow label="Instagram → Instagram girişi ile API kurulumu → İşletme girişi → OAuth yönlendirme URI’leri" value={redirectUri} />
           <p className="text-[11px] text-ink-400">Facebook Girişi ürünü ekli değilse: Panel → Ürün ekle → “Facebook Girişi” → Kur. “İstemci OAuth girişi” ve “Web OAuth girişi” açık olmalı.</p>
         </div>
         <div className="space-y-2">
           <div className="text-xs font-semibold text-ink-100">Google (YouTube) — console.cloud.google.com</div>
-          <CopyRow label="API’ler → Kimlik bilgileri → OAuth istemcisi → Yetkili yönlendirme URI’leri" value={redirectUri} />
+          <CopyRow label="API’ler → Kimlik bilgileri → OAuth istemcisi → Yetkili yönlendirme URI’leri (Hata 400: redirect_uri_mismatch bunun eksikliğidir)" value={redirectUri} />
           <CopyRow label="Yetkili JavaScript kaynakları" value={panel} />
           <p className="text-[11px] text-ink-400">“YouTube Data API v3” etkin olmalı; izin ekranı “Test” modundaysa kanal sahibinin e-postası test kullanıcısı olarak eklenmeli.</p>
         </div>

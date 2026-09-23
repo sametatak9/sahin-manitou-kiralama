@@ -3,11 +3,22 @@ import { makeLogger, serviceClient, type Db, type EngineCtx } from './context.ts
 import { connectorByKey } from './connectors/registry.ts';
 import { ConnectorError, resolveStatus, type AccountRow } from './connectors/types.ts';
 import { getHandler } from './tools/registry.ts';
+import { instagramRefresh } from './connectors/meta.ts';
 
 async function tokenFor(db: Db, account: AccountRow) {
   if (!account.credential_secret_id) throw new ConnectorError('Hesap token’ı yok — yeniden bağlanın', 'OAUTH_REQUIRED');
   const { data, error } = await db.rpc('read_connector_secret', { p_id: account.credential_secret_id });
   if (error || !data) throw new ConnectorError('Token okunamadı — yeniden bağlanın', 'OAUTH_REQUIRED');
+  // "Instagram ile giriş" token'ı 60 gün geçerli: son 10 günde otomatik yenilenir (kullanıcı tekrar giriş yapmaz)
+  const exp = account.token_expires_at ? new Date(account.token_expires_at).getTime() : null;
+  if (account.metadata?.login === 'instagram' && exp && exp - Date.now() < 10 * 86400000 && exp > Date.now()) {
+    try {
+      const r = await instagramRefresh(data as string);
+      await db.rpc('store_connector_secret', { p_name: `instagram_${account.external_account_id}`, p_secret: r.token, p_existing: account.credential_secret_id });
+      await db.from('social_accounts').update({ token_expires_at: new Date(Date.now() + r.expiresIn * 1000).toISOString(), last_verified_at: new Date().toISOString() }).eq('id', account.id);
+      return r.token;
+    } catch { /* yenilenemezse mevcut token ile devam; süre dolunca sistem kontrolü uyarır */ }
+  }
   return data as string;
 }
 
