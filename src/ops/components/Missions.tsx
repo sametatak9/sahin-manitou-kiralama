@@ -1,6 +1,6 @@
 // Bot görevleri: görev ver (amaç, link, aranan, rapor, süre, bitiş koşulu) → canlı adım günlüğü → rapor (HTML).
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Archive, Radio, CheckCircle2, CircleSlash, Download, ExternalLink, FileText, FlaskConical, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, Archive, Radio, RotateCcw, CheckCircle2, CircleSlash, Download, ExternalLink, FileText, FlaskConical, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2, XCircle } from 'lucide-react';
 import { callMissions, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
@@ -184,6 +184,14 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
   const live = m && (m.status === 'running' || m.status === 'finalizing');
   useEffect(() => { if (m && !live && m.report_html) setTab('report'); }, [m?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [rerunId, setRerunId] = useState<string | null>(null);
+  const rerun = async () => {
+    if (!m) return; setBusy(true); setErr(null);
+    try {
+      const r = await callMissions<{ mission_id: string }>('mission_start', { bot_id: m.bot_id, title: m.title, goal: m.goal, target_url: m.target_url ?? '', search_for: m.search_for ?? '', report_spec: m.report_spec ?? '', stop_condition: m.stop_condition ?? '', duration_minutes: m.duration_minutes, model: m.model });
+      setRerunId(r.mission_id);
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
+  };
   const stop = async () => { setBusy(true); setErr(null); try { await callMissions('mission_stop', { mission_id: id }); await q.reload(); } catch (e) { setErr(errorText(e)); } finally { setBusy(false); } };
   const download = () => {
     if (!m?.report_html) return;
@@ -210,6 +218,7 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
     <Modal open wide onClose={onClose} title={m ? <span className="inline-flex items-center gap-2"><FileText className="w-4 h-4 text-brand-green" />{m.title}</span> : 'Görev'}
       footer={m && <>
         <Button variant="primary" onClick={() => setLiveOpen(true)} icon={<Radio className="w-4 h-4" />}>{live ? 'Canlı rapor' : 'Rapor penceresi'}</Button>
+        {!live && <Button variant="ghost" loading={busy} onClick={rerun} icon={<RotateCcw className="w-4 h-4" />}>Tekrar çalıştır</Button>}
         {live && <Button variant="danger" loading={busy} onClick={stop} icon={<Square className="w-4 h-4" />}>Durdur ve raporla</Button>}
         {m.report_html && <><Button variant="ghost" onClick={shareWhatsApp} icon={<MessageCircle className="w-4 h-4" />}>WhatsApp ile gönder</Button><Button variant="ghost" onClick={print} icon={<Printer className="w-4 h-4" />}>PDF kaydet / yazdır</Button><Button variant="primary" onClick={download} icon={<Download className="w-4 h-4" />}>HTML indir</Button></>}
         <Button variant="ghost" onClick={onClose}>Kapat</Button></>}>
@@ -265,6 +274,7 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
       )}
     </Modal>
     {liveOpen && <LiveReport id={id} onClose={() => setLiveOpen(false)} />}
+    {rerunId && <MissionDetail id={rerunId} bots={bots} onClose={() => { setRerunId(null); onClose(); }} />}
   </>);
 }
 
