@@ -169,6 +169,16 @@ function ApprovalDetail({ id, onClose, onChanged }: { id: string; onClose: () =>
               </Panel>
             )}
 
+            {typeof ap.payload?.message === 'string' && ap.payload?.reminder === true && (
+              <div className="rounded-xl ring-1 ring-ink-700 p-3 space-y-2 text-xs">
+                <div className="font-semibold text-ink-100">Hatırlatma mesajı</div>
+                <p className="text-ink-300 whitespace-pre-line">{String(ap.payload.message)}</p>
+                {typeof ap.payload.wa_link === 'string' && ['approved', 'scheduled', 'published'].includes(ap.status)
+                  ? <a href={String(ap.payload.wa_link)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 font-semibold bg-emerald-600 text-white"><ExternalLink className="w-4 h-4" /> WhatsApp’ta aç ve gönder</a>
+                  : typeof ap.payload.wa_link === 'string' ? <div className="text-ink-500">Onaylayınca “WhatsApp’ta aç” butonu çıkar; mesaj sizin WhatsApp’ınızdan gönderilir.</div>
+                  : <div className="text-ink-500">Kurumsal telefon yok: {String(ap.payload.email || ap.payload.website || 'kaynak sayfadan ulaşın')}</div>}
+              </div>
+            )}
             {!draft && !q.data?.lead && Object.keys(ap.payload || {}).length > 0 && (
               <Panel title="İşlem içeriği" kicker={ap.tool_key ?? ''}>
                 <pre className="text-[11px] text-ink-300 whitespace-pre-wrap break-words font-mono bg-ink-950 rounded-xl p-3 max-h-72 overflow-auto ops-scroll">{JSON.stringify(ap.payload, null, 2)}</pre>

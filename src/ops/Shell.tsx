@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Building2, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, Sparkles, Truck, X,
+  Blocks, Bot, Briefcase, Building2, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, Sparkles, Truck, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -21,6 +21,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım + önizleme' },
   ] },
   { title: 'Müşteri / CRM', items: [
+    { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'Arşiv · hatırlatma · aşama' },
     { id: 'construction', label: 'İnşaat Müşterileri', icon: Building2, hint: 'Kentsel dönüşüm, konut' },
     { id: 'rental', label: 'Makine Kiralama', icon: Truck, hint: 'Manitou müşterileri' },
     { id: 'leads', label: 'Gelen Talepler', icon: Inbox, hint: 'Web formu + bot adayları' },
