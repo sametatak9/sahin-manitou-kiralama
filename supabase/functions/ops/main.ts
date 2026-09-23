@@ -8,6 +8,7 @@ import { loadAppSecrets, resetAppSecrets, secret, secretSource } from '../_share
 import { googleAuthorizeUrl, googleExchange } from '../_shared/connectors/youtube.ts';
 import { aiComplete, loadAgent, serviceClient, type Db, type EngineCtx, type TaskRow } from '../_shared/context.ts';
 import { executeTask } from '../_shared/engine.ts';
+import { logActivity } from '../_shared/activity.ts';
 import { CONNECTORS, connectorByKey, publicConnectorInfo } from '../_shared/connectors/registry.ts';
 import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
 import { graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
@@ -198,6 +199,44 @@ async function credentialsReport(db: Db) {
   return { checked_at: new Date().toISOString(), rows, settings: extras };
 }
 
+// ── Meta webhook: GET doğrulama (hub.challenge) + POST olay kaydı (imza doğrulamalı) ──
+async function metaWebhook(db: Db, req: Request, url: URL): Promise<Response> {
+  if (req.method === 'GET') {
+    const { data: token } = await db.rpc('webhook_verify_token');
+    if (url.searchParams.get('hub.mode') === 'subscribe' && token && url.searchParams.get('hub.verify_token') === token)
+      return new Response(url.searchParams.get('hub.challenge') ?? '', { status: 200 });
+    return new Response('forbidden', { status: 403 });
+  }
+  if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
+  const raw = await req.text();
+  const sig = (req.headers.get('x-hub-signature-256') || '').replace(/^sha256=/, '');
+  let signatureOk = false;
+  for (const name of ['META_APP_SECRET', 'INSTAGRAM_APP_SECRET']) {
+    const sec = secret(name); if (!sec || !sig) continue;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(sec), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const mac = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw)))).map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (mac === sig) { signatureOk = true; break; }
+  }
+  // İmzası doğrulanamayan istek kaydedilmez (sahte olay engeli); Meta'ya yine 200 dönülür ki tekrar göndermesin
+  if (!signatureOk) { await logActivity(db, { connector_key: 'facebook', action: 'webhook', status: 'failed', error: 'İmza doğrulanamadı — olay kaydedilmedi' }); return new Response('ok'); }
+  // deno-lint-ignore no-explicit-any
+  let body: any = {}; try { body = JSON.parse(raw); } catch { /* boş */ }
+  const connector = body.object === 'instagram' ? 'instagram' : 'facebook';
+  let n = 0;
+  for (const entry of body.entry ?? []) {
+    const changes = [...(entry.changes ?? []).map((c: { field?: string; value?: unknown }) => ({ type: c.field ?? 'change', value: c.value })),
+      ...(entry.messaging ?? []).map((m: unknown) => ({ type: 'messages', value: m }))];
+    for (const ch of changes) {
+      await db.from('connector_events').insert({ connector_key: connector, event_type: String(ch.type).slice(0, 60), external_account_id: String(entry.id ?? ''),
+        // deno-lint-ignore no-explicit-any
+        external_id: String((ch.value as any)?.id ?? (ch.value as any)?.comment_id ?? (ch.value as any)?.message?.mid ?? ''), payload: ch.value ?? {}, signature_ok: true });
+      n++;
+    }
+  }
+  await logActivity(db, { connector_key: connector, action: 'webhook', status: 'ok', summary: `${n} gelen olay kaydedildi`, data: { object: body.object, count: n } });
+  return new Response('ok');
+}
+
 // ── Sistem kontrolü: her parça gerçekten çalışıyor mu? (secret değerleri döndürülmez) ──
 type Check = { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail'; detail: string; fix?: string };
 async function systemCheck(db: Db) {
@@ -330,6 +369,8 @@ async function oauthCallback(db: Db, url: URL) {
       // Bu girişte izin verilmeyen eski sayfa/IG hesapları artık kullanılamaz: "bağlı değil" yap (kayıt arşivde kalır)
       const keepIds = [...pages.map((p) => p.pageId), ...pages.filter((p) => p.igId).map((p) => p.igId as string)];
       await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null }).in('connector_key', ['facebook', 'instagram']).eq('connection_status', 'connected').or('metadata->>login.is.null,metadata->>login.neq.instagram').not('external_account_id', 'in', `(${keepIds.map((i) => `"${i}"`).join(',')})`);
+      await logActivity(db, { connector_key: 'facebook', action: 'connect', status: 'ok', actor: st.user_id, summary: `Facebook bağlandı: ${pages.map((p) => p.pageName).join(', ')}`, data: { pages: pages.length, instagram: igCount } });
+      if (igCount) await logActivity(db, { connector_key: 'instagram', action: 'connect', status: 'ok', actor: st.user_id, summary: `Instagram (sayfa üzerinden) bağlandı: ${pages.filter((p) => p.igUsername).map((p) => '@' + p.igUsername).join(', ')}` });
       await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: 'meta', p_summary: `Bağlandı: Facebook ${pages.map((p) => p.pageName).join(', ')}${igCount ? ` · Instagram ${pages.filter((p) => p.igUsername).map((p) => '@' + p.igUsername).join(', ')}` : ''}` });
       await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'facebook').eq('status', 'waiting_connection');
       if (igCount) await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'instagram').eq('status', 'waiting_connection');
@@ -344,6 +385,7 @@ async function oauthCallback(db: Db, url: URL) {
       // Başka bir Instagram hesabına geçildiyse eskisi "çıkış yapıldı" olur (arşivde kalır)
       await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null }).eq('connector_key', 'instagram').eq('connection_status', 'connected').neq('external_account_id', ig.igId);
       await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'instagram').eq('status', 'waiting_connection');
+      await logActivity(db, { connector_key: 'instagram', action: 'connect', status: 'ok', actor: st.user_id, external_id: ig.igId, summary: `Instagram @${ig.username} bağlandı (doğrudan giriş, 60 gün)` });
       await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: ig.igId, p_summary: `Bağlandı: Instagram @${ig.username}` });
       return back(`connected=instagram&ig_user=${encodeURIComponent(ig.username)}`);
     }
@@ -353,6 +395,7 @@ async function oauthCallback(db: Db, url: URL) {
       await upsertAccount(db, st.user_id, { platform: 'canva', connector_key: 'canva', account_name: profile.profile?.display_name ?? 'Canva', external_account_id: 'canva-user', external_account_name: profile.profile?.display_name ?? null,
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(), scopes: (tokens.scope || '').split(' ').filter(Boolean), capabilities: { design: true } },
         JSON.stringify({ access_token: tokens.access_token, refresh_token: tokens.refresh_token }));
+      await logActivity(db, { connector_key: 'canva', action: 'connect', status: 'ok', actor: st.user_id, summary: `Canva bağlandı` });
       await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: 'canva', p_summary: `Bağlandı: Canva ${profile.profile?.display_name ?? ''}` });
       return back('connected=canva');
     }
@@ -361,11 +404,13 @@ async function oauthCallback(db: Db, url: URL) {
       await upsertAccount(db, st.user_id, { platform: 'youtube', connector_key: 'youtube', account_name: yt.channelTitle, external_account_id: yt.channelId, external_account_name: yt.channelTitle,
         handle: yt.customUrl ?? null, profile_url: `https://www.youtube.com/channel/${yt.channelId}`, capabilities: { publish: true } }, JSON.stringify({ refresh_token: yt.refreshToken }));
       await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'youtube').eq('status', 'waiting_connection');
+      await logActivity(db, { connector_key: 'youtube', action: 'connect', status: 'ok', actor: st.user_id, external_id: yt.channelId, summary: `YouTube kanalı bağlandı: ${yt.channelTitle}` });
       await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: yt.channelId, p_summary: `Bağlandı: YouTube ${yt.channelTitle}` });
       return back('connected=youtube');
     }
     return back('oauth_error=unknown_provider');
   } catch (e) {
+    await logActivity(db, { connector_key: st.provider === 'meta' ? 'facebook' : st.provider === 'google' ? 'youtube' : st.provider, action: 'connect', status: 'failed', actor: st.user_id, error: String((e as Error).message) });
     await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect_failed', p_entity_type: 'social_accounts', p_entity_id: st.provider, p_summary: `Bağlantı hatası (${st.provider}): ${String((e as Error).message).slice(0, 160)}` });
     return back('oauth_error=' + encodeURIComponent(String((e as Error).message).slice(0, 200)));
   }
@@ -463,6 +508,7 @@ async function api(db: Db, req: Request) {
       // Bu uygulamada bağlı başka hesap kalmadıysa ilgili botlar "bağlantı bekliyor"a döner; sıradaki paylaşımlar bekler
       const { count } = await db.from('social_accounts').select('id', { count: 'exact', head: true }).eq('connector_key', acc.connector_key).eq('connection_status', 'connected');
       if (!count) await db.from('automation_bots').update({ status: 'waiting_connection' }).eq('connector_key', acc.connector_key).eq('status', 'active');
+      await logActivity(db, { connector_key: acc.connector_key, action: 'disconnect', status: 'ok', account_id: acc.id, actor: u.userId, summary: `Çıkış yapıldı: ${acc.external_account_name ?? ''}` });
       await db.rpc('write_audit_service', { p_actor: u.userId, p_action: 'disconnect', p_entity_type: 'social_accounts', p_entity_id: acc.id, p_summary: `Çıkış yapıldı: ${acc.connector_key} ${acc.external_account_name ?? ''}` });
       return { ok: true, bots_waiting: !count };
     }
@@ -501,7 +547,15 @@ async function api(db: Db, req: Request) {
 
     case 'credentials_report': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return credentialsReport(db); }
 
-    case 'verify_app': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return { checks: await verifyApp(body.provider === 'google' ? 'google' : 'meta') }; }
+    case 'verify_app': {
+      const u = await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db);
+      const prov = body.provider === 'google' ? 'google' : 'meta';
+      const checks = await verifyApp(prov);
+      const bad = checks.filter((c) => c.state !== 'ok');
+      await logActivity(db, { connector_key: prov === 'google' ? 'youtube' : 'facebook', action: 'verify', status: bad.length ? 'failed' : 'ok', actor: u.userId,
+        summary: bad.length ? undefined : 'Uygulama bilgileri canlı testten geçti', error: bad.length ? bad.map((c) => `${c.label}: ${c.detail}`).join(' · ') : undefined });
+      return { checks };
+    }
 
     case 'system_check': { await requireUser(db, req); resetAppSecrets(); await loadAppSecrets(db); return systemCheck(db); }
 
@@ -540,6 +594,8 @@ Deno.serve(async (req) => {
       }
       return json(out);
     }
+    // Meta (Facebook/Instagram) gelen olaylar: yorum, mesaj, bahsetme. Doğrulama belirteci Vault'ta; imza uygulama gizli anahtarıyla kontrol edilir.
+    if (path.startsWith('/webhook/meta')) return await metaWebhook(db, req, url);
     if (path.startsWith('/api') && req.method === 'POST') return json(await api(db, req));
     return json({ error: 'not found' }, 404);
   } catch (e) {

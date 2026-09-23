@@ -8,6 +8,7 @@ import type { Bot, ConnectorStatus, Draft, Mission, Run, Task } from '../lib/typ
 import { useRouter } from '../session';
 import { Button, DynIcon, Modal, Pill, PlatformBadge, StateView } from '../ui';
 import { FINISH_REASON, MISSION_STATUS, MissionDetail, MissionLauncher } from './Missions';
+import { ConnectorActivity } from './ConnectorActivity';
 
 const DOMAINS: Record<string, string[]> = {
   instagram: ['instagram.com'], facebook: ['facebook.com', 'fb.com'], linkedin: ['linkedin.com'], x: ['x.com', 'twitter.com'], tiktok: ['tiktok.com'],
@@ -95,6 +96,9 @@ export function AppDetail({ c, allBots, onClose, onConnect, canConnect, busy }: 
                 </button>);
             })}</div>)}
         </section>
+
+        {/* Aktivite günlüğü (bağlantı, paylaşım, istatistik, hata, gelen olay) */}
+        <ConnectorActivity connectorKey={c.key} botNames={Object.fromEntries(allBots.map((b) => [b.id, b.name]))} />
 
         {/* Geçmiş bulgular */}
         <section>

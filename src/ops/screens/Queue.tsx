@@ -268,6 +268,7 @@ export function QueueScreen() {
                             if (r === 'cancelled') return;
                             if (window.confirm(r === 'copied' ? 'Açıklama kopyalandı. Uygulamada paylaşımı tamamladıysanız "Tamam"a basın, "paylaşıldı" olarak işaretlensin.' : 'Paylaşımı tamamladınız mı? "Tamam" derseniz "elle paylaşıldı" olarak işaretlenir.')) {
                               await update(d.id, { workflow_status: 'published', status: 'yayinda', error: null, performance_notes: `Elle paylaşıldı (telefon) · ${new Date().toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}` }, ['scheduled', 'approved', 'failed', 'pending_approval']);
+                              await db().from('connector_activity').insert({ connector_key: d.primary_platform ?? 'instagram', action: 'manual_share', status: 'ok', bot_id: (d as { bot_id?: string | null }).bot_id ?? null, ref_type: 'social_drafts', ref_id: d.id, summary: `Telefondan elle paylaşıldı: “${(d.title ?? '').slice(0, 80)}”` });
                               setMsg({ tone: 'ok', text: 'Elle paylaşıldı olarak kaydedildi.' });
                             } else setMsg({ tone: 'ok', text: 'Açıklama panoya kopyalandı; uygulamada “yapıştır” diyebilirsiniz.' });
                           } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); q.reload(); }

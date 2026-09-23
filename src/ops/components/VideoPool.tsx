@@ -271,6 +271,12 @@ function VideoEditor({ item, onClose, onSaved, onGone }: { item: MediaItem; onCl
             try {
               const r = await shareToPhone({ title, caption, hashtags: tagList(), video_url: item.url });
               if (r === 'copied') setErr('Bu tarayıcı dosya paylaşımını desteklemiyor; açıklama kopyalandı. Videoyu “İndir” ile kaydedip uygulamada paylaşabilirsiniz.');
+              if (r === 'shared' && window.confirm('Paylaşımı tamamladınız mı? “Tamam” derseniz aktivite günlüğüne “elle paylaşıldı” olarak yazılır.')) {
+                const platform = TARGETS.find((t) => targets.includes(t.key))?.platform ?? 'instagram';
+                await db().from('connector_activity').insert({ connector_key: platform, action: 'manual_share', status: 'ok', ref_type: 'media_library', ref_id: item.id, summary: `Telefondan elle paylaşıldı (video): “${title.slice(0, 80)}”` });
+                const row = unwrap(await db().from('media_library').update({ status: 'published' }).eq('id', item.id).select('*').single()) as MediaItem;
+                onSaved(row);
+              }
             } catch (e) { setErr(errorText(e)); }
           }} icon={<Share2 className="w-4 h-4" />}>Telefondan paylaş (hesap bağlamadan)</Button>
           <p className="text-[11px] text-ink-400 -mt-1">Telefonun paylaşım menüsü açılır: Instagram, Facebook, YouTube veya WhatsApp’ı seçin. Açıklama otomatik kopyalanır, uygulamada “yapıştır” deyin.</p>

@@ -4,6 +4,7 @@ import { connectorByKey } from './connectors/registry.ts';
 import { ConnectorError, resolveStatus, type AccountRow } from './connectors/types.ts';
 import { getHandler } from './tools/registry.ts';
 import { instagramRefresh } from './connectors/meta.ts';
+import { logActivity } from './activity.ts';
 
 async function tokenFor(db: Db, account: AccountRow) {
   if (!account.credential_secret_id) throw new ConnectorError('Hesap token’ı yok — yeniden bağlanın', 'OAUTH_REQUIRED');
@@ -16,8 +17,9 @@ async function tokenFor(db: Db, account: AccountRow) {
       const r = await instagramRefresh(data as string);
       await db.rpc('store_connector_secret', { p_name: `instagram_${account.external_account_id}`, p_secret: r.token, p_existing: account.credential_secret_id });
       await db.from('social_accounts').update({ token_expires_at: new Date(Date.now() + r.expiresIn * 1000).toISOString(), last_verified_at: new Date().toISOString() }).eq('id', account.id);
+      await logActivity(db, { connector_key: 'instagram', action: 'token_refresh', status: 'ok', account_id: account.id, summary: 'Instagram oturumu 60 gün uzatıldı' });
       return r.token;
-    } catch { /* yenilenemezse mevcut token ile devam; süre dolunca sistem kontrolü uyarır */ }
+    } catch (e) { await logActivity(db, { connector_key: 'instagram', action: 'token_refresh', status: 'failed', account_id: account.id, error: String((e as Error).message) }); /* mevcut token ile devam */ }
   }
   return data as string;
 }
@@ -28,7 +30,7 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
   if (!def) throw new ConnectorError(`Bilinmeyen platform: ${platform}`, 'UNKNOWN_PLATFORM');
   if (!def.publish) throw new ConnectorError(`${def.name}: ${def.officialApi ? 'yayın connector’ı henüz yapılandırılmadı' : 'resmi API yok, manuel yayın'}`, def.officialApi ? 'CONFIGURATION_REQUIRED' : 'MANUAL_ONLY');
 
-  const { data: draft } = await ctx.db.from('social_drafts').select('id,title,headline,format,body,caption,hashtags,media_urls,design_id,workflow_status').eq('id', input.content_id).maybeSingle();
+  const { data: draft } = await ctx.db.from('social_drafts').select('id,title,headline,format,body,caption,hashtags,media_urls,design_id,workflow_status,bot_id').eq('id', input.content_id).maybeSingle();
   if (!draft) throw new Error('İçerik bulunamadı');
   let media: string[] = Array.isArray(input.media_urls) && input.media_urls.length ? (input.media_urls as string[]) : (draft.media_urls || []);
   if (!media.length && draft.design_id) {
@@ -38,9 +40,19 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
   const caption = draft.caption ? `${draft.caption}${draft.hashtags?.length ? `\n\n${draft.hashtags.join(' ')}` : ''}` : draft.body;
 
   const { data: accounts } = await ctx.db.from('social_accounts').select('*').or(`connector_key.eq.${platform},platform.eq.${platform}`).eq('connection_status', 'connected');
-  const account = (accounts || [])[0] as AccountRow | undefined;
+  // Botun bu uygulama için atanmış hesabı varsa (bot_accounts) o kullanılır; yoksa bağlı ilk hesap
+  let account = (accounts || [])[0] as AccountRow | undefined;
+  if (draft.bot_id && (accounts || []).length > 1) {
+    const { data: map } = await ctx.db.from('bot_accounts').select('account_id').eq('bot_id', draft.bot_id).eq('role', 'publish').eq('active', true);
+    const pick = (accounts || []).find((a: { id: string }) => (map || []).some((m: { account_id: string }) => m.account_id === a.id));
+    if (pick) account = pick as AccountRow;
+  }
   const status = resolveStatus(def, account ?? null);
-  if (!account || status !== 'connected') throw new ConnectorError(`${def.name} hesabı bağlı değil (${status})`, status.toUpperCase());
+  if (!account || status !== 'connected') {
+    await logActivity(ctx.db, { connector_key: platform, action: 'publish', status: 'skipped', bot_id: draft.bot_id ?? null, ref_type: 'social_drafts', ref_id: draft.id, summary: `Hesap bağlı değil (${status}) — paylaşım sırada bekliyor` });
+    throw new ConnectorError(`${def.name} hesabı bağlı değil (${status})`, status.toUpperCase());
+  }
+  const started = Date.now();
 
   const { data: pub, error } = await ctx.db.from('social_publications').insert({
     content_id: draft.id, design_id: draft.design_id, approval_request_id: input.approval_request_id ?? null, platform, account_id: account.id,
@@ -55,11 +67,16 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
     await ctx.db.from('social_publications').update({ status: 'published', published_at: new Date().toISOString(), external_post_id: out.externalPostId, external_url: out.externalUrl, api_response: out.raw }).eq('id', pub.id);
     await ctx.db.from('social_drafts').update({ workflow_status: 'published', status: 'yayinda' }).eq('id', draft.id);
     await ctx.log('info', `${def.name} yayını API ile doğrulandı`, { external_post_id: out.externalPostId });
+    await logActivity(ctx.db, { connector_key: platform, action: 'publish', status: 'ok', account_id: account.id, bot_id: draft.bot_id ?? null, ref_type: 'social_publications', ref_id: pub.id,
+      external_id: out.externalPostId, external_url: out.externalUrl, duration_ms: Date.now() - started, summary: `${def.name}: “${(draft.headline || draft.title || '').slice(0, 80)}” paylaşıldı`, actor: ctx.actorId });
     return { published: true, publication_id: pub.id, external_post_id: out.externalPostId, external_url: out.externalUrl };
   } catch (e) {
     const raw = e instanceof ConnectorError ? e.raw : null;
     await ctx.db.from('social_publications').update({ status: 'failed', error: String((e as Error).message).slice(0, 1000), api_response: raw ?? null }).eq('id', pub.id);
     await ctx.db.from('social_drafts').update({ workflow_status: 'failed', status: 'hata', error: String((e as Error).message).slice(0, 500) }).eq('id', draft.id);
+    const code = e instanceof ConnectorError ? e.code : null;
+    await logActivity(ctx.db, { connector_key: platform, action: /rate|limit|429|too many/i.test(String((e as Error).message)) ? 'rate_limit' : 'publish', status: 'failed', account_id: account.id, bot_id: draft.bot_id ?? null,
+      ref_type: 'social_publications', ref_id: pub.id, duration_ms: Date.now() - started, error_code: code, error: String((e as Error).message), actor: ctx.actorId });
     throw e;
   }
 }
@@ -144,8 +161,11 @@ export async function syncMetrics(db: Db = serviceClient(), limit = 5, onlyPubli
       const m = await def.fetchMetrics(account as AccountRow, token, p.external_post_id);
       const { raw, ...values } = m;
       await db.from('social_post_metrics').insert({ publication_id: p.id, source: 'api', raw, ...values });
+      await logActivity(db, { connector_key: p.platform, action: 'metrics_sync', status: 'ok', account_id: p.account_id, ref_type: 'social_publications', ref_id: p.id, external_id: p.external_post_id,
+        summary: `İstatistik çekildi: ${Object.entries(values).filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(', ').slice(0, 200) || 'veri yok'}` });
       out.push({ id: p.id, ok: true });
     } catch (e) {
+      await logActivity(db, { connector_key: p.platform, action: 'metrics_sync', status: 'failed', account_id: p.account_id, ref_type: 'social_publications', ref_id: p.id, error: String((e as Error).message) });
       out.push({ id: p.id, ok: false, error: String((e as Error).message) });
     }
   }

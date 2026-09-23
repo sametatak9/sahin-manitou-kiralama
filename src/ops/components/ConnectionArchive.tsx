@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Archive, Check, Copy, History, Wrench } from 'lucide-react';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
@@ -29,6 +29,9 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 export function DeveloperSetupValues({ redirectUri }: { redirectUri: string }) {
   const host = (() => { try { return new URL(redirectUri).hostname; } catch { return ''; } })();
   const panel = 'https://embay-panel.vercel.app';
+  const webhookUrl = redirectUri.replace(/\/oauth\/callback$/, '/webhook/meta');
+  const [verifyToken, setVerifyToken] = useState<string>('');
+  useEffect(() => { db().rpc('webhook_verify_token_admin').then(({ data }) => setVerifyToken((data as string) || '')); }, []);
   return (
     <Panel title={<span className="inline-flex items-center gap-2"><Wrench className="w-4 h-4" />Uygulama ayarlarına yazılacak adresler</span>}>
       <p className="text-xs text-ink-400 mb-3">Facebook’ta <b>“URL Yüklenemedi — bu bağlantının domaini uygulamanın domainlerinde yer almıyor”</b> hatası, bu adreslerin geliştirici hesabındaki uygulama ayarlarına girilmemesinden kaynaklanır. Aşağıdakileri kopyalayıp ilgili alanlara yapıştırın, kaydedin ve “Hesabımla bağla”ya tekrar dokunun.</p>
@@ -39,6 +42,8 @@ export function DeveloperSetupValues({ redirectUri }: { redirectUri: string }) {
           <CopyRow label="Temel → + Platform ekle → Web sitesi → Site URL’si" value={panel} />
           <CopyRow label="Facebook Girişi → Ayarlar → Geçerli OAuth Yönlendirme URI’leri" value={redirectUri} />
           <CopyRow label="Instagram → Instagram girişi ile API kurulumu → İşletme girişi → OAuth yönlendirme URI’leri" value={redirectUri} />
+          <CopyRow label="(İsteğe bağlı) Webhooks → Geri çağırma URL’si — yorum/mesaj bildirimleri için" value={webhookUrl} />
+          {verifyToken && <CopyRow label="(İsteğe bağlı) Webhooks → Doğrulama belirteci" value={verifyToken} />}
           <p className="text-[11px] text-ink-400">Facebook Girişi ürünü ekli değilse: Panel → Ürün ekle → “Facebook Girişi” → Kur. “İstemci OAuth girişi” ve “Web OAuth girişi” açık olmalı.</p>
         </div>
         <div className="space-y-2">
