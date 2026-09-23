@@ -152,7 +152,7 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
   return null;
 }
 
-interface AiResult { text: string; sources: Source[]; tokensIn: number; tokensOut: number; searches: number }
+interface AiResult { text: string; sources: Source[]; tokensIn: number; tokensOut: number; searches: number; toolErrors?: string[] }
 
 async function anthropicResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
   if (!key) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
@@ -163,7 +163,7 @@ async function anthropicResearch(key: string, model: string, system: string, pro
   ];
   // deno-lint-ignore no-explicit-any
   const messages: any[] = [{ role: 'user', content: prompt }];
-  const sources: Source[] = []; let text = ''; let tokensIn = 0; let tokensOut = 0; let searches = 0;
+  const sources: Source[] = []; let text = ''; let tokensIn = 0; let tokensOut = 0; let searches = 0; const toolErrors: string[] = [];
   for (let i = 0; i < 3; i++) {
     // deno-lint-ignore no-explicit-any
     let res: any;
@@ -182,13 +182,15 @@ async function anthropicResearch(key: string, model: string, system: string, pro
     if (res.stop_reason === 'refusal') throw new Error('Model isteği güvenlik nedeniyle reddetti');
     for (const b of res.content || []) {
       if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) for (const r of b.content) if (r.url) sources.push({ url: r.url, title: r.title });
+      // Sunucu aracı hataları HTTP 200 içinde gelir (ör. too_many_requests, max_uses_exceeded) — kayda geçir
+      if ((b.type === 'web_search_tool_result' || b.type === 'web_fetch_tool_result') && b.content && !Array.isArray(b.content) && b.content.error_code) toolErrors.push(`${b.type === 'web_search_tool_result' ? 'arama' : 'sayfa'}: ${b.content.error_code}`);
       if (b.type === 'web_fetch_tool_result' && b.content?.url) sources.push({ url: b.content.url, title: b.content?.content?.title });
       if (b.type === 'text') { text += b.text; for (const c of b.citations || []) if (c.url) sources.push({ url: c.url, title: c.title }); }
     }
     if (res.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: res.content });
   }
-  return { text, sources, tokensIn, tokensOut, searches };
+  return { text, sources, tokensIn, tokensOut, searches, toolErrors };
 }
 
 async function geminiResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
@@ -294,7 +296,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,
-        'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 5 web araması ve 4 sayfa okuma hakkın var; hakların bitince araştırmayı bırak ve elindekileri yaz). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
+        'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 5 web araması ve 4 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
         'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
@@ -315,7 +317,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       }
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
       await logStep(db, m, step, 'ai_research', `${ai.provider}/${ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
-        null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j) }, t0);
+        null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: ai.provider, model: ai.model }).eq('id', m.id);
     } else {
       const t0 = Date.now();
