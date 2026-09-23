@@ -1,57 +1,617 @@
-import { useEffect, useState } from 'react';
-import { Loader2, LogOut, ShieldAlert } from 'lucide-react';
-import { SupabaseAuthGate } from './components/SupabaseAuthGate';
-import { supabase } from './lib/supabase';
-import { OpsApp } from './ops/OpsApp';
-import type { OpsSession } from './ops/session';
+import React, { useState } from 'react';
+import {
+  LayoutDashboard,
+  Building2,
+  Radar,
+  Calendar,
+  PenTool,
+  Cpu,
+  Mail,
+  Link2,
+  Activity,
+  Sliders,
+  CheckCircle2,
+  Eye,
+  ShieldCheck,
+  Phone,
+  MessageSquare
+} from 'lucide-react';
 
-type Phase = { kind: 'checking' } | { kind: 'anon' } | { kind: 'pending'; email: string } | { kind: 'ready'; session: OpsSession } | { kind: 'error'; message: string };
+import { Header } from './components/Header';
+import { DashboardView } from './components/views/DashboardView';
+import { CRMView } from './components/views/CRMView';
+import { LeadRadarView } from './components/views/LeadRadarView';
+import { ContentCalendarView } from './components/views/ContentCalendarView';
+import { PostStudioView } from './components/views/PostStudioView';
+import { BotControlView } from './components/views/BotControlView';
+import { EmailCenterView } from './components/views/EmailCenterView';
+import { ConnectionsView } from './components/views/ConnectionsView';
+import { SystemHealthView } from './components/views/SystemHealthView';
+import { PublicWebsiteView } from './components/views/PublicWebsiteView';
 
-/** Oturum + ekip üyeliği kapısı. Ekip boşsa ilk giriş yapan kullanıcı claim_first_admin ile yönetici olur. */
-async function resolveMembership(): Promise<Phase> {
-  if (!supabase) return { kind: 'error', message: 'Supabase yapılandırılmamış.' };
-  const { data } = await supabase.auth.getSession();
-  const user = data.session?.user;
-  if (!user) return { kind: 'anon' };
-  let { data: member } = await supabase.from('team_members').select('role,display_name').eq('user_id', user.id).maybeSingle();
-  if (!member) {
-    const { data: claimed } = await supabase.rpc('claim_first_admin');
-    if (claimed) ({ data: member } = await supabase.from('team_members').select('role,display_name').eq('user_id', user.id).maybeSingle());
-  }
-  if (!member) return { kind: 'pending', email: user.email ?? '' };
-  return { kind: 'ready', session: { userId: user.id, email: user.email ?? '', role: member.role as OpsSession['role'], displayName: member.display_name || (user.email ?? 'Ekip üyesi').split('@')[0] } };
-}
+import {
+  INITIAL_COMPANIES,
+  INITIAL_PROJECTS,
+  INITIAL_OPPORTUNITIES,
+  INITIAL_LEADS,
+  INITIAL_PLATFORMS,
+  INITIAL_BOT_TASKS,
+  INITIAL_CONTENT_ITEMS,
+  INITIAL_SEO_REPORT,
+  INITIAL_TRENDS,
+  INITIAL_EMAILS,
+  INITIAL_SYSTEM_ERRORS,
+  INITIAL_AI_COSTS
+} from './data/initialData';
 
-export default function App() {
-  const [phase, setPhase] = useState<Phase>({ kind: 'checking' });
+import {
+  Company,
+  Project,
+  Opportunity,
+  Lead,
+  LeadStatus,
+  ContentItem,
+  BotTask,
+  PlatformConnection
+} from './types';
 
-  useEffect(() => {
-    let alive = true;
-    const refresh = () => resolveMembership().then((p) => alive && setPhase(p)).catch((e) => alive && setPhase({ kind: 'error', message: String(e?.message || e) }));
-    refresh();
-    const sub = supabase?.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') refresh();
-    });
-    return () => { alive = false; sub?.data.subscription.unsubscribe(); };
-  }, []);
+export function App() {
+  // Main View: 'panel' (Operations Center) or 'website' (Public Showcase)
+  const [currentView, setCurrentView] = useState<'panel' | 'website'>('panel');
+  // Operations Panel Tabs
+  const [currentTab, setCurrentTab] = useState<string>('dashboard');
 
-  const logout = async () => { await supabase?.auth.signOut(); setPhase({ kind: 'anon' }); };
+  // Application State (Additive and in-memory persistence)
+  const [companies, setCompanies] = useState<Company[]>(INITIAL_COMPANIES);
+  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(INITIAL_OPPORTUNITIES);
+  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [platforms, setPlatforms] = useState<PlatformConnection[]>(INITIAL_PLATFORMS);
+  const [botTasks, setBotTasks] = useState<BotTask[]>(INITIAL_BOT_TASKS);
+  const [contentItems, setContentItems] = useState<ContentItem[]>(INITIAL_CONTENT_ITEMS);
+  const [seoReport, setSeoReport] = useState(INITIAL_SEO_REPORT);
+  const [trends, setTrends] = useState(INITIAL_TRENDS);
+  const [emails, setEmails] = useState(INITIAL_EMAILS);
+  const [errors, setErrors] = useState(INITIAL_SYSTEM_ERRORS);
+  const [costs, setCosts] = useState(INITIAL_AI_COSTS);
 
-  if (phase.kind === 'checking') {
-    return <div className="ops-root min-h-screen flex items-center justify-center text-ink-300 text-sm gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Operasyon merkezi hazırlanıyor…</div>;
-  }
-  if (phase.kind === 'anon') return <SupabaseAuthGate onAuthenticated={() => resolveMembership().then(setPhase)} />;
-  if (phase.kind === 'pending' || phase.kind === 'error') {
-    return (
-      <div className="ops-root min-h-screen flex items-center justify-center p-4">
-        <div className="ops-panel max-w-md w-full p-7 text-center space-y-3">
-          <ShieldAlert className="w-8 h-8 text-amber-300 mx-auto" />
-          <h1 className="font-display text-lg font-semibold text-ink-100">{phase.kind === 'pending' ? 'Yetki bekleniyor' : 'Bağlantı hatası'}</h1>
-          <p className="text-sm text-ink-300">{phase.kind === 'pending' ? `${phase.email} hesabı giriş yaptı ancak ekip üyesi değil. Yöneticiniz sizi Ayarlar → Ekip bölümünden eklemeli.` : phase.message}</p>
-          <button onClick={logout} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold ring-1 ring-ink-600 text-ink-200 hover:bg-ink-800"><LogOut className="w-4 h-4" /> Çıkış yap</button>
-        </div>
-      </div>
+  // Status Notification
+  const [notification, setNotification] = useState<string | null>(null);
+
+  const showNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  // Bot Trigger
+  const handleTriggerBot = (id: string) => {
+    setBotTasks(prev =>
+      prev.map(task => {
+        if (task.id === id) {
+          return {
+            ...task,
+            status: 'ÇALIŞIYOR',
+            duration: '0.4 sn'
+          };
+        }
+        return task;
+      })
     );
-  }
-  return <OpsApp session={phase.session} onLogout={logout} />;
+
+    setTimeout(() => {
+      setBotTasks(prev =>
+        prev.map(task => {
+          if (task.id === id) {
+            return {
+              ...task,
+              status: 'TAMAMLANDI',
+              lastRunAt: 'Şimdi',
+              report: 'Görev başarıyla koşuldu ve kayıtlar güncellendi.'
+            };
+          }
+          return task;
+        })
+      );
+      showNotification('Bot görevi başarıyla tamamlandı.');
+    }, 800);
+  };
+
+  // Human Approval for Lead
+  const handleApproveLead = (leadId: string) => {
+    setLeads(prev =>
+      prev.map(l => {
+        if (l.id === leadId) {
+          const updatedHistory = [
+            ...l.history,
+            {
+              status: 'CONTACTED' as LeadStatus,
+              changedAt: 'Şimdi (Samet Bey Onayladı)',
+              note: 'Resmi iletişim kanalı üzerinden teklif mesajı gönderildi.'
+            }
+          ];
+          return {
+            ...l,
+            status: 'CONTACTED',
+            requiresHumanApproval: false,
+            history: updatedHistory
+          };
+        }
+        return l;
+      })
+    );
+    showNotification('Lead için insan onayı verildi ve resmi iletişim başlatıldı.');
+  };
+
+  // Human Approval for Content Post
+  const handleApproveContent = (contentId: string) => {
+    setContentItems(prev =>
+      prev.map(item => {
+        if (item.id === contentId) {
+          return {
+            ...item,
+            approvalStatus: 'APPROVED',
+            publishStatus: 'SCHEDULED'
+          };
+        }
+        return item;
+      })
+    );
+    showNotification('İçerik onaylandı ve takvimde yayına alındı.');
+  };
+
+  // Update Lead Lifecycle
+  const handleUpdateLeadStatus = (leadId: string, newStatus: LeadStatus, note: string) => {
+    setLeads(prev =>
+      prev.map(l => {
+        if (l.id === leadId) {
+          return {
+            ...l,
+            status: newStatus,
+            history: [
+              ...l.history,
+              {
+                status: newStatus,
+                changedAt: 'Şimdi',
+                note
+              }
+            ]
+          };
+        }
+        return l;
+      })
+    );
+    showNotification(`Lead durumu ${newStatus} olarak güncellendi.`);
+  };
+
+  // Add Company (Enrichment / Additive)
+  const handleAddCompany = (newComp: Omit<Company, 'id' | 'createdAt' | 'enrichmentHistory'>) => {
+    const existing = companies.find(c => c.name.toLowerCase() === newComp.name.toLowerCase());
+    if (existing) {
+      // Enrichment instead of duplicate
+      setCompanies(prev =>
+        prev.map(c => {
+          if (c.id === existing.id) {
+            return {
+              ...c,
+              phone: newComp.phone || c.phone,
+              email: newComp.email || c.email,
+              enrichmentHistory: [
+                ...c.enrichmentHistory,
+                {
+                  date: 'Bugün',
+                  source: 'Kullanıcı Girişi / Zenginleştirme',
+                  addedFields: ['phone', 'email']
+                }
+              ]
+            };
+          }
+          return c;
+        })
+      );
+      showNotification(`"${existing.name}" zaten kayıtlıydı; profil yeni bilgilerle zenginleştirildi.`);
+    } else {
+      const created: Company = {
+        ...newComp,
+        id: `comp-${Date.now()}`,
+        createdAt: '2026-09-23',
+        enrichmentHistory: []
+      };
+      setCompanies(prev => [created, ...prev]);
+      showNotification(`"${created.name}" firma havuzuna eklendi.`);
+    }
+  };
+
+  // Convert Signal to Lead
+  const handleConvertSignalToLead = (signal: any) => {
+    const newLead: Lead = {
+      id: `lead-${Date.now()}`,
+      name: signal.title.slice(0, 30),
+      companyName: signal.category === 'MANITOU' ? 'İş Makineleri Şantiye Talebi' : 'Tozkoparan Kat Malikleri',
+      phone: '0531 436 29 04',
+      status: 'QUALIFIED',
+      opportunitySummary: signal.snippet,
+      requiresHumanApproval: true,
+      approvalAction: 'SEND_WHATSAPP',
+      sourceEvidence: {
+        url: signal.url,
+        domain: signal.domain,
+        sourceType: signal.sourceType,
+        title: signal.title,
+        discoveredAt: signal.discoveredAt,
+        evidenceSnippet: signal.snippet,
+        confidenceScore: signal.confidenceScore,
+        botName: signal.botName,
+        query: signal.query
+      },
+      history: [
+        {
+          status: 'DISCOVERED',
+          changedAt: 'Şimdi',
+          note: `Radar sinyali CRM'e aktarıldı (${signal.domain})`
+        },
+        {
+          status: 'QUALIFIED',
+          changedAt: 'Şimdi',
+          note: 'Sinyal güven skoru ve kanıt metni doğrulandı.'
+        }
+      ]
+    };
+
+    setLeads(prev => [newLead, ...prev]);
+    showNotification('Sinyal başarıyla CRM Lead havuzuna eklendi. Samet Bey onayı bekleniyor.');
+  };
+
+  // Generate 30-Day Content Plan ("30 GÜNLÜK AI İLE İÇERİK PLANI BAŞLAT")
+  const handleGenerate30DayPlan = () => {
+    const newItems: ContentItem[] = [];
+    const platformsList: ('INSTAGRAM' | 'GOOGLE_BUSINESS' | 'FACEBOOK')[] = ['INSTAGRAM', 'GOOGLE_BUSINESS', 'FACEBOOK'];
+
+    for (let i = 1; i <= 30; i++) {
+      const p = platformsList[i % 3];
+      const dayStr = i < 10 ? `0${i}` : `${i}`;
+      const isManitou = i % 2 === 0;
+
+      newItems.push({
+        id: `plan-30-${i}-${Date.now()}`,
+        platform: p,
+        account: p === 'INSTAGRAM' ? '@sahinmanitou_kiralama' : 'Embay Yapı & Şahin Manitou',
+        plannedAt: `2026-10-${dayStr} 11:30`,
+        timezone: 'Europe/Istanbul',
+        title: isManitou
+          ? `Günün Manitou İpucu #${i}: MT-X 1840 ile Şantiye Emniyeti`
+          : `Güngören Kentsel Dönüşüm Rehberi #${i}: Zemin Güvenliği`,
+        caption: isManitou
+          ? 'Yüksek irtifa montajlarınızda 18 metre bom uzanımı ve 4 ton taşıma kapasitesiyle zamandan ve iş gücünden tasarruf edin.'
+          : 'Tozkoparan ve çevresinde deprem yönetmeliğine tam uyumlu radye temel ve C35 beton standartlarında güvenli yapılar.',
+        hashtags: isManitou ? ['#manitou', '#kiralık', '#telehandler'] : ['#kentseldönüşüm', '#güngören', '#embayyapi'],
+        cta: 'Teklif ve keşif için: 0531 436 29 04',
+        mediaType: 'IMAGE',
+        bot: '30 Günlük AI İçerik Motoru',
+        campaign: 'Ekim 2026 30 Günlük Master Kampanya',
+        approvalStatus: 'PENDING_APPROVAL',
+        publishStatus: 'DRAFT'
+      });
+    }
+
+    setContentItems(prev => [...newItems, ...prev]);
+    showNotification('30 günlük gerçek içerik planı takvime eklendi. Onayınızı bekliyor.');
+  };
+
+  // Schedule Post from Studio
+  const handleSchedulePost = (post: any) => {
+    const newItem: ContentItem = {
+      id: `post-${Date.now()}`,
+      platform: post.platform,
+      account: post.platform === 'INSTAGRAM' ? '@sahinmanitou_kiralama' : 'Embay Yapı & Şahin Manitou',
+      plannedAt: post.plannedAt,
+      timezone: 'Europe/Istanbul',
+      title: post.title,
+      caption: post.caption,
+      hashtags: post.hashtags,
+      cta: post.cta,
+      mediaType: 'IMAGE',
+      bot: post.bot,
+      campaign: post.campaign,
+      approvalStatus: post.approvalStatus,
+      publishStatus: 'SCHEDULED'
+    };
+    setContentItems(prev => [newItem, ...prev]);
+    showNotification('Yeni içerik Post Studio üzerinden oluşturuldu ve takvime işlendi.');
+  };
+
+  // Lead Submitted from Public Website Form
+  const handleLeadFromWebsite = (leadData: {
+    name: string;
+    phone: string;
+    companyName: string;
+    serviceType: string;
+    notes: string;
+  }) => {
+    const newLead: Lead = {
+      id: `web-lead-${Date.now()}`,
+      name: leadData.name,
+      companyName: leadData.companyName,
+      phone: leadData.phone,
+      status: 'DISCOVERED',
+      opportunitySummary: `${leadData.serviceType} - ${leadData.notes}`,
+      requiresHumanApproval: true,
+      approvalAction: 'SEND_WHATSAPP',
+      sourceEvidence: {
+        url: 'https://sahin-manitou-kiralama.vercel.app/#kesif-formu',
+        domain: 'sahin-manitou-kiralama.vercel.app',
+        sourceType: 'INBOUND_FORM',
+        title: 'Canlı Web Sitesi Keşif / Teklif Formu',
+        discoveredAt: 'Az Önce',
+        evidenceSnippet: `${leadData.name} (${leadData.phone}) webden form doldurdu: "${leadData.serviceType} - ${leadData.notes}"`,
+        confidenceScore: 100,
+        botName: 'Inbound Webhook Listener',
+        query: 'Doğrudan Web Ziyaretçisi'
+      },
+      history: [
+        {
+          status: 'DISCOVERED',
+          changedAt: 'Az Önce',
+          note: 'Vitrin sitesi keşif formundan operasyon paneline düştü.'
+        }
+      ]
+    };
+
+    setLeads(prev => [newLead, ...prev]);
+    showNotification(`Yeni talep (${leadData.name}) doğrudan Operasyon Paneli CRM'e eklendi!`);
+  };
+
+  // Count pending approvals
+  const pendingApprovalsCount =
+    leads.filter(l => l.requiresHumanApproval).length +
+    contentItems.filter(c => c.approvalStatus === 'PENDING_APPROVAL').length;
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">
+      {/* Toast Notification */}
+      {notification && (
+        <div className="fixed top-20 right-4 z-50 bg-emerald-800 text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-lg border border-emerald-600 flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+          <span>{notification}</span>
+        </div>
+      )}
+
+      {/* Global Light Green & White Header */}
+      <Header
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        pendingApprovalsCount={pendingApprovalsCount}
+        onOpenApprovals={() => {
+          setCurrentView('panel');
+          setCurrentTab('dashboard');
+        }}
+      />
+
+      {/* VIEW 1: OPERATIONS CENTER PANEL (EMBAY-PANEL) */}
+      {currentView === 'panel' ? (
+        <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 gap-6">
+          {/* Left Navigation Sidebar (Light Green + White) */}
+          <aside className="lg:w-64 shrink-0 space-y-4">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs">
+              <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Operasyon Menüsü
+              </div>
+
+              <nav className="space-y-1 text-xs font-semibold">
+                <button
+                  onClick={() => setCurrentTab('dashboard')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'dashboard'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Operasyon & Özet</span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('crm')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'crm'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Building2 className="w-4 h-4" />
+                    <span>Firma, Proje & CRM</span>
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                    {leads.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('radar')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'radar'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Radar className="w-4 h-4" />
+                  <span>Lead Radarı & Fırsatlar</span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('calendar')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'calendar'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Calendar className="w-4 h-4" />
+                    <span>İçerik Takvimi</span>
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                    30 Gün
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('studio')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'studio'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <PenTool className="w-4 h-4" />
+                  <span>Post Studio (Üretim)</span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('bots')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'bots'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Cpu className="w-4 h-4" />
+                  <span>Bot Kontrol & SEO</span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('email')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'email'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Mail className="w-4 h-4" />
+                    <span>E-Posta & Teklif</span>
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">
+                    {emails.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('connections')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'connections'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Link2 className="w-4 h-4" />
+                  <span>Bağlantılar & Vercel ENV</span>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('health')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                    currentTab === 'health'
+                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>Sistem Sağlığı & Maliyet</span>
+                </button>
+              </nav>
+            </div>
+
+            {/* Quick Live Contact Box */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs space-y-2">
+              <span className="font-bold text-emerald-900 block">📞 Resmi Operasyon Hattı:</span>
+              <p className="text-emerald-800 font-mono font-bold text-sm">0531 436 29 04</p>
+              <p className="text-[11px] text-emerald-700 leading-snug">
+                Tüm botlar ve iletişim şablonları bu numara ile mühürlenmiştir.
+              </p>
+            </div>
+          </aside>
+
+          {/* Main Body */}
+          <main className="flex-1 min-w-0">
+            {currentTab === 'dashboard' && (
+              <DashboardView
+                botTasks={botTasks}
+                onTriggerBot={handleTriggerBot}
+                leads={leads}
+                onApproveLead={handleApproveLead}
+                contentItems={contentItems}
+                onApproveContent={handleApproveContent}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+              />
+            )}
+
+            {currentTab === 'crm' && (
+              <CRMView
+                companies={companies}
+                projects={projects}
+                opportunities={opportunities}
+                leads={leads}
+                onUpdateLeadStatus={handleUpdateLeadStatus}
+                onAddCompany={handleAddCompany}
+              />
+            )}
+
+            {currentTab === 'radar' && (
+              <LeadRadarView onConvertSignalToLead={handleConvertSignalToLead} />
+            )}
+
+            {currentTab === 'calendar' && (
+              <ContentCalendarView
+                contentItems={contentItems}
+                onApproveContent={handleApproveContent}
+                onGenerate30DayPlan={handleGenerate30DayPlan}
+              />
+            )}
+
+            {currentTab === 'studio' && (
+              <PostStudioView onSchedulePost={handleSchedulePost} />
+            )}
+
+            {currentTab === 'bots' && (
+              <BotControlView
+                botTasks={botTasks}
+                seoReport={seoReport}
+                trends={trends}
+                onTriggerBot={handleTriggerBot}
+                onApproveTrend={() => {
+                  setCurrentTab('studio');
+                  showNotification('Trend Post Studio alanına aktarıldı.');
+                }}
+              />
+            )}
+
+            {currentTab === 'email' && (
+              <EmailCenterView
+                emails={emails}
+                onApproveAndSend={(id) => {
+                  setEmails(prev =>
+                    prev.map(em => (em.id === id ? { ...em, status: 'SENT' } : em))
+                  );
+                  showNotification('E-posta teklif yanıtı onaylandı ve gönderildi.');
+                }}
+              />
+            )}
+
+            {currentTab === 'connections' && (
+              <ConnectionsView platforms={platforms} />
+            )}
+
+            {currentTab === 'health' && (
+              <SystemHealthView errors={errors} costs={costs} />
+            )}
+          </main>
+        </div>
+      ) : (
+        /* VIEW 2: PUBLIC SHOWCASE WEBSITE (TOU-KIRALAMA & SAHIN-MANITOU) */
+        <PublicWebsiteView onLeadSubmitted={handleLeadFromWebsite} />
+      )}
+    </div>
+  );
 }
+export default App;

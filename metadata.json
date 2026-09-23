@@ -1,6 +1,6 @@
 {
-  "name": "Şahin Manitou & Embay Yapı Dijital Yönetim Kokpiti",
-  "description": "Google yerel SEO, GBP yayınları, Instagram Reels içerik takvimi ve pazar alanı yönetim merkezi.",
+  "name": "Embay Yapı & Şahin Manitou | Operasyon Merkezi",
+  "description": "Deprem yönetmeliğine uygun konut inşaatı, kentsel dönüşüm, Şahin Manitou kiralama ve operasyon yönetim paneli.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

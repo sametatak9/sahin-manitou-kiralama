@@ -1,0 +1,30 @@
+# ==============================================================================
+# VERCEL PRODUCTION ENVIRONMENT VARIABLES (METİN BELGESİ FORMATI)
+# ==============================================================================
+# Bu metni kopyalayıp doğrudan Vercel Dashboard -> Settings -> Environment Variables
+# alanına yapıştırabilir veya Claude Code / diğer yapay zekaya verip doldurtabilirsiniz.
+# ==============================================================================
+
+# 1. Google Gemini AI Motoru (İçerik Stüdyosu, Lead Taraması ve Botlar İçin)
+# Alınacağı yer: https://aistudio.google.com/app/apikey
+GEMINI_API_KEY="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+# 2. Canlı Vercel Domainleri
+APP_URL="https://embay-panel.vercel.app"
+VITE_PUBLIC_SITE_URL="https://sahin-manitou-kiralama.vercel.app"
+
+# 3. Supabase Veritabanı ve Auth (Kalıcı Veri Kaydı İçin)
+# Alınacağı yer: https://supabase.com -> Projeniz -> Project Settings -> API
+VITE_SUPABASE_URL="https://sizin-proje-id.supabase.co"
+VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sizin-anon-keyiniz"
+SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sizin-service-role-keyiniz"
+
+# 4. İletişim ve Operasyon Hattı (Şahin Manitou & Embay Yapı)
+VITE_CONTACT_PHONE="0531 436 29 04"
+VITE_CONTACT_PHONE_CLEAN="05314362904"
+WHATSAPP_WEBHOOK_SECRET="embay_wh_secret_2026"
+
+# 5. Opsiyonel Meta ve Sosyal Medya Entegrasyonları (İleride eklemek isterseniz)
+META_GRAPH_ACCESS_TOKEN=""
+GOOGLE_BUSINESS_API_KEY=""
+X_BEARER_TOKEN=""
