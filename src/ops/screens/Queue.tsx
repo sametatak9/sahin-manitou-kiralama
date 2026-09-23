@@ -1,12 +1,13 @@
 // Yayın Kuyruğu: telefondan görsel/video yükle → platform + format + tarih/saat seç → bot o saatte resmi API ile paylaşır.
 // Başarı yalnızca platform API yanıtıyla (social_publications.external_post_id) gösterilir.
 import { useMemo, useRef, useState } from 'react';
-import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Share2, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { callOps, errorCode, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDateTime, istanbulToIso, relTime, type Tone } from '../lib/format';
 import type { Draft, OpsStatus, Publication } from '../lib/types';
 import { TARGETS, uploadMedia } from '../lib/media';
+import { shareToPhone } from '../lib/share';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
 
@@ -239,7 +240,8 @@ export function QueueScreen() {
           <ul className="divide-y divide-ink-800">
             {list.map((d) => {
               const pub = pubBy.get(d.id); const media = d.media_urls?.[0];
-              const wf = WF[d.workflow_status] ?? { label: d.workflow_status, tone: 'idle' as Tone };
+              const manual = d.workflow_status === 'published' && (d as { performance_notes?: string | null }).performance_notes?.startsWith('Elle paylaşıldı');
+              const wf = manual ? { label: 'ELLE PAYLAŞILDI', tone: 'go' as Tone } : WF[d.workflow_status] ?? { label: d.workflow_status, tone: 'idle' as Tone };
               return (
                 <li key={d.id} className="py-3 flex gap-3">
                   <div className="w-16 h-20 shrink-0 rounded-lg overflow-hidden bg-ink-800 ring-1 ring-ink-700">
@@ -258,6 +260,18 @@ export function QueueScreen() {
                       {admin && d.workflow_status === 'pending_approval' && <Button variant="primary" loading={busy === d.id} onClick={() => act(d.id, update(d.id, { workflow_status: 'scheduled', status: 'planlandi', approved_by: session.userId, approved_at: new Date().toISOString() }, ['pending_approval']), 'Onaylandı ve zamanlandı.')}>Onayla</Button>}
                       {admin && ['scheduled', 'approved', 'failed'].includes(d.workflow_status) && <Button variant="ghost" loading={busy === `now-${d.id}`} icon={<Send className="w-4 h-4" />}
                         onClick={async () => { setBusy(`now-${d.id}`); setMsg(null); try { const r = await callOps<{ external_url?: string }>('publish_content', { content_id: d.id }); setMsg({ tone: 'ok', text: `Paylaşıldı (API doğruladı)${r.external_url ? `: ${r.external_url}` : ''}` }); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); q.reload(); } }}>Şimdi paylaş</Button>}
+                      {['scheduled', 'approved', 'failed', 'pending_approval'].includes(d.workflow_status) && <Button variant="primary" loading={busy === `share-${d.id}`} icon={<Share2 className="w-4 h-4" />}
+                        onClick={async () => {
+                          setBusy(`share-${d.id}`); setMsg(null);
+                          try {
+                            const r = await shareToPhone(d);
+                            if (r === 'cancelled') return;
+                            if (window.confirm(r === 'copied' ? 'Açıklama kopyalandı. Uygulamada paylaşımı tamamladıysanız "Tamam"a basın, "paylaşıldı" olarak işaretlensin.' : 'Paylaşımı tamamladınız mı? "Tamam" derseniz "elle paylaşıldı" olarak işaretlenir.')) {
+                              await update(d.id, { workflow_status: 'published', status: 'yayinda', error: null, performance_notes: `Elle paylaşıldı (telefon) · ${new Date().toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}` }, ['scheduled', 'approved', 'failed', 'pending_approval']);
+                              setMsg({ tone: 'ok', text: 'Elle paylaşıldı olarak kaydedildi.' });
+                            } else setMsg({ tone: 'ok', text: 'Açıklama panoya kopyalandı; uygulamada “yapıştır” diyebilirsiniz.' });
+                          } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); q.reload(); }
+                        }}>Telefondan paylaş</Button>}
                       {admin && d.workflow_status === 'failed' && <Button variant="ghost" loading={busy === d.id} icon={<RotateCcw className="w-4 h-4" />} onClick={() => act(d.id, update(d.id, { workflow_status: 'scheduled', status: 'planlandi', error: null, scheduled_at: new Date(Date.now() + 60_000).toISOString() }, ['failed']), 'Yeniden denenecek (1 dk içinde).')}>Tekrar dene</Button>}
                       {['pending_approval', 'scheduled', 'approved'].includes(d.workflow_status) && <Button variant="ghost" loading={busy === d.id} icon={<Trash2 className="w-4 h-4" />} onClick={() => act(d.id, update(d.id, { workflow_status: 'cancelled' }, ['pending_approval', 'scheduled', 'approved']), 'Paylaşım iptal edildi.')}>İptal</Button>}
                       {d.workflow_status === 'processing' && <span className="inline-flex items-center gap-1 text-xs text-ink-400"><Loader2 className="w-3.5 h-3.5 animate-spin" />Platforma gönderiliyor</span>}

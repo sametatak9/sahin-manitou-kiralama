@@ -1,13 +1,14 @@
 // Video Havuzu: telefondan video yükle → havuza kaydolur → uygulama/format seç → düzenle (kırp, kapak, ses) → kaydet →
 // istenirse Yayın Kuyruğu'na tarih/saat ile gönder. Her kayıt veritabanına tarihli yazılır (media_library).
 import { useEffect, useRef, useState } from 'react';
-import { Archive, CalendarClock, Image as ImageIcon, Scissors, Send, Upload, VolumeX, Save } from 'lucide-react';
+import { Archive, CalendarClock, Image as ImageIcon, Scissors, Send, Share2, Upload, VolumeX, Save } from 'lucide-react';
 import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDateTime, istanbulToIso } from '../lib/format';
 import { grabFrame, recorderFormat, TARGETS, trimVideo, uploadBlob, uploadMedia, videoMeta } from '../lib/media';
 import type { OpsStatus } from '../lib/types';
 import { useSession } from '../session';
+import { shareToPhone } from '../lib/share';
 import { Button, cx, Field, Modal, Notice, Panel, Pill, SavedStamp, StateView } from '../ui';
 
 export interface MediaItem {
@@ -265,6 +266,14 @@ function VideoEditor({ item, onClose, onSaved, onGone }: { item: MediaItem; onCl
             <Button variant="primary" className="mt-2 w-full" loading={busy === 'Kuyruğa ekleniyor'} onClick={toQueue} icon={<Send className="w-4 h-4" />}>Kaydet ve kuyruğa gönder</Button>
             <p className="text-[11px] text-ink-400 mt-1.5">Seçilen her uygulama için ayrı paylaşım oluşur. Hesap bağlı değilse paylaşım sırada bekler, bağlanınca gönderilir.{item.draft_ids.length ? ` Bu video daha önce ${item.draft_ids.length} kez kuyruğa eklendi.` : ''}</p>
           </Panel>
+          <Button variant="subtle" className="w-full" onClick={async () => {
+            setErr(null);
+            try {
+              const r = await shareToPhone({ title, caption, hashtags: tagList(), video_url: item.url });
+              if (r === 'copied') setErr('Bu tarayıcı dosya paylaşımını desteklemiyor; açıklama kopyalandı. Videoyu “İndir” ile kaydedip uygulamada paylaşabilirsiniz.');
+            } catch (e) { setErr(errorText(e)); }
+          }} icon={<Share2 className="w-4 h-4" />}>Telefondan paylaş (hesap bağlamadan)</Button>
+          <p className="text-[11px] text-ink-400 -mt-1">Telefonun paylaşım menüsü açılır: Instagram, Facebook, YouTube veya WhatsApp’ı seçin. Açıklama otomatik kopyalanır, uygulamada “yapıştır” deyin.</p>
           {busy && <Notice tone="info">{busy}…</Notice>}
           {err && <Notice tone="error">{err}</Notice>}
         </div>
