@@ -14,20 +14,21 @@ export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: To
   stopped: { label: 'DURDURULDU', tone: 'wait' }, failed: { label: 'BAŞARISIZ', tone: 'stop' }, blocked: { label: 'ENGELLENDİ', tone: 'stop' },
 };
 export const FINISH_REASON: Record<string, string> = {
-  deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', error: 'Hata', no_ai: 'AI kullanılamadı (yalnızca sayfa taraması)',
+  deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', error: 'Hata', no_ai: 'AI kullanılamadı (yalnızca sayfa taraması)', budget: 'Harcama sınırı doldu',
 };
 const DURATIONS = [1, 5, 10, 15, 30, 60, 120];
 export const ERROR_KIND: Record<string, string> = {
-  ai_credit: 'AI kredisi / bakiyesi bitti', ai_auth: 'AI anahtarı geçersiz veya yetkisiz', repeated_error: 'Üst üste 3 adım hata verdi', timeout: 'Zaman aşımı',
+  ai_credit: 'AI kredisi / bakiyesi bitti', ai_auth: 'AI anahtarı geçersiz veya yetkisiz', repeated_error: 'Üst üste 3 adım hata verdi', timeout: 'Zaman aşımı', budget: 'Harcama sınırı doldu',
 };
 const MODELS = [
-  { id: '', label: 'Otomatik (botun ayarı)' },
-  { id: 'claude-opus-5', label: 'Claude Opus 5 — en güçlü' },
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — ekonomik' },
+  { id: '', label: 'Otomatik (ekonomik: Sonnet 5)' },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — ekonomik (önerilen)' },
+  { id: 'claude-opus-5', label: 'Claude Opus 5 — en güçlü, ~2,5 kat pahalı' },
 ];
 // USD / 1M token (giriş, çıkış) — yaklaşık maliyet gösterimi için
 const PRICE: Record<string, [number, number]> = { 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10] };
-export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'>) {
+export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'> & { cost_usd?: number | null }) {
+  if (m.cost_usd && Number(m.cost_usd) > 0) return `≈ $${Number(m.cost_usd).toFixed(2)}`;
   const p = m.model ? PRICE[m.model] : undefined; if (!p || !(m.tokens_in + m.tokens_out)) return null;
   return `≈ $${((m.tokens_in * p[0] + m.tokens_out * p[1]) / 1e6).toFixed(2)}`;
 }

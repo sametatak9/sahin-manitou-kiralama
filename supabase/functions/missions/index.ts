@@ -4,9 +4,10 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { finalizeMission, runDueMissions, stepMission, type MissionRow } from '../_shared/mission.ts';
 import { aiKeyAvailability, getAiKey, initKeyStore, liveKeyTest, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
+import { budgetBlock, spendStatus } from '../_shared/ai/budget.ts';
 
 type Db = SupabaseClient;
-// Görev başlatılırken seçilebilen modeller (varsayılan: botun AI ajanı, yoksa claude-opus-5)
+// Görev başlatılırken seçilebilen modeller (varsayılan: botun AI ajanı, yoksa claude-sonnet-5 — daha ekonomik)
 const ALLOWED_MODELS = ['claude-opus-5', 'claude-sonnet-5'];
 const cors = {
   'access-control-allow-origin': '*',
@@ -55,6 +56,8 @@ async function api(c: Db, req: Request) {
         if (bot.status === 'archived' || bot.status === 'paused') throw new HttpError(409, `Bot ${bot.status === 'paused' ? 'duraklatılmış' : 'arşivlenmiş'}`);
       }
       const model = ALLOWED_MODELS.includes(String(body.model)) ? String(body.model) : null;
+      const blocked = await budgetBlock(c);
+      if (blocked) throw new HttpError(409, `${blocked}. Sınırı Ayarlar → Harcama sınırı bölümünden değiştirebilirsiniz.`, 'BUDGET_EXCEEDED');
       let schedule_id: string | null = null;
       if (body.schedule_id) {
         const { data: sch } = await c.from('mission_schedules').select('id').eq('id', body.schedule_id).maybeSingle();
@@ -66,7 +69,7 @@ async function api(c: Db, req: Request) {
         bot_id: body.bot_id || null, title: title.slice(0, 200), goal: goal.slice(0, 4000), target_url: target || null,
         search_for: String(body.search_for || '').trim().slice(0, 1000) || null, report_spec: String(body.report_spec || '').trim().slice(0, 1000) || null,
         stop_condition: String(body.stop_condition || '').trim().slice(0, 1000) || null, duration_minutes: minutes,
-        max_steps: minutes <= 15 ? minutes : Math.min(40, Math.ceil(minutes / 3)), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
+        max_steps: minutes <= 15 ? Math.min(minutes, 5) : Math.min(12, Math.ceil(minutes / 5)), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
         locked_until: new Date(now + 150_000).toISOString(),
       }).select('*').single();
       if (error) throw error;
@@ -128,6 +131,8 @@ async function api(c: Db, req: Request) {
     }
 
     // Kayıtlı anahtarı sağlayıcıya küçük bir istekle doğrular (sonuç panelde "doğrulandı" olarak görünür)
+    case 'ai_spend': { await requireUser(c, req); return await spendStatus(c); }
+
     case 'ai_test': {
       await requireUser(c, req, 'admin');
       const p = String(body.provider || 'anthropic') as KeyProvider;

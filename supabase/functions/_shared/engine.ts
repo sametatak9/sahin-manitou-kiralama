@@ -1,6 +1,7 @@
 // EMBAY BOT ENGINE: Bot = configuration + skills + tools + permissions + schedule.
 // Görev → bot/skill/tool yükle → izin kontrolü → (pipeline | AI agent) → run/log → retry/next_run.
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
+import { budgetBlock, recordUsage } from './ai/budget.ts';
 import type { AgentRunResult } from './ai/types.ts';
 import { loadAgent, makeLogger, type BotRow, type Db, type EngineCtx, type SkillRow, type TaskRow, type ToolRow } from './context.ts';
 import { decideToolUse } from './pure/rules.ts';
@@ -124,6 +125,9 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
         'Yalnızca verilen araçları kullan. Onay gerektiren araçlar hemen yürütülmez, onay kuyruğuna düşer. Veri uydurma. Bitince 1-2 cümlelik Türkçe özet yaz.'].join('\n\n');
       const prompt = `Görev: ${task.title ?? skill.display_name}\nPlatform: ${baseInput.platform ?? 'genel'}\nGirdi: ${JSON.stringify(task.input_config ?? {})}\nBugün: ${new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}`;
       let res: AgentRunResult | undefined;
+      let used = { provider: ctx.agent!.provider as string, model: ctx.agent!.model };
+      const blocked = await budgetBlock(ctx.db);
+      if (blocked) throw new Error(`${blocked}. Yapay zekâ çağrısı yapılmadı (Ayarlar → Harcama sınırı).`);
       try {
         res = await getProvider(ctx.agent!.provider).runAgent(ctx.agent!, {
           system, prompt, maxTurns: 8,
@@ -146,14 +150,14 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
               const altAgent = {
                 ...ctx.agent!,
                 provider: fallback,
-                model: fallback === 'gemini' ? 'gemini-flash-latest' : fallback === 'openai' ? 'gpt-4o-mini' : 'claude-opus-5'
+                model: fallback === 'gemini' ? 'gemini-flash-latest' : fallback === 'openai' ? 'gpt-4o-mini' : 'claude-sonnet-5'
               };
               res = await getProvider(fallback).runAgent(altAgent, {
                 system, prompt, maxTurns: 8,
                 tools: allowedTools.map((t) => ({ name: t.tool_key, description: t.description, input_schema: t.input_schema })),
                 onToolCall: (name, input) => invoke(name, input),
               });
-              recovered = true;
+              recovered = true; used = { provider: fallback, model: altAgent.model };
               await log('info', `Failover başarılı: ${fallback} modeli ile görev tamamlandı.`);
               break;
             } catch {
@@ -167,6 +171,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
       }
       if (!res) throw new Error('AI yanıtı alınamadı');
       ctx.tokens.in += res.usage.tokensIn; ctx.tokens.out += res.usage.tokensOut;
+      await recordUsage(ctx.db, { source: 'agent', ref_id: ctx.runId ?? null, provider: used.provider, model: used.model, tokens_in: res.usage.tokensIn, tokens_out: res.usage.tokensOut });
       summary = res.finalText.slice(0, 500) || `${res.toolCalls} araç çağrısı`;
       await log('info', 'Agent tamamlandı', { turns: res.turns, tool_calls: res.toolCalls, stop: res.stopReason });
     };

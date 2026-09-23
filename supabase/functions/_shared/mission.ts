@@ -1,6 +1,7 @@
 // EMBAY BOT GÖREVLERİ (mission): amaç + hedef link + aranacak şey + süre + bitiş koşulu → adım adım gerçek araştırma → rapor.
 // Kurallar: sonuç asla rastgele üretilmez; her bulgu bir kaynak URL'ye dayanır; kaynağı doğrulanamayan AI bulgusu atılır.
 import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
+import { budgetBlock, recordUsage } from './ai/budget.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, extractJson } from './ai/types.ts';
 import { getAiKey } from './ai/keys.ts';
@@ -11,7 +12,7 @@ export interface MissionRow {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: string; finish_reason: string | null; started_at: string; deadline_at: string;
   finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null; schedule_id?: string | null;
-  findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null;
+  findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null; cost_usd?: number; web_searches?: number;
 }
 export interface Finding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;
@@ -131,6 +132,7 @@ export class AiFatalError extends Error {
 export const ERROR_KIND: Record<string, string> = {
   ai_credit: 'AI kredisi / bakiyesi bitti — sağlayıcı hesabına bakiye yüklenmeli',
   ai_auth: 'AI anahtarı geçersiz veya yetkisiz — anahtar yenilenmeli',
+  budget: 'Harcama sınırı doldu — Ayarlar → Harcama sınırı',
   repeated_error: 'Üst üste 3 adım hata verdi',
   timeout: 'Adım zaman aşımına uğradı',
 };
@@ -146,20 +148,20 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
   }
   const base = agent?.system_prompt || 'Sen Embay Yapı ve Şahin Manitou Kiralama için çalışan titiz bir araştırma botusun. Türkçe yaz. Asla bilgi uydurma.';
   const ak = await getAiKey('anthropic');
-  if (ak) return { provider: 'anthropic', model: preferred?.startsWith('claude-') ? preferred : agent?.provider === 'anthropic' ? agent.model : 'claude-opus-5', system: base, key: ak };
+  if (ak) return { provider: 'anthropic', model: preferred?.startsWith('claude-') ? preferred : agent?.provider === 'anthropic' ? agent.model : 'claude-sonnet-5', system: base, key: ak };
   const gk = await getAiKey('gemini');
   if (gk) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base, key: gk };
   return null;
 }
 
-interface AiResult { text: string; sources: Source[]; tokensIn: number; tokensOut: number; searches: number; toolErrors?: string[] }
+interface AiResult { text: string; sources: Source[]; tokensIn: number; tokensOut: number; searches: number; toolErrors?: string[]; model?: string; provider?: string }
 
 async function anthropicResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
   if (!key) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
   const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: 100_000 });
   const tools = [
-    { type: 'web_search_20260209', name: 'web_search', max_uses: 5, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 4, blocked_domains: NO_SCRAPE_HOSTS, max_content_tokens: 8000 },
+    { type: 'web_search_20260209', name: 'web_search', max_uses: 3, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2, blocked_domains: NO_SCRAPE_HOSTS, max_content_tokens: 4000 },
   ];
   // deno-lint-ignore no-explicit-any
   const messages: any[] = [{ role: 'user', content: prompt }];
@@ -168,7 +170,7 @@ async function anthropicResearch(key: string, model: string, system: string, pro
     // deno-lint-ignore no-explicit-any
     let res: any;
     try {
-      res = await client.beta.messages.create({ model, max_tokens: 6000, system, tools, messages, output_config: { effort: 'medium' },
+      res = await client.beta.messages.create({ model, max_tokens: 4000, system, tools, messages, output_config: { effort: 'medium' },
         ...(model.startsWith('claude-opus-5') ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}) } as any);
     } catch (e) {
       if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw new AiFatalError('ai_auth', `Anthropic anahtarı reddedildi (${e.status})`);
@@ -190,7 +192,7 @@ async function anthropicResearch(key: string, model: string, system: string, pro
     if (res.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: res.content });
   }
-  return { text, sources, tokensIn, tokensOut, searches, toolErrors };
+  return { text, sources, tokensIn, tokensOut, searches, toolErrors, model, provider: 'anthropic' };
 }
 
 async function geminiResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
@@ -216,7 +218,7 @@ async function geminiResearch(key: string, model: string, system: string, prompt
   const text = (cand?.content?.parts || []).map((p: any) => p.text || '').join('');
   // deno-lint-ignore no-explicit-any
   const sources: Source[] = (cand?.groundingMetadata?.groundingChunks || []).map((c: any) => ({ url: c.web?.uri, title: c.web?.title })).filter((s: Source) => s.url);
-  return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0, searches: data.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length ?? 0 };
+  return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0, searches: data.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length ?? 0, model, provider: 'gemini' };
 }
 
 async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
@@ -332,6 +334,14 @@ export async function stepMission(db: Db, m: MissionRow) {
 
     // AI kredisi/anahtarı çalışmıyorsa ve hedef link varsa görev durmaz: AI'sız sayfa taramasıyla sürer
     const aiDown = Boolean(m.target_url && (m.error_kind === 'ai_credit' || m.error_kind === 'ai_auth'));
+    // Harcama freni: günlük / aylık / görev başı sınır dolduysa yeni AI çağrısı yapılmaz
+    const blocked = aiDown ? null : await budgetBlock(db, Number(m.cost_usd) || 0);
+    if (blocked) {
+      await logStep(db, m, step, 'error', `${blocked}. Yeni yapay zekâ çağrısı yapılmadı; görev elindeki bulgularla raporlanıyor.`);
+      await db.from('bot_missions').update({ error_kind: 'budget', error: blocked }).eq('id', m.id);
+      await persist();
+      return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut, error_kind: 'budget' }, 'budget');
+    }
     const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model);
     let useScan = !ai;
     if (ai) try {
@@ -348,7 +358,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,
-        'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 5 web araması ve 4 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
+        'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
         'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
@@ -356,6 +366,9 @@ export async function stepMission(db: Db, m: MissionRow) {
       const t0 = Date.now();
       const r = await aiCall(ai, prompt, async (msg) => { await logStep(db, m, step, 'ai_failover', msg); });
       tokensIn += r.tokensIn; tokensOut += r.tokensOut;
+      const stepCost = await recordUsage(db, { source: 'mission', ref_id: m.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: r.searches });
+      m.cost_usd = Math.round(((Number(m.cost_usd) || 0) + stepCost) * 10000) / 10000; m.web_searches = (m.web_searches ?? 0) + r.searches;
+      await db.from('bot_missions').update({ cost_usd: m.cost_usd, web_searches: m.web_searches }).eq('id', m.id);
       for (const s of r.sources) if (!sources.some((x) => canonical(x.url) === canonical(s.url))) sources.push(s);
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
       const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text)) as
@@ -431,7 +444,7 @@ function factsHtml(f: Finding) {
     f.phone && `<a href="${telHref(f.phone)}">📞 ${esc(f.phone)}</a>`, f.email && `<a href="mailto:${esc(f.email)}">✉️ ${esc(f.email)}</a>`, f.website && `<a href="${safeHref(f.website)}" target="_blank" rel="noopener">🌐 web</a>`].filter(Boolean);
   return parts.length ? `<div class="facts">${parts.join('')}</div>` : '';
 }
-const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', error: 'Hata', no_ai: 'AI kullanılamadı — yalnızca sayfa taraması yapıldı' };
+const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', error: 'Hata', no_ai: 'AI kullanılamadı — yalnızca sayfa taraması yapıldı', budget: 'Harcama sınırı doldu' };
 const fmt = (iso: string | null) => (iso ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '—');
 
 export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
@@ -446,7 +459,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
 
   let summary = '';
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
-  const ai = reason === 'error' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' ? null : await chooseAi(db, cur.bot_id, cur.model);
+  const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model);
   if (ai && findings.length) {
     try {
       const r = await aiCall(ai, [
@@ -456,6 +469,8 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
         'Biçim: 1) 3-6 cümlelik yönetici özeti 2) madde madde sonuçlar 3) önerilen sonraki adım. Markdown başlık kullanma; düz paragraflar ve "- " maddeleri kullan.',
       ].join('\n\n'), async (msg) => { await logStep(db, cur, cur.step_count + 1, 'ai_failover', msg); });
       summary = r.text.trim(); tokensIn += r.tokensIn; tokensOut += r.tokensOut;
+      const c = await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: r.searches });
+      await db.from('bot_missions').update({ cost_usd: Math.round(((Number(cur.cost_usd) || 0) + c) * 10000) / 10000 }).eq('id', cur.id);
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
   }
   if (!summary && reason === 'error') {

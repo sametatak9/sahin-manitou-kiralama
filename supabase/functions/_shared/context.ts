@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
+import { budgetBlock, recordUsage } from './ai/budget.ts';
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
 import type { AgentConfig } from './ai/index.ts';
 import { getAiKey } from './ai/keys.ts';
@@ -59,7 +60,7 @@ export async function loadAgent(db: Db, agentId: string | null, fallbackKey = 'c
   const agent = { ...data, temperature: Number(data.temperature) } as AgentConfig & { id: string };
   // Ajanın sağlayıcısının anahtarı yoksa tanımlı başka sağlayıcıya geç (önce Claude, sonra Gemini)
   if (!(await getAiKey(agent.provider))) {
-    if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-opus-5' };
+    if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-sonnet-5' };
     if (agent.provider !== 'gemini' && (await getAiKey('gemini'))) return { ...agent, provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest' };
   }
   return agent;
@@ -72,8 +73,11 @@ export async function aiComplete(ctx: Pick<EngineCtx, 'db' | 'runId' | 'actorId'
   const system = [agent.system_prompt, systemExtra].filter(Boolean).join('\n\n');
   const base = { agent_id: (agent as { id?: string }).id ?? null, provider: agent.provider, model: agent.model, kind, input: { prompt: prompt.slice(0, 4000) }, run_id: ctx.runId, created_by: ctx.actorId };
   try {
+    const blocked = await budgetBlock(ctx.db);
+    if (blocked) throw new Error(`${blocked}. Yapay zekâ çağrısı yapılmadı (Ayarlar → Harcama sınırı).`);
     const res = await getProvider(agent.provider).complete(agent, { system, prompt, schema });
     ctx.tokens.in += res.usage.tokensIn; ctx.tokens.out += res.usage.tokensOut;
+    await recordUsage(ctx.db, { source: 'generate', ref_id: null, provider: agent.provider, model: agent.model, tokens_in: res.usage.tokensIn, tokens_out: res.usage.tokensOut });
     const { data: gen } = await ctx.db.from('ai_generations').insert({ ...base, status: 'succeeded', output: res.json ?? { text: res.text }, tokens_in: res.usage.tokensIn, tokens_out: res.usage.tokensOut, duration_ms: Date.now() - started }).select('id').single();
     if (schema && !res.json) throw new Error('AI yanıtı beklenen JSON biçiminde değil');
     return { json: res.json as Record<string, unknown>, text: res.text, generationId: gen?.id as string | undefined };

@@ -7,6 +7,7 @@ import type { BrandKit, OpsStatus } from '../lib/types';
 import { useSession } from '../session';
 import { Button, ErrorState, Field, Notice, Panel, Pill, SavedStamp, StateView, Tabs } from '../ui';
 import { AiKeysPanel } from '../components/AiKeys';
+import { AiBudgetPanel } from '../components/AiBudget';
 
 interface Agent { id: string; agent_key: string; name: string; provider: 'anthropic' | 'openai' | 'gemini'; model: string; temperature: number; max_tokens: number; system_prompt: string; active: boolean }
 interface Member { user_id: string; role: string; display_name: string | null; created_at: string }
@@ -21,7 +22,7 @@ export function SettingsScreen() {
         <Tabs value={tab} onChange={setTab} items={[{ id: 'brand', label: 'Marka kiti' }, { id: 'ai', label: 'AI anahtarı & modeller' }, { id: 'team', label: 'Ekip' }, { id: 'audit', label: 'Audit log' }]} />
       </div>
       {tab === 'brand' && <BrandKits />}
-      {tab === 'ai' && <div className="space-y-4"><AiKeysPanel /><Agents /></div>}
+      {tab === 'ai' && <div className="space-y-4"><AiBudgetPanel /><AiKeysPanel /><Agents /></div>}
       {tab === 'team' && <Team />}
       {tab === 'audit' && <Audit />}
     </div>
