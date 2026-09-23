@@ -1,5 +1,6 @@
 // Canva Connect API (resmi REST). OAuth 2.0 + PKCE. Brand template autofill Canva Enterprise ister.
 import { ConnectorError } from './types.ts';
+import { secret as appSecret } from '../secrets.ts';
 
 const API = 'https://api.canva.com/rest/v1';
 export const CANVA_SCOPES = ['design:content:read', 'design:content:write', 'design:meta:read', 'asset:read', 'asset:write', 'profile:read'];
@@ -18,7 +19,7 @@ export async function canvaAuthorizeUrl(state: string, verifier: string, redirec
   const u = new URL('https://www.canva.com/api/oauth/authorize');
   u.searchParams.set('code_challenge_method', 's256');
   u.searchParams.set('response_type', 'code');
-  u.searchParams.set('client_id', Deno.env.get('CANVA_CLIENT_ID') || '');
+  u.searchParams.set('client_id', appSecret('CANVA_CLIENT_ID') || '');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('scope', CANVA_SCOPES.join(' '));
   u.searchParams.set('state', state);
@@ -29,7 +30,7 @@ export async function canvaAuthorizeUrl(state: string, verifier: string, redirec
 export interface CanvaTokens { access_token: string; refresh_token: string; expires_in: number; scope?: string }
 
 async function tokenRequest(body: Record<string, string>): Promise<CanvaTokens> {
-  const basic = btoa(`${Deno.env.get('CANVA_CLIENT_ID')}:${Deno.env.get('CANVA_CLIENT_SECRET')}`);
+  const basic = btoa(`${appSecret('CANVA_CLIENT_ID')}:${appSecret('CANVA_CLIENT_SECRET')}`);
   const res = await fetch(`${API}/oauth/token`, {
     method: 'POST',
     headers: { authorization: `Basic ${basic}`, 'content-type': 'application/x-www-form-urlencoded' },

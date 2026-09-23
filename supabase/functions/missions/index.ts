@@ -1,11 +1,13 @@
 // EMBAY bot görev (mission) edge function:
 //   POST /missions/worker            → pg_cron (x-worker-secret): çalışan görevlerin bir sonraki adımı / raporu
-//   POST /missions/api {action,...}  → panel (kullanıcı JWT + ekip rolü): mission_start · mission_stop · skill_create · ai_status · ai_test
+//   POST /missions/api {action,...}  → panel (kullanıcı JWT + ekip rolü): mission_start · mission_stop · mission_review · skill_create · ai_status · ai_test
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { finalizeMission, runDueMissions, stepMission, type MissionRow } from '../_shared/mission.ts';
 import { aiKeyAvailability, getAiKey, initKeyStore, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
 
 type Db = SupabaseClient;
+// Görev başlatılırken seçilebilen modeller (varsayılan: botun AI ajanı, yoksa claude-opus-5)
+const ALLOWED_MODELS = ['claude-opus-5', 'claude-sonnet-5'];
 const cors = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-worker-secret',
@@ -52,8 +54,9 @@ async function api(c: Db, req: Request) {
         if (!bot) throw new HttpError(404, 'Bot bulunamadı');
         if (bot.status === 'archived' || bot.status === 'paused') throw new HttpError(409, `Bot ${bot.status === 'paused' ? 'duraklatılmış' : 'arşivlenmiş'}`);
       }
+      const model = ALLOWED_MODELS.includes(String(body.model)) ? String(body.model) : null;
       const now = Date.now();
-      const { data: m, error } = await c.from('bot_missions').insert({
+      const { data: m, error } = await c.from('bot_missions').insert({ model,
         bot_id: body.bot_id || null, title: title.slice(0, 200), goal: goal.slice(0, 4000), target_url: target || null,
         search_for: String(body.search_for || '').trim().slice(0, 1000) || null, report_spec: String(body.report_spec || '').trim().slice(0, 1000) || null,
         stop_condition: String(body.stop_condition || '').trim().slice(0, 1000) || null, duration_minutes: minutes,
@@ -74,6 +77,21 @@ async function api(c: Db, req: Request) {
       await c.from('bot_missions').update({ status: 'finalizing', finish_reason: 'admin_stop', stopped_by: u.userId, next_step_at: new Date().toISOString() }).eq('id', m.id);
       await audit(c, u.userId, 'mission_stop', 'bot_missions', m.id, 'Görev yönetici tarafından durduruldu');
       return finalizeMission(c, { ...(m as MissionRow), status: 'finalizing' }, 'admin_stop');
+    }
+
+    // Sonuç kutusu: yönetici görevin sonucunu onaylar (program veritabanına onaylı sonuç olarak yazılır) veya reddeder
+    case 'mission_review': {
+      const u = await requireUser(c, req);
+      const decision = String(body.decision);
+      if (!['approved', 'rejected'].includes(decision)) throw new HttpError(400, 'Karar approved veya rejected olmalı');
+      const { data: m } = await c.from('bot_missions').select('id,status,title').eq('id', body.mission_id).maybeSingle();
+      if (!m) throw new HttpError(404, 'Görev bulunamadı');
+      if (!['completed', 'stopped', 'failed'].includes(m.status)) throw new HttpError(409, 'Görev henüz bitmedi');
+      const { error } = await c.from('bot_missions').update({ review_status: decision, reviewed_by: u.userId, reviewed_at: new Date().toISOString(),
+        review_note: String(body.note || '').trim().slice(0, 1000) || null }).eq('id', m.id);
+      if (error) throw error;
+      await audit(c, u.userId, `mission_${decision}`, 'bot_missions', m.id, `${decision === 'approved' ? 'Sonuç onaylandı ve kaydedildi' : 'Sonuç reddedildi'}: ${m.title}`);
+      return { mission_id: m.id, review_status: decision };
     }
 
     case 'skill_create': {

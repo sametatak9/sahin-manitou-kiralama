@@ -1,6 +1,6 @@
 // Bot görevleri: görev ver (amaç, link, aranan, rapor, süre, bitiş koşulu) → canlı adım günlüğü → rapor (HTML).
 import { useEffect, useState } from 'react';
-import { Archive, Download, ExternalLink, FileText, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2 } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, CircleSlash, Download, ExternalLink, FileText, FlaskConical, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2, XCircle } from 'lucide-react';
 import { callMissions, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
@@ -16,16 +16,43 @@ export const FINISH_REASON: Record<string, string> = {
   deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', error: 'Hata', no_ai: 'AI anahtarı yok (yalnızca sayfa taraması)',
 };
 const DURATIONS = [1, 5, 10, 15, 30, 60, 120];
+export const ERROR_KIND: Record<string, string> = {
+  ai_credit: 'AI kredisi / bakiyesi bitti', ai_auth: 'AI anahtarı geçersiz veya yetkisiz', repeated_error: 'Üst üste 3 adım hata verdi', timeout: 'Zaman aşımı',
+};
+const MODELS = [
+  { id: '', label: 'Otomatik (botun ayarı)' },
+  { id: 'claude-opus-5', label: 'Claude Opus 5 — en güçlü' },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — ekonomik' },
+];
+// USD / 1M token (giriş, çıkış) — yaklaşık maliyet gösterimi için
+const PRICE: Record<string, [number, number]> = { 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10] };
+export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'>) {
+  const p = m.model ? PRICE[m.model] : undefined; if (!p || !(m.tokens_in + m.tokens_out)) return null;
+  return `≈ $${((m.tokens_in * p[0] + m.tokens_out * p[1]) / 1e6).toFixed(2)}`;
+}
+const TEST_MISSION = {
+  title: 'Test görevi — 3 ürün', goal: 'Test amaçlı: teleskopik yükleyici (Manitou) kategorisinden 3 adet ürün seç ve isimlerini yaz. Her ürün için üreticinin kendi ürün sayfasını kaynak olarak ver.',
+  search_for: 'ürün adı, model, kaldırma yüksekliği', report_spec: '3 ürünün adı ve kısa açıklaması, kaynak linkiyle', stop_condition: '3 ürün bulunduğunda dur', duration_minutes: 1, target_url: '',
+};
+
+/** Görev sonucu: başarı / veri yok / durduruldu / hata (kredi, anahtar…). */
+export function outcomeOf(m: Mission): { tone: 'ok' | 'warn' | 'error' | 'info'; title: string; text: string } {
+  if (m.status === 'failed') return { tone: 'error', title: 'Hata ile bitti', text: ERROR_KIND[m.error_kind ?? ''] ?? m.error ?? 'Bilinmeyen hata' };
+  if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı', text: 'AI anahtarı tanımlı değil; yalnızca sayfa taraması yapıldı.' };
+  if (m.status === 'stopped') return { tone: 'info', title: 'Yönetici durdurdu', text: `${m.findings.length} bulgu ile raporlandı.` };
+  if (!m.findings.length) return { tone: 'warn', title: 'Sonuç bulunamadı', text: 'Kaynağı doğrulanabilen bir bulgu çıkmadı (Veri bulunamadı).' };
+  return { tone: 'ok', title: 'Başarılı', text: `${m.findings.length} kaynaklı bulgu · ${FINISH_REASON[m.finish_reason ?? ''] ?? ''}` };
+}
 
 /** Bir bota görev ver. */
 export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot[]; botId?: string; onClose: () => void; onStarted: (id: string) => void }) {
-  const [f, setF] = useState({ bot_id: botId ?? '', title: '', goal: '', target_url: '', search_for: '', report_spec: '', stop_condition: '', duration_minutes: 10 });
+  const [f, setF] = useState({ bot_id: botId ?? '', title: '', goal: '', target_url: '', search_for: '', report_spec: '', stop_condition: '', duration_minutes: 10, model: '' });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const ai = useQuery(() => callMissions<{ anthropic: boolean; gemini: boolean }>('ai_status'), null as { anthropic: boolean; gemini: boolean } | null, []);
   const noAi = ai.data && !ai.data.anthropic && !ai.data.gemini;
   const start = async () => {
     setBusy(true); setErr(null);
-    try { const r = await callMissions<{ mission_id: string }>('mission_start', { ...f, bot_id: f.bot_id || null }); onStarted(r.mission_id); }
+    try { const r = await callMissions<{ mission_id: string }>('mission_start', { ...f, bot_id: f.bot_id || null, model: f.model || null }); onStarted(r.mission_id); }
     catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
   };
   const valid = f.title.trim().length >= 2 && f.goal.trim().length >= 3 && (!f.target_url || /^https?:\/\//i.test(f.target_url));
@@ -34,6 +61,10 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
       footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} disabled={!valid} onClick={start} icon={<Play className="w-4 h-4" />}>Görevi başlat</Button></>}>
       <div className="space-y-3">
         <Notice tone="info">Bot görevi süre boyunca her dakika bir adım ilerletir. Süre dolduğunda, bitiş koşulu sağlandığında ya da siz durdurduğunuzda rapor hazırlanır. Raporda yalnızca kaynağı gösterilebilen bulgular yer alır; bulunamazsa “Veri bulunamadı” yazar.</Notice>
+        <button type="button" onClick={() => setF({ ...f, ...TEST_MISSION })} className="w-full flex items-center gap-3 rounded-xl ring-1 ring-dashed ring-brand-green/50 bg-emerald-50/60 px-3 py-2.5 text-left hover:bg-emerald-50">
+          <FlaskConical className="w-5 h-5 text-brand-green shrink-0" />
+          <span className="text-xs text-ink-200"><b className="text-ink-100">1 dakikalık test görevi</b> — “3 ürün seç ve isimlerini yaz”. Formu doldurur; başlatınca sistemin uçtan uca çalıştığını görürsünüz.</span>
+        </button>
         {noAi && <Notice tone="warn">AI anahtarı tanımlı değil: bot yalnızca verdiğiniz linki ve aynı sitedeki sayfaları tarar, web araması yapamaz. <a className="underline font-semibold" href="?ops=settings&tab=ai">Ayarlar → AI anahtarı</a> bölümüne anahtarı yapıştırmanız yeterli.</Notice>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Bot"><select className="ops-input" value={f.bot_id} onChange={(e) => setF({ ...f, bot_id: e.target.value })}>
@@ -48,6 +79,8 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
               className={cx('rounded-lg px-2.5 py-1.5 text-xs font-semibold ring-1', f.duration_minutes === d ? 'bg-brand-green text-white ring-brand-green' : 'ring-ink-700 text-ink-300 hover:bg-ink-800')}>{d} dk</button>)}
               <input type="number" min={1} max={240} className="ops-input !w-20 !py-1.5" value={f.duration_minutes} onChange={(e) => setF({ ...f, duration_minutes: Math.min(240, Math.max(1, Number(e.target.value) || 1)) })} /></div>
           </Field>
+          <Field label="Yapay zekâ modeli" hint="Ekonomik model aynı işi daha düşük krediyle yapar"><select className="ops-input" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })}>
+            {MODELS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></Field>
           <Field label="Bitiş koşulu (opsiyonel)" hint="Bu sağlanırsa süre dolmadan rapor hazırlanır"><input className="ops-input" placeholder="Örn: iletişim numarası bulunduğunda dur" value={f.stop_condition} onChange={(e) => setF({ ...f, stop_condition: e.target.value })} /></Field>
         </div>
         {err && <Notice tone="error">{err}</Notice>}
@@ -63,13 +96,15 @@ function progress(m: Mission) {
 }
 
 /** Görev + rapor listesi (canlı). botId verilirse yalnızca o botun görevleri. */
-export function MissionList({ bots, botId, compact = false }: { bots: Bot[]; botId?: string; compact?: boolean }) {
+export function MissionList({ bots, botId, compact = false, review }: { bots: Bot[]; botId?: string; compact?: boolean; review?: 'approved' | 'pending' }) {
   const session = useSession();
   const q = useQuery(async () => {
-    let r = db().from('bot_missions').select('id,bot_id,title,goal,target_url,search_for,report_spec,stop_condition,duration_minutes,status,finish_reason,started_at,deadline_at,finished_at,step_count,max_steps,provider,model,findings,sources,summary,tokens_in,tokens_out,error,created_at').order('created_at', { ascending: false }).limit(compact ? 10 : 100);
+    let r = db().from('bot_missions').select('id,bot_id,title,goal,target_url,search_for,report_spec,stop_condition,duration_minutes,status,finish_reason,started_at,deadline_at,finished_at,step_count,max_steps,provider,model,findings,sources,summary,tokens_in,tokens_out,error,created_at,error_kind,review_status,reviewed_at,review_note').order('created_at', { ascending: false }).limit(compact ? 10 : 100);
     if (botId) r = r.eq('bot_id', botId);
+    if (review === 'approved') r = r.eq('review_status', 'approved');
+    if (review === 'pending') r = r.eq('review_status', 'pending').in('status', ['completed', 'stopped', 'failed']);
     return unwrap(await r) as Mission[];
-  }, [] as Mission[], [botId], ['bot_missions']);
+  }, [] as Mission[], [botId, review], ['bot_missions']);
   const [open, setOpen] = useState<string | null>(null);
   const [launch, setLaunch] = useState(false);
   const [, tick] = useState(0);
@@ -83,7 +118,7 @@ export function MissionList({ bots, botId, compact = false }: { bots: Bot[]; bot
         <Button variant="primary" onClick={() => setLaunch(true)} icon={<Target className="w-4 h-4" />}>Görev ver</Button>
       </div>
       {q.error ? <Notice tone="error">{q.error}</Notice> : q.loading ? <StateView kind="loading" compact /> : q.data.length === 0 ? (
-        <StateView kind="empty" title="Henüz görev yok" message="“Görev ver” ile bota amaç, link, aranacak şey ve süre tanımlayın. Sonuç raporu burada listelenecek." compact />
+        <StateView kind="empty" title={review === 'approved' ? 'Henüz onaylanmış sonuç yok' : review === 'pending' ? 'Onay bekleyen sonuç yok' : 'Henüz görev yok'} message={review ? 'Biten görevin detayında “Onayla ve kaydet” dediğinizde sonuç burada listelenir.' : '“Görev ver” ile bota amaç, link, aranacak şey ve süre tanımlayın. Sonuç raporu burada listelenecek.'} compact />
       ) : (
         <div className="space-y-2">
           {q.data.map((m) => {
@@ -93,13 +128,14 @@ export function MissionList({ bots, botId, compact = false }: { bots: Bot[]; bot
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-sm text-ink-100 flex-1 min-w-[180px] truncate">{m.title}</span>
                   <Pill tone={st.tone}>{st.label}</Pill>
-                  {m.finish_reason && <span className="text-[10px] text-ink-500">{FINISH_REASON[m.finish_reason] ?? m.finish_reason}</span>}
+                  {m.finish_reason && <span className="text-[10px] text-ink-500">{m.status === 'failed' ? ERROR_KIND[m.error_kind ?? ''] ?? 'Hata' : FINISH_REASON[m.finish_reason] ?? m.finish_reason}</span>}
+                  {m.review_status === 'approved' && <Pill tone="go">ONAYLANDI</Pill>}{m.review_status === 'rejected' && <Pill tone="stop">REDDEDİLDİ</Pill>}
                 </div>
                 <div className="text-[11px] text-ink-400 mt-1 line-clamp-1">{m.goal}</div>
                 {live && <div className="mt-2 h-1.5 rounded-full bg-ink-800 overflow-hidden"><div className="h-full bg-signal-run transition-all" style={{ width: `${progress(m)}%` }} /></div>}
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-ink-500 font-mono">
                   {!botId && <span>🤖 {botName(m.bot_id)}</span>}
-                  <span>⏱ {m.duration_minutes} dk</span><span>ADIM {m.step_count}</span><span>BULGU {m.findings?.length ?? 0}</span><span>KAYNAK {m.sources?.length ?? 0}</span>
+                  <span>⏱ {m.duration_minutes} dk</span>{costText(m) && <span>{costText(m)}</span>}<span>ADIM {m.step_count}</span><span>BULGU {m.findings?.length ?? 0}</span><span>KAYNAK {m.sources?.length ?? 0}</span>
                   <span>{live ? `bitiş ${fmtDateTime(m.deadline_at)}` : `bitti ${relTime(m.finished_at)}`}</span>
                 </div>
                 {!live && m.summary && <p className="text-xs text-ink-300 mt-2 line-clamp-2 whitespace-pre-line">{m.summary}</p>}
@@ -171,8 +207,9 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
             {m.search_for && <div><b className="text-ink-200">Aranan:</b> <span className="text-ink-300">{m.search_for}</span></div>}
             {m.report_spec && <div><b className="text-ink-200">Raporda istenen:</b> <span className="text-ink-300">{m.report_spec}</span></div>}
             {m.stop_condition && <div><b className="text-ink-200">Bitiş koşulu:</b> <span className="text-ink-300">{m.stop_condition}</span></div>}
-            {m.provider && <div className="text-ink-500">AI: {m.provider} / {m.model} · token {(m.tokens_in + m.tokens_out).toLocaleString('tr-TR')}</div>}
+            {m.provider && <div className="text-ink-500">AI: {m.provider} / {m.model} · token {(m.tokens_in + m.tokens_out).toLocaleString('tr-TR')}{costText(m) ? ` · maliyet ${costText(m)}` : ''}</div>}
           </div>
+          {!live && <ResultBox m={m} onChanged={q.reload} />}
           {err && <Notice tone="error">{err}</Notice>}
           <div className="flex gap-1.5">{(['steps', 'findings', 'report'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={cx('rounded-lg px-3 py-1.5 text-xs font-semibold', tab === t ? 'bg-brand-green text-white' : 'bg-ink-800 text-ink-300')}>
@@ -207,6 +244,48 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Sonuç kutusu: görev nasıl bitti + yönetici onayı (onaylanan sonuç veritabanına "onaylı" olarak yazılır ve listelenir). */
+function ResultBox({ m, onChanged }: { m: Mission; onChanged: () => void }) {
+  const o = outcomeOf(m);
+  const [note, setNote] = useState(''); const [busy, setBusy] = useState<string | null>(null); const [err, setErr] = useState<string | null>(null);
+  const decide = async (decision: 'approved' | 'rejected') => {
+    setBusy(decision); setErr(null);
+    try { await callMissions('mission_review', { mission_id: m.id, decision, note }); onChanged(); } catch (e) { setErr(errorText(e)); } finally { setBusy(null); }
+  };
+  const Icon = o.tone === 'ok' ? CheckCircle2 : o.tone === 'error' ? XCircle : o.tone === 'warn' ? AlertTriangle : CircleSlash;
+  const ring = { ok: 'ring-emerald-300 bg-emerald-50/70', warn: 'ring-amber-300 bg-amber-50/70', error: 'ring-rose-300 bg-rose-50/70', info: 'ring-sky-300 bg-sky-50/70' }[o.tone];
+  const color = { ok: 'text-emerald-700', warn: 'text-amber-700', error: 'text-rose-700', info: 'text-sky-700' }[o.tone];
+  return (
+    <div className={cx('rounded-2xl ring-1 p-3.5 space-y-2.5', ring)}>
+      <div className="flex items-start gap-2.5">
+        <Icon className={cx('w-6 h-6 shrink-0', color)} />
+        <div className="min-w-0 flex-1">
+          <div className={cx('font-display font-semibold', color)}>Sonuç: {o.title}</div>
+          <div className="text-xs text-ink-300">{o.text}</div>
+          {m.error_kind === 'ai_credit' && <div className="text-[11px] text-ink-400 mt-1">console.anthropic.com → Billing bölümünden bakiye yükleyince botlar kaldığı yerden çalışır.</div>}
+          {m.error_kind === 'ai_auth' && <div className="text-[11px] text-ink-400 mt-1">Ayarlar → AI anahtarı bölümünde anahtarı yenileyin.</div>}
+        </div>
+      </div>
+      {m.review_status === 'approved' || m.review_status === 'rejected' ? (
+        <div className="text-xs text-ink-300 flex flex-wrap items-center gap-2">
+          <Pill tone={m.review_status === 'approved' ? 'go' : 'stop'}>{m.review_status === 'approved' ? 'ONAYLANDI · KAYDEDİLDİ' : 'REDDEDİLDİ'}</Pill>
+          <span>{fmtDateTime(m.reviewed_at ?? null)}</span>{m.review_note && <span className="italic">“{m.review_note}”</span>}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <input className="ops-input" placeholder="Not (opsiyonel)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" loading={busy === 'approved'} onClick={() => decide('approved')} icon={<CheckCircle2 className="w-4 h-4" />}>Onayla ve kaydet</Button>
+            <Button variant="ghost" loading={busy === 'rejected'} onClick={() => decide('rejected')} icon={<XCircle className="w-4 h-4" />}>Reddet</Button>
+          </div>
+          <div className="text-[10px] text-ink-500">Onaylanan sonuç “Bot Raporları → Onaylı sonuçlar” listesinde kalıcı olarak saklanır.</div>
+        </div>
+      )}
+      {err && <Notice tone="error">{err}</Notice>}
+    </div>
   );
 }
 

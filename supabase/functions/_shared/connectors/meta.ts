@@ -1,6 +1,7 @@
 // Meta Graph API: Instagram (Business/Creator) + Facebook Sayfası. Resmi uçlar.
 import { ConnectorError } from './types.ts';
 import type { AccountRow, MetricsOutput, PublishInput, PublishOutput } from './types.ts';
+import { secret as appSecret } from '../secrets.ts';
 
 export const graphVersion = () => Deno.env.get('META_GRAPH_VERSION') || 'v23.0';
 const graph = (path: string) => `https://graph.facebook.com/${graphVersion()}/${path.replace(/^\//, '')}`;
@@ -25,7 +26,7 @@ async function call(method: 'GET' | 'POST', path: string, params: Record<string,
 
 export function metaAuthorizeUrl(state: string, redirectUri: string) {
   const u = new URL(`https://www.facebook.com/${graphVersion()}/dialog/oauth`);
-  u.searchParams.set('client_id', Deno.env.get('META_APP_ID') || '');
+  u.searchParams.set('client_id', appSecret('META_APP_ID') || '');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
   u.searchParams.set('response_type', 'code');
@@ -40,8 +41,8 @@ export interface MetaPageAccount {
 
 /** code → uzun ömürlü kullanıcı token'ı → sayfa token'ları + bağlı IG hesabı. */
 export async function metaExchange(code: string, redirectUri: string): Promise<{ pages: MetaPageAccount[]; userName: string | null }> {
-  const appId = Deno.env.get('META_APP_ID') || '';
-  const secret = Deno.env.get('META_APP_SECRET') || '';
+  const appId = appSecret('META_APP_ID') || '';
+  const secret = appSecret('META_APP_SECRET') || '';
   const short = await call('GET', 'oauth/access_token', { client_id: appId, client_secret: secret, redirect_uri: redirectUri, code });
   const long = await call('GET', 'oauth/access_token', { grant_type: 'fb_exchange_token', client_id: appId, client_secret: secret, fb_exchange_token: short.access_token });
   const me = await call('GET', 'me', { fields: 'name', access_token: long.access_token });

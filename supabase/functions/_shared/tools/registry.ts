@@ -4,6 +4,7 @@ import { aiComplete, defaultBrand, istanbulDayRange, type EngineCtx } from '../c
 import { resendEmail, telegramSend, waMeLink, whatsappCloudSend } from '../connectors/messaging.ts';
 import { normalizeDomain } from '../pure/rules.ts';
 import { publishContent } from '../publisher.ts';
+import { secret as appSecret } from '../secrets.ts';
 
 export type ToolHandler = (ctx: EngineCtx, input: Record<string, unknown>) => Promise<unknown>;
 
@@ -221,7 +222,7 @@ const handlers: Record<string, ToolHandler> = {
     }
     if (!phone) throw new Error('Telefon gerekli');
     const message = str(input.message);
-    if (Deno.env.get('WHATSAPP_TOKEN') && Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')) {
+    if (appSecret('WHATSAPP_TOKEN') && appSecret('WHATSAPP_PHONE_NUMBER_ID')) {
       const r = await whatsappCloudSend(phone, message);
       return { sent: true, mode: 'whatsapp_cloud_api', external_id: r.messageId };
     }
@@ -297,7 +298,7 @@ const handlers: Record<string, ToolHandler> = {
     ].filter(Boolean);
     const report = { title, scope: str(input.scope, 'daily'), metrics, body: lines.join('\n'), previous_steps: previous };
     // Gün sonu raporu: Telegram yapılandırılmışsa yöneticiye gerçek gönderim
-    if (ctx.bot?.slug === 'manager-assistant' && Deno.env.get('TELEGRAM_BOT_TOKEN') && Deno.env.get('TELEGRAM_CHAT_ID')) {
+    if (ctx.bot?.slug === 'manager-assistant' && appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID')) {
       try { const t = await telegramSend(report.body); await ctx.log('info', 'Rapor Telegram’a gönderildi', t); Object.assign(report, { telegram: 'sent' }); }
       catch (e) { await ctx.log('warn', 'Telegram gönderimi başarısız', String(e)); Object.assign(report, { telegram: 'failed' }); }
     } else Object.assign(report, { telegram: 'not_configured' });

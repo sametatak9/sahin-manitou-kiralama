@@ -1,9 +1,10 @@
 // İletişim kanalları: Telegram Bot API, Resend e-posta, WhatsApp Cloud API. Env yoksa çağrılmaz.
 import { ConnectorError } from './types.ts';
 import { graphVersion } from './meta.ts';
+import { secret as appSecret } from '../secrets.ts';
 
-export async function telegramSend(text: string, chatId = Deno.env.get('TELEGRAM_CHAT_ID') || '') {
-  const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+export async function telegramSend(text: string, chatId = appSecret('TELEGRAM_CHAT_ID') || '') {
+  const token = appSecret('TELEGRAM_BOT_TOKEN');
   if (!token || !chatId) throw new ConnectorError('TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID tanımlı değil', 'CONFIGURATION_REQUIRED');
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -15,8 +16,8 @@ export async function telegramSend(text: string, chatId = Deno.env.get('TELEGRAM
 }
 
 export async function resendEmail(to: string, subject: string, text: string) {
-  const key = Deno.env.get('RESEND_API_KEY');
-  const from = Deno.env.get('EMAIL_FROM');
+  const key = appSecret('RESEND_API_KEY');
+  const from = appSecret('EMAIL_FROM');
   if (!key || !from) throw new ConnectorError('RESEND_API_KEY / EMAIL_FROM tanımlı değil', 'CONFIGURATION_REQUIRED');
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
@@ -29,8 +30,8 @@ export async function resendEmail(to: string, subject: string, text: string) {
 
 /** WhatsApp Cloud API serbest metin yalnızca 24 saatlik müşteri penceresinde teslim edilir. */
 export async function whatsappCloudSend(toPhone: string, body: string) {
-  const token = Deno.env.get('WHATSAPP_TOKEN');
-  const phoneId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+  const token = appSecret('WHATSAPP_TOKEN');
+  const phoneId = appSecret('WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new ConnectorError('WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID tanımlı değil', 'CONFIGURATION_REQUIRED');
   const digits = toPhone.replace(/\D/g, '');
   const to = digits.startsWith('90') ? digits : `90${digits.slice(-10)}`;

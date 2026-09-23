@@ -14,6 +14,7 @@ const LeadsScreen = lazy(() => import('./screens/Leads').then((m) => ({ default:
 const SkillsScreen = lazy(() => import('./screens/Skills').then((m) => ({ default: m.SkillsScreen })));
 const SettingsScreen = lazy(() => import('./screens/Settings').then((m) => ({ default: m.SettingsScreen })));
 const PortfolioScreen = lazy(() => import('./screens/Portfolio').then((m) => ({ default: m.PortfolioScreen })));
+const SystemScreen = lazy(() => import('./screens/System').then((m) => ({ default: m.SystemScreen })));
 const QueueScreen = lazy(() => import('./screens/Queue').then((m) => ({ default: m.QueueScreen })));
 const ReportsScreen = lazy(() => import('./screens/Reports').then((m) => ({ default: m.ReportsScreen })));
 
@@ -33,6 +34,7 @@ function Screens() {
     case 'reports': return <ReportsScreen />;
     case 'portfolio': return <PortfolioScreen />;
     case 'queue': return <QueueScreen />;
+    case 'system': return <SystemScreen />;
     default: return <HomeScreen />;
   }
 }

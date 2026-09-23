@@ -1,12 +1,13 @@
 // YouTube Data API v3: Google OAuth (offline, refresh token) + resumable video yükleme. Resmi uçlar.
 import { ConnectorError } from './types.ts';
 import type { AccountRow, PublishInput, PublishOutput } from './types.ts';
+import { secret as appSecret } from '../secrets.ts';
 
 export const YOUTUBE_SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly'];
 
 export function googleAuthorizeUrl(state: string, redirectUri: string) {
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  u.searchParams.set('client_id', Deno.env.get('GOOGLE_CLIENT_ID') || '');
+  u.searchParams.set('client_id', appSecret('GOOGLE_CLIENT_ID') || '');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', YOUTUBE_SCOPES.join(' '));
@@ -18,7 +19,7 @@ export function googleAuthorizeUrl(state: string, redirectUri: string) {
 
 async function tokenRequest(params: Record<string, string>) {
   const res = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({
-    client_id: Deno.env.get('GOOGLE_CLIENT_ID') || '', client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET') || '', ...params }) });
+    client_id: appSecret('GOOGLE_CLIENT_ID') || '', client_secret: appSecret('GOOGLE_CLIENT_SECRET') || '', ...params }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) throw new ConnectorError(data.error_description || data.error || `Google OAuth ${res.status}`, 'GOOGLE_OAUTH', data);
   return data as { access_token: string; refresh_token?: string; expires_in: number };

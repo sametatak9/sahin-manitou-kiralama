@@ -70,5 +70,7 @@ export interface Mission {
   finish_reason: string | null; started_at: string; deadline_at: string; finished_at: string | null; step_count: number; max_steps: number;
   provider: string | null; model: string | null; findings: MissionFinding[]; sources: Array<{ url: string; title?: string }>; summary: string | null;
   report_html: string | null; tokens_in: number; tokens_out: number; error: string | null; created_at: string;
+  error_kind?: 'ai_credit' | 'ai_auth' | 'repeated_error' | 'timeout' | null; error_count?: number;
+  review_status?: 'pending' | 'approved' | 'rejected'; reviewed_at?: string | null; review_note?: string | null;
 }
 export interface MissionStep { id: string; mission_id: string; step_no: number; action: string; target: string | null; message: string; duration_ms: number | null; created_at: string }

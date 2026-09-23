@@ -16,7 +16,7 @@ export function useSession() {
 
 export type Route =
   | 'home' | 'approvals' | 'bots' | 'planner' | 'studio' | 'connections'
-  | 'construction' | 'rental' | 'leads' | 'skills' | 'settings' | 'reports' | 'portfolio' | 'queue';
+  | 'construction' | 'rental' | 'leads' | 'skills' | 'settings' | 'reports' | 'portfolio' | 'queue' | 'system';
 
 export interface RouteState { route: Route; id?: string | null; params: URLSearchParams }
 

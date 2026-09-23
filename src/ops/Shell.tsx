@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, Sparkles, Truck, X,
+  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, Truck, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -28,6 +28,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'leads', label: 'Gelen Talepler', icon: Inbox, hint: 'Web formu + bot adayları' },
   ] },
   { title: 'Sistem', items: [
+    { id: 'system', label: 'Bağlantı & Sistem', icon: ShieldCheck, hint: 'Giriş bilgileri · sistem kontrolü' },
     { id: 'skills', label: 'Yetenek Kütüphanesi', icon: Blocks, hint: 'Skill & araçlar' },
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka, AI, ekip, kayıtlar' },
   ] },

@@ -3,6 +3,8 @@
 //   POST /ops/api {action,...}  → panel (kullanıcı JWT + ekip rolü)
 //   GET  /ops/oauth/callback    → Meta / Canva OAuth dönüşü
 import { initKeyStore, providerAvailability } from '../_shared/ai/index.ts';
+import { getAiKey } from '../_shared/ai/keys.ts';
+import { loadAppSecrets, resetAppSecrets, secret } from '../_shared/secrets.ts';
 import { googleAuthorizeUrl, googleExchange } from '../_shared/connectors/youtube.ts';
 import { aiComplete, loadAgent, serviceClient, type Db, type EngineCtx, type TaskRow } from '../_shared/context.ts';
 import { executeTask } from '../_shared/engine.ts';
@@ -88,16 +90,78 @@ async function status(db: Db) {
   const connectors = CONNECTORS.map((def) => {
     const own = (accounts || []).filter((a) => a.connector_key === def.key);
     const best = own.find((a) => a.connection_status === 'connected') ?? own[0] ?? null;
-    return { ...publicConnectorInfo(def), status: resolveStatus(def, best), missing_env: def.requiredEnv.filter((k) => !Deno.env.get(k)), accounts: own };
+    return { ...publicConnectorInfo(def), status: resolveStatus(def, best), missing_env: def.requiredEnv.filter((k) => !secret(k)), accounts: own };
   });
   return { ai: await providerAvailability(), connectors, worker_last_seen: lastRun?.created_at ?? null, canva_connected: Boolean(canva?.length), redirect_uri: REDIRECT_URI() };
+}
+
+// ── Sistem kontrolü: her parça gerçekten çalışıyor mu? (secret değerleri döndürülmez) ──
+type Check = { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail'; detail: string; fix?: string };
+async function systemCheck(db: Db) {
+  const checks: Check[] = [];
+  const ago = (iso: string | null) => (iso ? Math.round((Date.now() - new Date(iso).getTime()) / 60000) : null);
+
+  // 1) Zamanlanmış işler (bot motorları)
+  const { data: jobs, error: je } = await db.rpc('ops_worker_health');
+  const JOB_LABEL: Record<string, string> = { 'embay-ops-worker': 'Bot görev + yayın motoru (her dakika)', 'embay-missions-worker': 'Araştırma görev motoru (her dakika)', 'embay-portfolio-reminders': 'Firma hatırlatmaları (her sabah 09:00)' };
+  if (je) checks.push({ key: 'cron', group: 'Motor', label: 'Zamanlanmış işler', state: 'fail', detail: je.message });
+  for (const j of (jobs || []) as Array<{ job: string; schedule: string; active: boolean; last_ok: string | null; last_status: string | null }>) {
+    const everyMinute = j.schedule === '* * * * *'; const m = ago(j.last_ok);
+    const ok = j.active && m !== null && m <= (everyMinute ? 3 : 26 * 60);
+    checks.push({ key: `cron:${j.job}`, group: 'Motor', label: JOB_LABEL[j.job] ?? j.job, state: ok ? 'ok' : !everyMinute && m === null ? 'warn' : 'fail',
+      detail: m === null ? 'Henüz çalışmadı' : `Son başarılı çalışma ${m} dk önce${j.last_status && j.last_status !== 'succeeded' ? ` · son durum: ${j.last_status}` : ''}` });
+  }
+
+  // 2) AI anahtarları — sağlayıcıya ücretsiz model listesi isteğiyle canlı doğrulama
+  for (const p of ['anthropic', 'gemini'] as const) {
+    const key = await getAiKey(p); const label = p === 'anthropic' ? 'Claude (Anthropic) AI anahtarı' : 'Gemini AI anahtarı';
+    if (!key) { checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: p === 'anthropic' ? 'fail' : 'warn', detail: 'Tanımlı değil', fix: 'Ayarlar → AI anahtarı' }); continue; }
+    try {
+      const r = p === 'anthropic'
+        ? await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } })
+        : await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': key } });
+      checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: r.ok ? 'ok' : 'fail', detail: r.ok ? `Doğrulandı (…${key.slice(-4)})` : `Sağlayıcı reddetti: HTTP ${r.status}`, fix: r.ok ? undefined : 'Anahtarı yenileyin' });
+    } catch (e) { checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: 'warn', detail: `Bağlantı hatası: ${String(e).slice(0, 120)}` }); }
+  }
+
+  // 3) Son araştırma görevi
+  const { data: lastMission } = await db.from('bot_missions').select('title,status,finish_reason,error_kind,finished_at,created_at').order('created_at', { ascending: false }).limit(1).maybeSingle();
+  checks.push(lastMission
+    ? { key: 'mission:last', group: 'Yapay zekâ', label: 'Son bot görevi', state: lastMission.status === 'failed' ? 'fail' : 'ok', detail: `${lastMission.title} · ${lastMission.status}${lastMission.error_kind ? ` (${lastMission.error_kind})` : ''}` }
+    : { key: 'mission:last', group: 'Yapay zekâ', label: 'Son bot görevi', state: 'warn', detail: 'Henüz görev çalıştırılmadı', fix: 'Bot Merkezi → Görev ver' });
+
+  // 4) Medya deposu (telefon yüklemeleri)
+  const { data: bucket, error: be } = await db.storage.getBucket('media-uploads');
+  checks.push({ key: 'storage', group: 'Motor', label: 'Medya deposu (görsel/video)', state: bucket && !be ? 'ok' : 'fail', detail: bucket ? `Hazır · en fazla ${Math.round((bucket.file_size_limit ?? 0) / 1048576)} MB` : be?.message ?? 'Bulunamadı' });
+
+  // 5) Uygulamalar: giriş bilgisi + hesap bağlantısı
+  const { data: accounts } = await db.from('social_accounts').select('connector_key,platform,connection_status,external_account_name,token_expires_at,last_verified_at,last_error');
+  for (const k of ['instagram', 'facebook', 'youtube', 'whatsapp', 'email', 'telegram', 'canva']) {
+    const def = connectorByKey(k); if (!def) continue;
+    const missing = def.requiredEnv.filter((e) => !secret(e));
+    const acc = (accounts || []).find((a) => (a.connector_key === k || a.platform === k) && a.connection_status === 'connected');
+    const st = resolveStatus(def, acc ?? null);
+    const needsAccount = def.authType === 'oauth';
+    let state: Check['state'] = 'ok'; let detail = ''; let fix: string | undefined;
+    if (missing.length) { state = 'warn'; detail = `Uygulama giriş bilgisi eksik: ${missing.join(', ')}`; fix = 'Uygulamalar → Giriş bilgileri'; }
+    else if (needsAccount && !acc) { state = 'warn'; detail = 'Giriş bilgisi hazır · hesap henüz bağlanmadı'; fix = 'Uygulamalar → Bağla'; }
+    else if (st !== 'connected') { state = 'fail'; detail = `Durum: ${st}`; fix = 'Yeniden bağlayın'; }
+    else {
+      const exp = acc?.token_expires_at ? new Date(acc.token_expires_at).getTime() : null;
+      detail = `Bağlı${acc?.external_account_name ? ` · ${acc.external_account_name}` : ''}${exp ? ` · oturum ${Math.max(0, Math.round((exp - Date.now()) / 86400000))} gün geçerli` : ''}`;
+      if (exp && exp - Date.now() < 7 * 86400000) { state = 'warn'; fix = 'Oturum süresi yakında doluyor — yeniden bağlayın'; }
+    }
+    checks.push({ key: `app:${k}`, group: 'Uygulamalar', label: def.name, state, detail, fix });
+  }
+  const summary = { ok: checks.filter((c) => c.state === 'ok').length, warn: checks.filter((c) => c.state === 'warn').length, fail: checks.filter((c) => c.state === 'fail').length };
+  return { checked_at: new Date().toISOString(), summary, checks, redirect_uri: REDIRECT_URI() };
 }
 
 // ── OAuth ───────────────────────────────────────────────────────────────────
 async function oauthStart(db: Db, userId: string, provider: string) {
   const def = connectorByKey(provider === 'meta' ? 'instagram' : provider === 'google' ? 'youtube' : provider);
   if (!def) throw new HttpError(400, 'Bilinmeyen sağlayıcı');
-  const missing = def.requiredEnv.filter((k) => !Deno.env.get(k));
+  const missing = def.requiredEnv.filter((k) => !secret(k));
   if (missing.length) throw new HttpError(409, `Yapılandırma gerekli: ${missing.join(', ')}`, 'CONFIGURATION_REQUIRED');
   const state = crypto.randomUUID().replace(/-/g, '');
   if (provider === 'meta' || provider === 'instagram' || provider === 'facebook') {
@@ -283,6 +347,11 @@ async function api(db: Db, req: Request) {
       return { export_url: publicUrl };
     }
 
+    // Panelden giriş bilgisi girildikten sonra önbelleği yeniler
+    case 'reload_secrets': { await requireUser(db, req, 'admin'); resetAppSecrets(); await loadAppSecrets(db); return { ok: true }; }
+
+    case 'system_check': { await requireUser(db, req); resetAppSecrets(); await loadAppSecrets(db); return systemCheck(db); }
+
     default: throw new HttpError(400, `Bilinmeyen işlem: ${action}`);
   }
 }
@@ -294,6 +363,7 @@ Deno.serve(async (req) => {
   const db = serviceClient();
   initKeyStore(db);
   try {
+    await loadAppSecrets(db);
     if (path.startsWith('/oauth/callback')) return await oauthCallback(db, url);
     if (path.startsWith('/worker') && req.method === 'POST') {
       const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });

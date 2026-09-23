@@ -1,3 +1,4 @@
+import { secret as appSecret } from '../secrets.ts';
 // Ortak connector arayüzü. Resmi API'si olmayan platform için sahte entegrasyon yazılmaz.
 
 export type ConnectorCategory = 'social' | 'listing' | 'search' | 'communication' | 'design';
@@ -62,7 +63,7 @@ export class ConnectorError extends Error {
 }
 
 /** Gerçek durum: env eksikse CONFIG REQUIRED, hesap yoksa OAUTH REQUIRED, API yoksa MANUEL. */
-export function resolveStatus(def: ConnectorDef, account?: Pick<AccountRow, 'connection_status' | 'token_expires_at'> | null, env: (k: string) => string | undefined = (k) => Deno.env.get(k)): string {
+export function resolveStatus(def: ConnectorDef, account?: Pick<AccountRow, 'connection_status' | 'token_expires_at'> | null, env: (k: string) => string | undefined = appSecret): string {
   if (!def.officialApi) return def.authType === 'manual' ? 'manual_only' : 'api_unavailable';
   if (def.requiredEnv.some((k) => !env(k))) return def.authType === 'api_key' ? 'api_key_required' : 'config_required';
   if (!def.implemented) return 'config_required';

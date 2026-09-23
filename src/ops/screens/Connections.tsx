@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, Cpu, ExternalLink, LayoutGrid, Link2, Loader2, PlugZap, Radar, RefreshCw, Send, Unplug } from 'lucide-react';
+import { BookOpen, Cpu, KeyRound, ShieldCheck, ExternalLink, LayoutGrid, Link2, Loader2, PlugZap, Radar, RefreshCw, Send, Unplug } from 'lucide-react';
 import { AppDetail } from '../components/AppDetail';
 import { db, unwrap } from '../lib/hooks';
 import { callOps, errorText } from '../lib/api';
@@ -19,7 +19,7 @@ const CATEGORY: Record<string, { title: string; kicker: string }> = {
 const OAUTH_PROVIDER: Record<string, string> = { instagram: 'meta', facebook: 'meta', canva: 'canva', youtube: 'google' };
 
 export function ConnectionsScreen() {
-  const { state } = useRouter();
+  const { state, go } = useRouter();
   const session = useSession();
   const q = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
   const bots = useQuery(async () => unwrap(await db().from('automation_bots').select('*').order('name')) as Bot[], [] as Bot[], []);
@@ -53,7 +53,11 @@ export function ConnectionsScreen() {
           <h2 className="font-display text-xl font-semibold text-ink-100">Uygulamalar</h2>
           <p className="text-xs text-ink-400">Bir uygulamaya tıklayın: hangi botlar görevli, ne yapıyorlar, hesabın durumu ve botların o uygulama hakkında bulduğu bilgiler. Giriş yalnızca uygulamanın resmi (OAuth) ekranıyla yapılır; şifre panelde tutulmaz.</p>
         </div>
-        <Button variant="ghost" onClick={q.reload} icon={q.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}>Yenile</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => go('system', null, { tab: 'credentials' })} icon={<KeyRound className="w-4 h-4" />}>Giriş bilgileri</Button>
+          <Button variant="ghost" onClick={() => go('system')} icon={<ShieldCheck className="w-4 h-4" />}>Sistem kontrolü</Button>
+          <Button variant="ghost" onClick={q.reload} icon={q.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}>Yenile</Button>
+        </div>
       </div>
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
 
@@ -118,7 +122,7 @@ export function ConnectionsScreen() {
       {detail && data && (() => { const c = data.connectors.find((x) => x.key === detail)!; return (
         <AppDetail c={c} allBots={bots.data} onClose={() => setDetail(null)} busy={busy === c.key}
           canConnect={c.authType === 'oauth' && c.implemented && Boolean(OAUTH_PROVIDER[c.key]) && session.role === 'admin'} onConnect={() => connect(c)} />); })()}
-      <Notice tone="info">Secret’lar (META_APP_SECRET, CANVA_CLIENT_SECRET, ANTHROPIC_API_KEY…) yalnızca Supabase Dashboard → Edge Functions → Secrets bölümüne girilir; tarayıcıya hiç gönderilmez. OAuth token’ları Supabase Vault’ta şifreli saklanır.</Notice>
+      <Notice tone="info">Uygulama anahtarları “Giriş bilgileri” ekranında bir kez girilir ve Supabase Vault’ta şifreli saklanır; tarayıcıya geri gönderilmez. Hesap bağlantısı resmi OAuth ile yapılır, oturum token’ları da Vault’ta durur ve sistem tarafından yenilenir.</Notice>
     </div>
   );
 }

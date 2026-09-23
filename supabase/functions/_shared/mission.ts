@@ -10,7 +10,7 @@ type Db = SupabaseClient;
 export interface MissionRow {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: string; finish_reason: string | null; started_at: string; deadline_at: string;
-  finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null;
+  finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null;
   findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null;
 }
 export interface Finding { title: string; detail: string; url: string; evidence?: string; at: string; step: number }
@@ -117,9 +117,20 @@ export function keywordSnippets(text: string, terms: string[], max = 6): Array<{
   return out;
 }
 
+/** Görevi durduran AI hataları: kredi bitti, anahtar geçersiz. Tekrar denemek anlamsız. */
+export class AiFatalError extends Error {
+  constructor(public kind: 'ai_credit' | 'ai_auth', message: string) { super(message); }
+}
+export const ERROR_KIND: Record<string, string> = {
+  ai_credit: 'AI kredisi / bakiyesi bitti — sağlayıcı hesabına bakiye yüklenmeli',
+  ai_auth: 'AI anahtarı geçersiz veya yetkisiz — anahtar yenilenmeli',
+  repeated_error: 'Üst üste 3 adım hata verdi',
+  timeout: 'Adım zaman aşımına uğradı',
+};
+
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
 interface AiChoice { provider: 'anthropic' | 'gemini'; model: string; system: string; key: string }
-async function chooseAi(db: Db, botId: string | null): Promise<AiChoice | null> {
+async function chooseAi(db: Db, botId: string | null, preferred?: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
   if (botId) {
     const { data } = await db.from('automation_bots').select('ai_agents(provider,model,system_prompt)').eq('id', botId).maybeSingle();
@@ -128,7 +139,7 @@ async function chooseAi(db: Db, botId: string | null): Promise<AiChoice | null> 
   }
   const base = agent?.system_prompt || 'Sen Embay Yapı ve Şahin Manitou Kiralama için çalışan titiz bir araştırma botusun. Türkçe yaz. Asla bilgi uydurma.';
   const ak = await getAiKey('anthropic');
-  if (ak) return { provider: 'anthropic', model: agent?.provider === 'anthropic' ? agent.model : 'claude-opus-5', system: base, key: ak };
+  if (ak) return { provider: 'anthropic', model: preferred?.startsWith('claude-') ? preferred : agent?.provider === 'anthropic' ? agent.model : 'claude-opus-5', system: base, key: ak };
   const gk = await getAiKey('gemini');
   if (gk) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base, key: gk };
   return null;
@@ -148,8 +159,17 @@ async function anthropicResearch(key: string, model: string, system: string, pro
   const sources: Source[] = []; let text = ''; let tokensIn = 0; let tokensOut = 0; let searches = 0;
   for (let i = 0; i < 3; i++) {
     // deno-lint-ignore no-explicit-any
-    const res: any = await client.beta.messages.create({ model, max_tokens: 6000, system, tools, messages, output_config: { effort: 'medium' },
-      ...(model.startsWith('claude-opus-5') ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}) } as any);
+    let res: any;
+    try {
+      res = await client.beta.messages.create({ model, max_tokens: 6000, system, tools, messages, output_config: { effort: 'medium' },
+        ...(model.startsWith('claude-opus-5') ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}) } as any);
+    } catch (e) {
+      if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw new AiFatalError('ai_auth', `Anthropic anahtarı reddedildi (${e.status})`);
+      // deno-lint-ignore no-explicit-any
+      if (e instanceof Anthropic.APIError && (e.status === 402 || (e as any).type === 'billing_error' || (e.status === 400 && /credit balance/i.test(e.message))))
+        throw new AiFatalError('ai_credit', 'Anthropic hesabında kredi/bakiye yetersiz');
+      throw e;
+    }
     tokensIn += res.usage?.input_tokens ?? 0; tokensOut += res.usage?.output_tokens ?? 0;
     searches += res.usage?.server_tool_use?.web_search_requests ?? 0;
     if (res.stop_reason === 'refusal') throw new Error('Model isteği güvenlik nedeniyle reddetti');
@@ -171,7 +191,12 @@ async function geminiResearch(key: string, model: string, system: string, prompt
     body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 4000 } }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
+  if (!res.ok) {
+    const detail = JSON.stringify(data).slice(0, 300);
+    if (res.status === 401 || res.status === 403 || /API_KEY_INVALID|API key not valid/i.test(detail)) throw new AiFatalError('ai_auth', `Gemini anahtarı reddedildi (${res.status})`);
+    if (res.status === 429 && /quota|billing/i.test(detail)) throw new AiFatalError('ai_credit', 'Gemini kotası / bakiyesi bitti');
+    throw new Error(`Gemini ${res.status}: ${detail}`);
+  }
   const cand = data.candidates?.[0];
   // deno-lint-ignore no-explicit-any
   const text = (cand?.content?.parts || []).map((p: any) => p.text || '').join('');
@@ -227,6 +252,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const terms = searchTerms(m.search_for);
+  let stepFailed = false;
   const addFinding = (f: Omit<Finding, 'at' | 'step'>) => {
     if (!f.url || !f.title) return false;
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
@@ -247,7 +273,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       if (p.og['og:description'] && !m.search_for) addFinding({ title: 'Sayfanın kendi tanımı (meta)', detail: p.og['og:description'], url: p.url || m.target_url, evidence: p.og['og:description'] });
     }
 
-    const ai = await chooseAi(db, m.bot_id);
+    const ai = await chooseAi(db, m.bot_id, m.model);
     if (ai) {
       const ctx = await botContext(db, m.bot_id);
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
@@ -302,12 +328,17 @@ export async function stepMission(db: Db, m: MissionRow) {
     }
   } catch (e) {
     const msg = String((e as Error).message || e);
+    stepFailed = true;
     await logStep(db, m, step, 'error', `Adım hatası: ${msg.slice(0, 500)}`);
     if (e instanceof ConfigurationRequiredError) { await persist(); return await finalizeMission(db, { ...m, findings, sources, step_count: step }, 'no_ai'); }
+    const errors = (m.error_count ?? 0) + 1;
+    const kind = e instanceof AiFatalError ? e.kind : errors >= 3 ? 'repeated_error' : null;
+    await db.from('bot_missions').update({ error_count: errors, error: msg.slice(0, 500), ...(kind ? { error_kind: kind } : {}) }).eq('id', m.id);
+    if (kind) { await persist(); return await finalizeMission(db, { ...m, findings, sources, step_count: step, error_count: errors, error_kind: kind }, 'error'); }
   }
 
   async function persist() {
-    await db.from('bot_missions').update({ step_count: step, findings, sources: sources.slice(0, 200), visited: [...visited].slice(0, 200), tokens_in: tokensIn, tokens_out: tokensOut,
+    await db.from('bot_missions').update({ step_count: step, findings, sources: sources.slice(0, 200), visited: [...visited].slice(0, 200), tokens_in: tokensIn, tokens_out: tokensOut, ...(stepFailed ? {} : { error_count: 0 }),
       next_step_at: new Date(Date.now() + STEP_INTERVAL_MS).toISOString(), locked_until: null }).eq('id', m.id);
   }
   await persist();
@@ -336,7 +367,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
 
   let summary = '';
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
-  const ai = await chooseAi(db, cur.bot_id);
+  const ai = reason === 'error' ? null : await chooseAi(db, cur.bot_id, cur.model);
   if (ai && findings.length) {
     try {
       const r = await aiCall(ai, [
@@ -348,13 +379,16 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
       summary = r.text.trim(); tokensIn += r.tokensIn; tokensOut += r.tokensOut;
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
   }
+  if (!summary && reason === 'error') {
+    summary = `Görev hata ile bitti: ${ERROR_KIND[cur.error_kind ?? ''] ?? 'bilinmeyen hata'}.${findings.length ? ` Hata öncesi ${findings.length} kaynaklı bulgu toplanmıştı.` : ''}`;
+  }
   if (!summary) {
     summary = findings.length
       ? `${findings.length} kaynaklı bulgu toplandı. ${findings.slice(0, 5).map((f) => `- ${f.title}`).join('\n')}`
       : `Veri bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; görevin aradığı bilgiye dair doğrulanabilir bir bulgu çıkmadı.`;
   }
 
-  const status = reason === 'admin_stop' ? 'stopped' : 'completed';
+  const status = reason === 'admin_stop' ? 'stopped' : reason === 'error' ? 'failed' : 'completed';
   const finishedAt = new Date().toISOString();
   const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cur.title)} — Bot Raporu</title>
 <style>body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#0e1e16;background:#f3f9f5;margin:0;padding:24px}main{max-width:860px;margin:0 auto;background:#fff;border:1px solid #d2e7da;border-radius:18px;padding:28px}
@@ -363,7 +397,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td{padding:4px 6px;bord
 .f{border:1px solid #e1f3e7;border-radius:12px;padding:10px 12px;margin:8px 0}.f b{display:block}.f q{display:block;color:#3e5549;font-size:12px;margin-top:4px;font-style:italic}
 a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;line-height:1.6}.log{font-family:ui-monospace,monospace;font-size:11px;color:#3e5549}.badge{display:inline-block;background:#e1f3e7;color:#115a31;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
 @media print{body{background:#fff;padding:0}main{border:0}}</style></head>
-<body><main><div class="k">EMBAY YAPI & ŞAHİN MANİTOU · BOT GÖREV RAPORU</div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}</span>
+<body><main><div class="k">EMBAY YAPI & ŞAHİN MANİTOU · BOT GÖREV RAPORU</div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}${reason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
 <h2>Görev</h2><table><tr><td>Bot</td><td>${esc(ctx.name)}</td></tr><tr><td>Amaç</td><td>${esc(cur.goal)}</td></tr>
 ${cur.target_url ? `<tr><td>Hedef link</td><td><a href="${safeHref(cur.target_url)}">${esc(cur.target_url)}</a></td></tr>` : ''}
 ${cur.search_for ? `<tr><td>Aranan</td><td>${esc(cur.search_for)}</td></tr>` : ''}${cur.report_spec ? `<tr><td>Raporda istenen</td><td>${esc(cur.report_spec)}</td></tr>` : ''}
