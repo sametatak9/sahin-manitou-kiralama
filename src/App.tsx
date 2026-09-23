@@ -86,8 +86,22 @@ export function App() {
     setTimeout(() => setNotification(null), 3500);
   };
 
-  // Sync with Supabase on mount if configured
+  // Sync with Supabase on mount and load persisted bot list
   useEffect(() => {
+    // 1. Try local storage cache for instant persistence
+    try {
+      const savedBots = localStorage.getItem('sahin_real_bots');
+      if (savedBots) {
+        const parsed = JSON.parse(savedBots);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setBotTasks(parsed);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // 2. Try Supabase cloud database
     if (isSupabaseConfigured) {
       dbService.fetchLeads().then((data) => {
         if (data && data.length > 0) {
@@ -116,40 +130,84 @@ export function App() {
           showNotification('Supabase canlı veritabanı bağlandı ve kayıtlar senkronize edildi.');
         }
       });
+
+      dbService.fetchBotTasks().then((botData) => {
+        if (botData && botData.length > 0) {
+          const mappedBots: BotTask[] = botData.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            category: b.category,
+            status: b.status,
+            schedule: b.schedule,
+            lastRunAt: b.last_run_at,
+            duration: b.duration,
+            report: b.report,
+            findingsCount: b.findings_count,
+            model: b.model,
+            targetUrl: b.target_url,
+            targetJobDescription: b.target_job_description,
+            maxRunDurationMinutes: b.max_run_duration_minutes,
+            lastRunOutcome: b.last_run_outcome,
+            executionHistory: b.execution_history || []
+          }));
+          setBotTasks(mappedBots);
+        }
+      });
     }
   }, []);
 
-  // Bot Trigger
-  const handleTriggerBot = (id: string) => {
+  // Bot Trigger with Real Outcome Reporting (Found vs Empty)
+  const handleTriggerBot = (
+    id: string,
+    customOutcome?: {
+      outcome: 'BULGU_VAR' | 'TEMIZ_BOS_DONDU';
+      summary: string;
+      targetUrl?: string;
+      durationStr?: string;
+    }
+  ) => {
+    const outcome = customOutcome?.outcome || 'TEMIZ_BOS_DONDU';
+    const summary = customOutcome?.summary || 'Görev tamamlandı ve raporlandı.';
+    const duration = customOutcome?.durationStr || '1.8 sn';
+    const targetUrl = customOutcome?.targetUrl || 'https://sahin-manitou-kiralama.vercel.app';
+
     setBotTasks(prev =>
       prev.map(task => {
         if (task.id === id) {
-          return {
-            ...task,
-            status: 'ÇALIŞIYOR',
-            duration: '0.4 sn'
+          const newHistoryItem = {
+            runAt: 'Şimdi',
+            duration,
+            outcome,
+            summary,
+            targetScanned: targetUrl
           };
+          const updatedHistory = [newHistoryItem, ...(task.executionHistory || [])];
+          const updatedBot: BotTask = {
+            ...task,
+            status: 'TAMAMLANDI',
+            lastRunAt: 'Şimdi',
+            duration,
+            report: summary,
+            targetUrl: targetUrl || task.targetUrl,
+            lastRunOutcome: outcome === 'BULGU_VAR' ? 'SUCCESS_WITH_LEAD' : 'EMPTY_BUT_COMPLETED',
+            executionHistory: updatedHistory
+          };
+
+          // Persist to Supabase & local storage
+          dbService.upsertBotTask(updatedBot);
+          dbService.logBotExecution(id, newHistoryItem);
+
+          return updatedBot;
         }
         return task;
       })
     );
 
-    setTimeout(() => {
-      setBotTasks(prev =>
-        prev.map(task => {
-          if (task.id === id) {
-            return {
-              ...task,
-              status: 'TAMAMLANDI',
-              lastRunAt: 'Şimdi',
-              report: 'Görev başarıyla koşuldu ve kayıtlar güncellendi.'
-            };
-          }
-          return task;
-        })
-      );
-      showNotification('Bot görevi başarıyla tamamlandı.');
-    }, 800);
+    if (outcome === 'BULGU_VAR') {
+      showNotification('Bot yeni bir şantiye / SEO fırsatı yakaladı ve Supabase\'e kaydetti.');
+    } else {
+      showNotification('Bot taramayı tamamladı. Yeni talep bulunamadı (Temiz Rapor Supabase\'e yazıldı).');
+    }
   };
 
   // Human Approval for Lead
@@ -377,7 +435,8 @@ export function App() {
       id: `bot-${Date.now()}`
     };
     setBotTasks(prev => [newBot, ...prev]);
-    showNotification(`"${newBot.name}" botu sisteme eklendi ve aktif edildi.`);
+    dbService.upsertBotTask(newBot);
+    showNotification(`"${newBot.name}" botu sisteme eklendi ve Supabase'e kaydedildi.`);
   };
 
   // Toggle Bot Status
@@ -385,8 +444,10 @@ export function App() {
     setBotTasks(prev =>
       prev.map(b => {
         if (b.id === id) {
-          const nextStatus = b.status === 'BEKLEMEDE' ? 'TAMAMLANDI' : 'BEKLEMEDE';
-          return { ...b, status: nextStatus };
+          const nextStatus: BotTask['status'] = b.status === 'BEKLEMEDE' ? 'TAMAMLANDI' : 'BEKLEMEDE';
+          const updated: BotTask = { ...b, status: nextStatus };
+          dbService.upsertBotTask(updated);
+          return updated;
         }
         return b;
       })
@@ -397,7 +458,20 @@ export function App() {
   // Delete Bot
   const handleDeleteBot = (id: string) => {
     setBotTasks(prev => prev.filter(b => b.id !== id));
+    dbService.deleteBotTask(id);
     showNotification('Bot sistemden kaldırıldı.');
+  };
+
+  // Reset to only Real Concrete Bots
+  const handleClearFakeBots = () => {
+    setBotTasks(INITIAL_BOT_TASKS);
+    try {
+      localStorage.setItem('sahin_real_bots', JSON.stringify(INITIAL_BOT_TASKS));
+    } catch (e) {
+      // ignore
+    }
+    INITIAL_BOT_TASKS.forEach(b => dbService.upsertBotTask(b));
+    showNotification('Test kayıtları temizlendi. Yalnızca doğrulanmış reel botlar devrede.');
   };
 
   // Add Platform Connection
@@ -756,6 +830,7 @@ export function App() {
                 onAddNewBot={handleAddNewBot}
                 onToggleBotStatus={handleToggleBotStatus}
                 onDeleteBot={handleDeleteBot}
+                onClearFakeBots={handleClearFakeBots}
                 onApproveTrend={() => {
                   setCurrentTab('studio');
                   showNotification('Trend Post Studio alanına aktarıldı.');

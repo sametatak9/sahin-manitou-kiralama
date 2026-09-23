@@ -145,6 +145,17 @@ export interface BotTask {
   report: string;
   findingsCount: number;
   model: string;
+  targetUrl?: string;
+  targetJobDescription?: string;
+  maxRunDurationMinutes?: number;
+  lastRunOutcome?: 'SUCCESS_WITH_LEAD' | 'EMPTY_BUT_COMPLETED' | 'ERROR';
+  executionHistory?: {
+    runAt: string;
+    duration: string;
+    outcome: 'BULGU_VAR' | 'TEMIZ_BOS_DONDU' | 'HATA';
+    summary: string;
+    targetScanned: string;
+  }[];
 }
 
 export interface SEORun {

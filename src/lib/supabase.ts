@@ -100,5 +100,106 @@ export const dbService = {
       console.warn('[Supabase] insertContentItem error', err);
       return null;
     }
+  },
+
+  // BOT TASKS PERSISTENCE
+  async fetchBotTasks() {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('bot_tasks')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.warn('[Supabase] fetchBotTasks offline or table not ready, using memory store', err);
+      return null;
+    }
+  },
+
+  async upsertBotTask(bot: any) {
+    // Also save to localStorage for instant persistence across mobile page reloads
+    try {
+      const saved = localStorage.getItem('sahin_real_bots');
+      const list = saved ? JSON.parse(saved) : [];
+      const updated = [bot, ...list.filter((b: any) => b.id !== bot.id)];
+      localStorage.setItem('sahin_real_bots', JSON.stringify(updated));
+    } catch (e) {
+      // ignore
+    }
+
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('bot_tasks')
+        .upsert([{
+          id: bot.id,
+          name: bot.name,
+          category: bot.category,
+          status: bot.status,
+          schedule: bot.schedule,
+          last_run_at: bot.lastRunAt,
+          duration: bot.duration,
+          report: bot.report,
+          findings_count: bot.findingsCount,
+          model: bot.model,
+          target_url: bot.targetUrl,
+          target_job_description: bot.targetJobDescription,
+          max_run_duration_minutes: bot.maxRunDurationMinutes,
+          last_run_outcome: bot.lastRunOutcome,
+          execution_history: bot.executionHistory
+        }])
+        .select();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.warn('[Supabase] upsertBotTask error, saved to local cache', err);
+      return null;
+    }
+  },
+
+  async deleteBotTask(id: string) {
+    try {
+      const saved = localStorage.getItem('sahin_real_bots');
+      if (saved) {
+        const list = JSON.parse(saved);
+        localStorage.setItem('sahin_real_bots', JSON.stringify(list.filter((b: any) => b.id !== id)));
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    if (!supabase) return null;
+    try {
+      const { error } = await supabase.from('bot_tasks').delete().eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.warn('[Supabase] deleteBotTask error', err);
+      return false;
+    }
+  },
+
+  async logBotExecution(botId: string, runLog: any) {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('bot_execution_logs')
+        .insert([{
+          bot_id: botId,
+          run_at: runLog.runAt,
+          duration: runLog.duration,
+          outcome: runLog.outcome,
+          target_scanned: runLog.targetScanned,
+          summary: runLog.summary
+        }])
+        .select();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.warn('[Supabase] logBotExecution error', err);
+      return null;
+    }
   }
 };
