@@ -30,3 +30,28 @@ export async function aiKeyAvailability() {
 export async function markAiKey(p: KeyProvider, ok: boolean, error?: string) {
   if (db) await db.rpc('mark_ai_key', { p_provider: p, p_ok: ok, p_error: error ?? null });
 }
+
+/** Anahtarın GERÇEKTEN çalıştığını test eder: sağlayıcıdan 1 kelimelik gerçek cevap ister (model listesi okumak yetmez —
+ *  bakiyesi bitmiş ya da Google tarafından engellenmiş projeler listeyi okuyabilir ama cevap üretemez). Maliyeti yok denecek kadar azdır. */
+export async function liveKeyTest(p: KeyProvider, key: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const r = p === 'anthropic'
+      ? await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }) })
+      : p === 'gemini'
+        ? await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest')}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ok' }] }], generationConfig: { maxOutputTokens: 5 } }) })
+        : await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }) });
+    if (r.ok) return { ok: true, detail: 'Çalışıyor (gerçek cevap üretti)' };
+    const t = (await r.text()).slice(0, 500);
+    const why = /credit balance|billing|insufficient_quota|exceeded your current quota/i.test(t) ? 'hesapta bakiye/kredi yok — sağlayıcı hesabına bakiye yükleyin'
+      : /denied access/i.test(t) ? 'Google bu anahtarın projesini/hesabını engellemiş — FARKLI bir Gmail hesabıyla yeni anahtar alın'
+      : /leaked/i.test(t) ? 'anahtar sızdırılmış diye işaretlenmiş — yeni anahtar alın'
+      : /SERVICE_DISABLED|is disabled|has not been used/i.test(t) ? 'projede API kapalı'
+      : /invalid|not valid|incorrect|authentication/i.test(t) ? 'anahtar geçersiz / yanlış kopyalanmış'
+      : /not found|no longer available/i.test(t) ? 'model bulunamadı'
+      : r.status === 429 ? 'kota/limit doldu' : `HTTP ${r.status}`;
+    return { ok: false, detail: `Reddedildi: ${why}` };
+  } catch (e) { return { ok: false, detail: `Bağlantı hatası: ${String(e).slice(0, 100)}` }; }
+}

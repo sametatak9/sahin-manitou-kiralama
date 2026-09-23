@@ -3,7 +3,7 @@
 //   POST /missions/api {action,...}  → panel (kullanıcı JWT + ekip rolü): mission_start · mission_stop · mission_review · skill_create · ai_status · ai_test
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { finalizeMission, runDueMissions, stepMission, type MissionRow } from '../_shared/mission.ts';
-import { aiKeyAvailability, getAiKey, initKeyStore, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
+import { aiKeyAvailability, getAiKey, initKeyStore, liveKeyTest, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
 
 type Db = SupabaseClient;
 // Görev başlatılırken seçilebilen modeller (varsayılan: botun AI ajanı, yoksa claude-opus-5)
@@ -133,13 +133,9 @@ async function api(c: Db, req: Request) {
       const p = String(body.provider || 'anthropic') as KeyProvider;
       const key = await getAiKey(p);
       if (!key) throw new HttpError(409, 'Anahtar tanımlı değil', 'CONFIGURATION_REQUIRED');
-      let res: Response;
-      if (p === 'anthropic') res = await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
-      else if (p === 'gemini') res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': key } });
-      else res = await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${key}` } });
-      const ok = res.ok; const err = ok ? undefined : `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`;
-      await markAiKey(p, ok, err);
-      if (!ok) throw new HttpError(400, `Anahtar doğrulanamadı (${err})`, 'INVALID_KEY');
+      const t = await liveKeyTest(p, key);
+      await markAiKey(p, t.ok, t.ok ? undefined : t.detail);
+      if (!t.ok) throw new HttpError(400, `Anahtar kaydedildi ama çalışmıyor — ${t.detail}`, 'INVALID_KEY');
       return { provider: p, ok: true };
     }
 

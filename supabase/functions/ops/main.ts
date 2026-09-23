@@ -3,7 +3,7 @@
 //   POST /ops/api {action,...}  → panel (kullanıcı JWT + ekip rolü)
 //   GET  /ops/oauth/callback    → Meta / Canva OAuth dönüşü
 import { initKeyStore, providerAvailability } from '../_shared/ai/index.ts';
-import { getAiKey } from '../_shared/ai/keys.ts';
+import { getAiKey, liveKeyTest } from '../_shared/ai/keys.ts';
 import { loadAppSecrets, resetAppSecrets, secret, secretSource } from '../_shared/secrets.ts';
 import { googleAuthorizeUrl, googleExchange } from '../_shared/connectors/youtube.ts';
 import { aiComplete, loadAgent, serviceClient, type Db, type EngineCtx, type TaskRow } from '../_shared/context.ts';
@@ -158,22 +158,6 @@ const APP_KEYS: Array<{ group: string; name: string; label: string }> = [
   { group: 'Canva', name: 'CANVA_CLIENT_ID', label: 'Canva istemci kimliği' }, { group: 'Canva', name: 'CANVA_CLIENT_SECRET', label: 'Canva gizli anahtarı' },
 ];
 
-async function liveAiTest(p: 'anthropic' | 'gemini' | 'openai', key: string): Promise<{ ok: boolean; detail: string }> {
-  try {
-    const r = p === 'anthropic' ? await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } })
-      : p === 'gemini' ? await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': key } })
-      : await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${key}` } });
-    if (r.ok) return { ok: true, detail: 'Çalışıyor (sağlayıcı anahtarı kabul etti)' };
-    const t = (await r.text()).slice(0, 400);
-    const why = /leaked/i.test(t) ? 'anahtar sızdırılmış diye işaretlenmiş — yeni anahtar alın'
-      : /denied access/i.test(t) ? 'Google bu anahtarın projesini engellemiş — farklı bir Google hesabı/projeyle yeni anahtar alın'
-      : /SERVICE_DISABLED|is disabled|has not been used/i.test(t) ? 'projede API kapalı'
-      : /invalid|not valid|incorrect/i.test(t) ? 'anahtar geçersiz / yanlış kopyalanmış'
-      : r.status === 429 ? 'kota/bakiye bitti' : `HTTP ${r.status}`;
-    return { ok: false, detail: `Reddedildi: ${why}` };
-  } catch (e) { return { ok: false, detail: `Bağlantı hatası: ${String(e).slice(0, 100)}` }; }
-}
-
 async function credentialsReport(db: Db) {
   const rows: KeyRow[] = [];
   // 1) Yapay zekâ anahtarları (botların beyni)
@@ -185,7 +169,7 @@ async function credentialsReport(db: Db) {
     const panelRow = (aiRows || []).find((r: { provider: string }) => r.provider === p) as { updated_at: string } | undefined;
     const source = panelRow ? 'panel' : Deno.env.get(ENVN[p]) ? 'sunucu' : null;
     if (!key) { rows.push({ group: 'Yapay zekâ (botlar)', name: `ai:${p}`, label: AIL[p], source: null, masked: null, saved_at: null, state: 'missing', detail: 'Girilmemiş', can_clear: false }); continue; }
-    const t = await liveAiTest(p, key);
+    const t = await liveKeyTest(p, key);
     rows.push({ group: 'Yapay zekâ (botlar)', name: `ai:${p}`, label: AIL[p], source, masked: mask(key), saved_at: panelRow?.updated_at ?? null, state: t.ok ? 'ok' : 'fail',
       detail: t.ok ? t.detail : `${t.detail}${source === 'sunucu' ? ' · Bu eski sunucu anahtarı; panelden yeni anahtar girince otomatik devre dışı kalır.' : ''}`, can_clear: source === 'panel' });
   }
@@ -231,16 +215,12 @@ async function systemCheck(db: Db) {
       detail: m === null ? 'Henüz çalışmadı' : `Son başarılı çalışma ${m} dk önce${j.last_status && j.last_status !== 'succeeded' ? ` · son durum: ${j.last_status}` : ''}` });
   }
 
-  // 2) AI anahtarları — sağlayıcıya ücretsiz model listesi isteğiyle canlı doğrulama
+  // 2) AI anahtarları — sağlayıcıdan gerçek (1 kelimelik) cevap istenerek canlı doğrulama
   for (const p of ['anthropic', 'gemini'] as const) {
     const key = await getAiKey(p); const label = p === 'anthropic' ? 'Claude (Anthropic) AI anahtarı' : 'Gemini AI anahtarı';
     if (!key) { checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: p === 'anthropic' ? 'fail' : 'warn', detail: 'Tanımlı değil', fix: 'Ayarlar → AI anahtarı' }); continue; }
-    try {
-      const r = p === 'anthropic'
-        ? await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } })
-        : await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': key } });
-      checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: r.ok ? 'ok' : 'fail', detail: r.ok ? `Doğrulandı (…${key.slice(-4)})` : `Sağlayıcı reddetti: HTTP ${r.status}`, fix: r.ok ? undefined : 'Anahtarı yenileyin' });
-    } catch (e) { checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: 'warn', detail: `Bağlantı hatası: ${String(e).slice(0, 120)}` }); }
+    const t = await liveKeyTest(p, key);
+    checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: t.ok ? 'ok' : 'fail', detail: t.ok ? `${t.detail} (…${key.slice(-4)})` : t.detail, fix: t.ok ? undefined : 'Ayarlar → AI anahtarı' });
   }
 
   // 3) Son araştırma görevi
