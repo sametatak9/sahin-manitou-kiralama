@@ -24,13 +24,15 @@ async function call(method: 'GET' | 'POST', path: string, params: Record<string,
   return data;
 }
 
-export function metaAuthorizeUrl(state: string, redirectUri: string) {
+export function metaAuthorizeUrl(state: string, redirectUri: string, switchAccount = false) {
   const u = new URL(`https://www.facebook.com/${graphVersion()}/dialog/oauth`);
   u.searchParams.set('client_id', appSecret('META_APP_ID') || '');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', META_SCOPES.join(','));
+  // Hesap değiştir: Facebook izin/sayfa seçim ekranını yeniden gösterir (başka sayfa/IG hesabı seçilebilir)
+  if (switchAccount) u.searchParams.set('auth_type', 'rerequest');
   return u.toString();
 }
 

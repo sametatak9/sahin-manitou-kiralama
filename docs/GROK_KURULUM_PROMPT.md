@@ -78,6 +78,7 @@ ADIM 5 — Meta geliştirici uygulaması (Instagram/Facebook'a otomatik paylaş�
 - "Uygulama oluştur" → tür: "İşletme" (Business) → ad: "Embay Panel" → iletişim e-postası info@sahinmanitou.com.
 - Ürün ekle: "Facebook Girişi (İşletme için)" ve "Instagram Graph API" / "Instagram".
 - Facebook Girişi → Ayarlar → "Geçerli OAuth Yönlendirme URI'leri" alanına BAĞLANTI ADRESİNİ yaz → kaydet.
+- Uygulama Ayarları → Temel → "Uygulama Alan Adları" alanına `utngxnqlcayfjkknaysx.supabase.co` yaz; aynı sayfada "+ Platform ekle → Web sitesi" → Site URL: `https://embay-panel.vercel.app` → kaydet. (Bu yapılmazsa Facebook "URL Yüklenemedi — domain uygulamanın domainlerinde yer almıyor" hatası verir.)
 - Uygulama Ayarları → Temel: "Gizlilik politikası URL'si" alanına https://sahin-manitou-kiralama.vercel.app yaz;
   "Uygulama Kimliği (App ID)" ve "Uygulama Gizli Anahtarı (App Secret — Göster'e bas, şifre sorabilir)" değerlerini belgeye yaz (META).
 

@@ -12,7 +12,7 @@ export function googleAuthorizeUrl(state: string, redirectUri: string) {
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', YOUTUBE_SCOPES.join(' '));
   u.searchParams.set('access_type', 'offline');
-  u.searchParams.set('prompt', 'consent');
+  u.searchParams.set('prompt', 'select_account consent'); // her seferinde hangi Google hesabı/kanal sorulur
   u.searchParams.set('state', state);
   return u.toString();
 }

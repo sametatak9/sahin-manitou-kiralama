@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { KeyRound, ShieldCheck, Smartphone, ExternalLink, LayoutGrid, Link2, Loader2, PlugZap, Radar, RefreshCw, Send, Unplug } from 'lucide-react';
 import { AppDetail } from '../components/AppDetail';
+import { ConnectionArchive, DeveloperSetupValues } from '../components/ConnectionArchive';
 import { appUrl, openApp } from '../lib/appLinks';
 import { db, unwrap } from '../lib/hooks';
 import { callOps, errorText } from '../lib/api';
@@ -34,10 +35,10 @@ export function ConnectionsScreen() {
     return null;
   });
 
-  const connect = async (c: ConnectorStatus) => {
+  const connect = async (c: ConnectorStatus, switchAccount = false) => {
     setBusy(c.key); setMsg(null);
     // return_to: giriş sonrası tam bu panel adresine dönülür (oturum burada)
-    try { const r = await callOps<{ url: string }>('oauth_start', { provider: OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}` }); window.location.href = r.url; }
+    try { const r = await callOps<{ url: string }>('oauth_start', { provider: OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount }); window.location.href = r.url; }
     catch (e) { setMsg({ tone: 'warn', text: errorText(e) }); setBusy(null); }
   };
   const disconnect = async (accountId: string) => {
@@ -98,6 +99,8 @@ export function ConnectionsScreen() {
                   <div className="mt-auto flex flex-wrap gap-2">
                     {canOauth && session.role === 'admin' && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy === c.key}
                       onClick={() => (c.missing_env.length ? (window.scrollTo({ top: 0, behavior: 'smooth' }), setMsg({ tone: 'warn', text: c.key === 'youtube' ? 'YouTube bağlantısı için Google Cloud’dan alınan “OAuth istemci kimliği” ve “istemci gizli anahtarı” gerekir. Gemini API anahtarı bu işe yaramaz (o yalnızca botların yapay zekâsı içindir). Bağlantı & Sistem → Giriş bilgileri → Google bölümünde adım adım anlatılıyor.' : `${c.name} bağlantısı için önce ${c.key === 'canva' ? 'Canva' : 'Meta (Facebook geliştirici)'} uygulama bilgileri girilmeli. Bağlantı & Sistem → Giriş bilgileri ekranında adım adım anlatılıyor.` })) : connect(c))} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : 'Hesabımla bağla'}</Button>}
+                    {canOauth && session.role === 'admin' && c.status === 'connected' && <Button variant="subtle" loading={busy === c.key}
+                      onClick={() => { if (window.confirm(`${c.name} için başka bir hesap seçilsin mi? Açılan ekranda kullanmak istediğiniz ${c.key === 'youtube' ? 'Google hesabını/kanalı' : c.key === 'canva' ? 'Canva hesabını' : 'Facebook sayfasını ve Instagram hesabını'} seçin; seçmediğiniz eski hesaplar arşive “çıkış yapıldı” olarak düşer.`)) connect(c, true); }} icon={<RefreshCw className="w-4 h-4" />}>Hesap değiştir</Button>}
                     {appUrl(c.key) && <Button variant={c.status === 'connected' ? 'primary' : 'subtle'} onClick={() => openApp(c.key)} icon={<Smartphone className="w-4 h-4" />}>Uygulamayı aç</Button>}
                     {c.key === 'telegram' && c.status === 'connected' && session.role === 'admin' && <Button variant="subtle" loading={busy === 'tg'} onClick={testTelegram} icon={<Send className="w-4 h-4" />}>Test mesajı</Button>}
                     <Button variant="subtle" onClick={() => setDetail(c.key)} icon={<LayoutGrid className="w-4 h-4" />}>Botlar & geçmiş</Button>
@@ -111,6 +114,8 @@ export function ConnectionsScreen() {
       {detail && data && (() => { const c = data.connectors.find((x) => x.key === detail)!; return (
         <AppDetail c={c} allBots={bots.data} onClose={() => setDetail(null)} busy={busy === c.key}
           canConnect={c.authType === 'oauth' && c.implemented && Boolean(OAUTH_PROVIDER[c.key]) && session.role === 'admin'} onConnect={() => connect(c)} />); })()}
+      {data?.redirect_uri && session.role === 'admin' && <DeveloperSetupValues redirectUri={data.redirect_uri} />}
+      <ConnectionArchive />
       <Notice tone="info">Her uygulamaya bir kez “Hesabımla bağla” ile giriş yaparsınız; bağlantı kalıcı saklanır ve botlar bu hesabı programın içinden kullanır. “Uygulamayı aç” uygulamanın kendisini açar (telefonda uygulama, bilgisayarda yeni sekme).</Notice>
     </div>
   );

@@ -169,7 +169,7 @@ function safeReturnTo(raw: unknown): string | null {
   } catch { return null; }
 }
 
-async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown) {
+async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown, switchAccount = false) {
   const def = connectorByKey(provider === 'meta' ? 'instagram' : provider === 'google' ? 'youtube' : provider);
   if (!def) throw new HttpError(400, 'Bilinmeyen sağlayıcı');
   const missing = def.requiredEnv.filter((k) => !secret(k));
@@ -178,7 +178,7 @@ async function oauthStart(db: Db, userId: string, provider: string, returnTo?: u
   const return_to = safeReturnTo(returnTo);
   if (provider === 'meta' || provider === 'instagram' || provider === 'facebook') {
     await db.from('oauth_states').insert({ state, provider: 'meta', user_id: userId, return_to });
-    return { url: metaAuthorizeUrl(state, REDIRECT_URI()) };
+    return { url: metaAuthorizeUrl(state, REDIRECT_URI(), switchAccount) };
   }
   if (provider === 'canva') {
     const verifier = pkceVerifier();
@@ -222,6 +222,10 @@ async function oauthCallback(db: Db, url: URL) {
           external_account_id: p.igId, external_account_name: p.igUsername, profile_url: p.igUsername ? `https://instagram.com/${p.igUsername}` : null, metadata: { page_id: p.pageId }, capabilities: { publish: true, metrics: true } }, p.pageToken);
       }
       const igCount = pages.filter((p) => p.igId).length;
+      // Bu girişte izin verilmeyen eski sayfa/IG hesapları artık kullanılamaz: "bağlı değil" yap (kayıt arşivde kalır)
+      const keepIds = [...pages.map((p) => p.pageId), ...pages.filter((p) => p.igId).map((p) => p.igId as string)];
+      await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null }).in('connector_key', ['facebook', 'instagram']).eq('connection_status', 'connected').not('external_account_id', 'in', `(${keepIds.map((i) => `"${i}"`).join(',')})`);
+      await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: 'meta', p_summary: `Bağlandı: Facebook ${pages.map((p) => p.pageName).join(', ')}${igCount ? ` · Instagram ${pages.filter((p) => p.igUsername).map((p) => '@' + p.igUsername).join(', ')}` : ''}` });
       await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'facebook').eq('status', 'waiting_connection');
       if (igCount) await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'instagram').eq('status', 'waiting_connection');
       return back(`connected=meta&pages=${pages.length}&ig=${igCount}`);
@@ -232,6 +236,7 @@ async function oauthCallback(db: Db, url: URL) {
       await upsertAccount(db, st.user_id, { platform: 'canva', connector_key: 'canva', account_name: profile.profile?.display_name ?? 'Canva', external_account_id: 'canva-user', external_account_name: profile.profile?.display_name ?? null,
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(), scopes: (tokens.scope || '').split(' ').filter(Boolean), capabilities: { design: true } },
         JSON.stringify({ access_token: tokens.access_token, refresh_token: tokens.refresh_token }));
+      await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: 'canva', p_summary: `Bağlandı: Canva ${profile.profile?.display_name ?? ''}` });
       return back('connected=canva');
     }
     if (st.provider === 'google') {
@@ -239,10 +244,12 @@ async function oauthCallback(db: Db, url: URL) {
       await upsertAccount(db, st.user_id, { platform: 'youtube', connector_key: 'youtube', account_name: yt.channelTitle, external_account_id: yt.channelId, external_account_name: yt.channelTitle,
         handle: yt.customUrl ?? null, profile_url: `https://www.youtube.com/channel/${yt.channelId}`, capabilities: { publish: true } }, JSON.stringify({ refresh_token: yt.refreshToken }));
       await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'youtube').eq('status', 'waiting_connection');
+      await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect', p_entity_type: 'social_accounts', p_entity_id: yt.channelId, p_summary: `Bağlandı: YouTube ${yt.channelTitle}` });
       return back('connected=youtube');
     }
     return back('oauth_error=unknown_provider');
   } catch (e) {
+    await db.rpc('write_audit_service', { p_actor: st.user_id, p_action: 'connect_failed', p_entity_type: 'social_accounts', p_entity_id: st.provider, p_summary: `Bağlantı hatası (${st.provider}): ${String((e as Error).message).slice(0, 160)}` });
     return back('oauth_error=' + encodeURIComponent(String((e as Error).message).slice(0, 200)));
   }
 }
@@ -326,7 +333,7 @@ async function api(db: Db, req: Request) {
 
     case 'sync_metrics': { await requireUser(db, req); return syncMetrics(db, 5, body.publication_id); }
 
-    case 'oauth_start': { const u = await requireUser(db, req, 'admin'); return oauthStart(db, u.userId, String(body.provider), body.return_to); }
+    case 'oauth_start': { const u = await requireUser(db, req, 'admin'); return oauthStart(db, u.userId, String(body.provider), body.return_to, body.switch_account === true); }
 
     case 'disconnect': {
       const u = await requireUser(db, req, 'admin');
