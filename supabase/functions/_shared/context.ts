@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { budgetBlock, recordUsage } from './ai/budget.ts';
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
 import type { AgentConfig } from './ai/index.ts';
-import { getAiKey } from './ai/keys.ts';
+import { COMPAT, getAiKey } from './ai/keys.ts';
 
 export type Db = SupabaseClient;
 
@@ -63,6 +63,7 @@ export async function loadAgent(db: Db, agentId: string | null, fallbackKey = 'c
     if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-sonnet-5' };
     if (agent.provider !== 'gemini' && (await getAiKey('gemini'))) return { ...agent, provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest' };
     if (agent.provider !== 'groq' && (await getAiKey('groq'))) return { ...agent, provider: 'groq', model: Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile' };
+    for (const p of ['openrouter', 'github'] as const) if (agent.provider !== p && (await getAiKey(p))) return { ...agent, provider: p, model: COMPAT[p].agentModel };
   }
   return agent;
 }

@@ -7,11 +7,13 @@ import { fmtDateTime } from '../lib/format';
 import { useSession } from '../session';
 import { Button, Notice, Panel, Pill } from '../ui';
 
-interface KeyRow { provider: 'anthropic' | 'gemini' | 'openai' | 'groq'; last4: string; updated_at: string; verified_at: string | null; verify_error: string | null }
+interface KeyRow { provider: 'anthropic' | 'gemini' | 'openai' | 'groq' | 'openrouter' | 'github'; last4: string; updated_at: string; verified_at: string | null; verify_error: string | null }
 const PROVIDERS = [
   { id: 'anthropic' as const, name: 'Anthropic Claude', note: 'Varsayılan. Web araması ve sayfa okuma ile en iyi araştırma.', url: 'https://console.anthropic.com/settings/keys', prefix: 'sk-ant-' },
   { id: 'gemini' as const, name: 'Google Gemini', note: 'ÜCRETSİZ (kart gerekmez, günlük sınırlı). Google arama ile araştırır. Claude çalışmazsa otomatik devreye girer.', url: 'https://aistudio.google.com/app/apikey', prefix: '' },
   { id: 'groq' as const, name: 'Groq (Llama)', note: 'ÜCRETSİZ yedek (kart gerekmez, e-posta ile üyelik). Web araması yapabilir. Claude ve Gemini çalışmazsa devreye girer.', url: 'https://console.groq.com/keys', prefix: 'gsk_' },
+  { id: 'openrouter' as const, name: 'OpenRouter (ücretsiz modeller)', note: 'ÜCRETSİZ (kart gerekmez, Google ile giriş). İnternette arama yapmaz; hedef linkli görevlerde ve içerik yazımında kullanılır.', url: 'https://openrouter.ai/settings/keys', prefix: 'sk-or-' },
+  { id: 'github' as const, name: 'GitHub Models', note: 'ÜCRETSİZ (GitHub hesabıyla, günlük sınırlı). İnternette arama yapmaz; içerik yazımı ve hedef linkli görevler için.', url: 'https://github.com/settings/personal-access-tokens/new', prefix: 'github_pat_' },
   { id: 'openai' as const, name: 'OpenAI GPT-4o', note: 'Alternatif sağlayıcı (Yedek analitik ve içerik motoru).', url: 'https://platform.openai.com/api-keys', prefix: 'sk-' },
 ];
 
@@ -20,10 +22,10 @@ export function AiKeysPanel({ compact = false }: { compact?: boolean }) {
   const q = useQuery(async () => {
     const [{ data }, env] = await Promise.all([
       db().from('ai_provider_keys').select('provider,last4,updated_at,verified_at,verify_error'),
-      callMissions<{ anthropic: boolean; gemini: boolean; openai: boolean; groq?: boolean }>('ai_status').catch(() => null),
+      callMissions<Record<string, boolean>>('ai_status').catch(() => null),
     ]);
     return { rows: (data ?? []) as KeyRow[], active: env };
-  }, { rows: [] as KeyRow[], active: null as { anthropic: boolean; gemini: boolean; openai: boolean; groq?: boolean } | null }, []);
+  }, { rows: [] as KeyRow[], active: null as Record<string, boolean> | null }, []);
   const [val, setVal] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);

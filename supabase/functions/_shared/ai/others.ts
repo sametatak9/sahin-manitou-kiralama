@@ -1,6 +1,6 @@
 // OpenAI ve Gemini adaptörleri (resmi REST uçları). Anahtar yoksa CONFIGURATION_REQUIRED.
 import { ConfigurationRequiredError, extractJson } from './types.ts';
-import { getAiKey, GROQ_URL, type KeyProvider } from './keys.ts';
+import { COMPAT, getAiKey, type KeyProvider } from './keys.ts';
 import type { AgentConfig, AgentRunInput, AgentRunResult, AIProvider, CompleteInput, CompleteResult } from './types.ts';
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown) {
@@ -12,7 +12,7 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
 
 // ── OpenAI (Chat Completions + function calling) ─────────────────────────────
 /** OpenAI ve OpenAI uyumlu sağlayıcılar (Groq) için ortak adaptör. */
-function openAiCompatible(name: 'openai' | 'groq', url: string, envName: string): AIProvider {
+function openAiCompatible(name: 'openai' | 'groq' | 'openrouter' | 'github', url: string, envName: string): AIProvider {
   const openaiKey = async () => {
     const k = await getAiKey(name as KeyProvider);
     if (!k) throw new ConfigurationRequiredError(envName);
@@ -59,8 +59,10 @@ function openAiCompatible(name: 'openai' | 'groq', url: string, envName: string)
 };
 }
 
-export const openaiProvider = openAiCompatible('openai', 'https://api.openai.com/v1/chat/completions', 'OPENAI_API_KEY');
-export const groqProvider = openAiCompatible('groq', GROQ_URL, 'GROQ_API_KEY');
+export const openaiProvider = openAiCompatible('openai', COMPAT.openai.url, 'OPENAI_API_KEY');
+export const groqProvider = openAiCompatible('groq', COMPAT.groq.url, 'GROQ_API_KEY');
+export const openrouterProvider = openAiCompatible('openrouter', COMPAT.openrouter.url, 'OPENROUTER_API_KEY');
+export const githubProvider = openAiCompatible('github', COMPAT.github.url, 'GITHUB_MODELS_TOKEN');
 
 // ── Google Gemini (generateContent + functionDeclarations) ──────────────────
 async function geminiKey() {
@@ -69,6 +71,11 @@ async function geminiKey() {
   return k;
 }
 const geminiUrl = (model: string) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+/** Ana model yoğunsa (503) hafif modelle bir kez daha dener. */
+async function geminiPost(model: string, key: string, body: unknown) {
+  try { return await postJson(geminiUrl(model), { 'x-goog-api-key': key }, body); }
+  catch (e) { if (/^503:/.test(String((e as Error).message)) && model !== 'gemini-flash-lite-latest') return await postJson(geminiUrl('gemini-flash-lite-latest'), { 'x-goog-api-key': key }, body); throw e; }
+}
 
 export const geminiProvider: AIProvider = {
   name: 'gemini',
@@ -78,7 +85,7 @@ export const geminiProvider: AIProvider = {
       contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
       generationConfig: { temperature: agent.temperature, maxOutputTokens: agent.max_tokens, ...(input.schema ? { responseMimeType: 'application/json' } : {}) },
     };
-    const data = await postJson(geminiUrl(agent.model), { 'x-goog-api-key': await geminiKey() }, body);
+    const data = await geminiPost(agent.model, await geminiKey(), body);
     // deno-lint-ignore no-explicit-any
     const text = (data.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('');
     return { text, json: input.schema ? extractJson(text) : null, usage: { tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0 }, stopReason: data.candidates?.[0]?.finishReason ?? '' };
@@ -92,7 +99,7 @@ export const geminiProvider: AIProvider = {
     let turns = 0; let toolCalls = 0; let finalText = ''; let stopReason = '';
     while (turns < input.maxTurns) {
       turns++;
-      const data = await postJson(geminiUrl(agent.model), { 'x-goog-api-key': key }, { systemInstruction: { parts: [{ text: input.system }] }, contents, tools, generationConfig: { temperature: agent.temperature, maxOutputTokens: agent.max_tokens } });
+      const data = await geminiPost(agent.model, key, { systemInstruction: { parts: [{ text: input.system }] }, contents, tools, generationConfig: { temperature: agent.temperature, maxOutputTokens: agent.max_tokens } });
       usage.tokensIn += data.usageMetadata?.promptTokenCount ?? 0; usage.tokensOut += data.usageMetadata?.candidatesTokenCount ?? 0;
       const content = data.candidates?.[0]?.content; stopReason = data.candidates?.[0]?.finishReason ?? '';
       if (!content) break;

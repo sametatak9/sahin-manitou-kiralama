@@ -41,7 +41,9 @@ export async function budgetBlock(db: SupabaseClient, missionCost?: number): Pro
 }
 
 export async function recordUsage(db: SupabaseClient, row: { source: 'mission' | 'agent' | 'generate' | 'test'; ref_id?: string | null; provider?: string | null; model?: string | null; tokens_in: number; tokens_out: number; searches?: number }) {
-  const cost = estimateCost(row.model, row.tokens_in, row.tokens_out, row.searches ?? 0);
+  // Ücretsiz katmanlar (GitHub Models, OpenRouter ':free' modelleri) para yazmaz
+  const free = row.provider === 'github' || (row.provider === 'openrouter' && /:free$/.test(row.model || ''));
+  const cost = free ? 0 : estimateCost(row.model, row.tokens_in, row.tokens_out, row.searches ?? 0);
   await db.from('ai_usage').insert({ ...row, searches: row.searches ?? 0, cost_usd: cost });
   return cost;
 }

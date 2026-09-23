@@ -135,13 +135,16 @@ async function api(c: Db, req: Request) {
 
     case 'ai_test': {
       await requireUser(c, req, 'admin');
-      const p = String(body.provider || 'anthropic') as KeyProvider;
+      let p = String(body.provider || 'anthropic') as KeyProvider;
+      // Panelde OpenAI/Gemini kutusuna başka sağlayıcının anahtarı yapıştırıldıysa (sistem ön ekten tanıyıp doğru yere kaydeder) onu test et
+      const { data: latest } = await c.from('ai_provider_keys').select('provider,updated_at').order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      if (latest && latest.provider !== p && ['groq', 'openrouter', 'github'].includes(latest.provider) && Date.now() - new Date(latest.updated_at).getTime() < 180_000) p = latest.provider as KeyProvider;
       const key = await getAiKey(p);
       if (!key) throw new HttpError(409, 'Anahtar tanımlı değil', 'CONFIGURATION_REQUIRED');
       const t = await liveKeyTest(p, key);
       await markAiKey(p, t.ok, t.ok ? undefined : t.detail);
       if (!t.ok) throw new HttpError(400, `Anahtar kaydedildi ama çalışmıyor — ${t.detail}`, 'INVALID_KEY');
-      return { provider: p, ok: true };
+      return { provider: p, ok: true, detail: p === 'openrouter' ? 'OpenRouter (ücretsiz) anahtarı olarak kaydedildi' : p === 'github' ? 'GitHub Models (ücretsiz) anahtarı olarak kaydedildi' : p === 'groq' ? 'Groq (ücretsiz) anahtarı olarak kaydedildi' : undefined };
     }
 
     default: throw new HttpError(400, `Bilinmeyen işlem: ${action}`);

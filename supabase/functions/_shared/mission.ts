@@ -4,7 +4,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 import { budgetBlock, recordUsage } from './ai/budget.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, extractJson } from './ai/types.ts';
-import { getAiKey, GROQ_URL } from './ai/keys.ts';
+import { COMPAT, getAiKey, GROQ_URL } from './ai/keys.ts';
 
 type Db = SupabaseClient;
 
@@ -138,7 +138,7 @@ export const ERROR_KIND: Record<string, string> = {
 };
 
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
-interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq'; model: string; system: string; key: string }
+interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq' | 'openrouter' | 'github'; model: string; system: string; key: string }
 async function chooseAi(db: Db, botId: string | null, preferred?: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
   if (botId) {
@@ -153,6 +153,7 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
   if (gk) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base, key: gk };
   const qk = await getAiKey('groq');
   if (qk) return { provider: 'groq', model: GROQ_RESEARCH_MODEL(), system: base, key: qk };
+  for (const p of ['openrouter', 'github'] as const) { const k = await getAiKey(p); if (k) return { provider: p, model: COMPAT[p].agentModel, system: base, key: k }; }
   return null;
 }
 
@@ -197,22 +198,42 @@ async function anthropicResearch(key: string, model: string, system: string, pro
   return { text, sources, tokensIn, tokensOut, searches, toolErrors, model, provider: 'anthropic' };
 }
 
-async function geminiResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
-  if (!key) throw new ConfigurationRequiredError('GEMINI_API_KEY');
+/** Ücretsiz Gemini planında Google arama kotası 0 olabilir: bir kez 429 alınca 1 saat aramasız çalışılır (boşa istek atılmaz). */
+let geminiSearchOffUntil = 0;
+const GEMINI_LITE = 'gemini-flash-lite-latest';
+
+async function geminiOnce(key: string, model: string, system: string, prompt: string, withSearch: boolean) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 4000 } }),
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: withSearch ? system : `${system}\n\nNOT: Bu adımda internet araması kullanılamıyor. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen bulgu yazma.` }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }], ...(withSearch ? { tools: [{ google_search: {} }] } : {}), generationConfig: { maxOutputTokens: 4000 } }),
   });
   const data = await res.json().catch(() => ({}));
+  return { res, data, detail: JSON.stringify(data).slice(0, 300) };
+}
+
+async function geminiResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+  if (!key) throw new ConfigurationRequiredError('GEMINI_API_KEY');
+  let withSearch = Date.now() > geminiSearchOffUntil;
+  let m = model;
+  let r = await geminiOnce(key, m, system, prompt, withSearch);
+  for (let i = 0; i < 3 && !r.res.ok; i++) {
+    if (r.res.status === 503 && m !== GEMINI_LITE) { m = GEMINI_LITE; }                     // ana model yoğun → hafif model
+    else if (r.res.status === 429 && withSearch) { withSearch = false; geminiSearchOffUntil = Date.now() + 3600_000; } // arama kotası yok → aramasız
+    else break;
+    r = await geminiOnce(key, m, system, prompt, withSearch);
+  }
+  const { res, data, detail } = r;
   if (!res.ok) {
-    const detail = JSON.stringify(data).slice(0, 300);
     if (res.status === 401 || res.status === 403 || /API_KEY_INVALID|API key not valid/i.test(detail)) {
       const why = /leaked/i.test(detail) ? 'anahtar sızdırılmış olarak işaretlenmiş — yeni anahtar alın'
+        : /denied access/i.test(detail) ? 'Google bu anahtarın projesini engellemiş — farklı Gmail ile yeni anahtar alın'
         : /SERVICE_DISABLED|has not been used|is disabled/i.test(detail) ? 'projede Generative Language API kapalı'
         : /API_KEY_INVALID|not valid/i.test(detail) ? 'anahtar geçersiz' : /referer|referrer|ip address|restrict/i.test(detail) ? 'anahtara kısıtlama konmuş (web sitesi/IP)' : detail.slice(0, 120);
       throw new AiFatalError('ai_auth', `Gemini anahtarı reddedildi (${res.status}: ${why})`);
     }
-    if (res.status === 429 && /quota|billing/i.test(detail)) throw new AiFatalError('ai_credit', 'Gemini kotası / bakiyesi bitti');
+    if (res.status === 429) throw new AiFatalError('ai_credit', 'Gemini ücretsiz günlük/dakikalık kotası doldu — biraz sonra tekrar dener');
+    if (res.status === 503) throw new Error('Gemini şu an yoğun (503) — sonraki adımda tekrar denenecek');
     throw new Error(`Gemini ${res.status}: ${detail}`);
   }
   const cand = data.candidates?.[0];
@@ -220,7 +241,8 @@ async function geminiResearch(key: string, model: string, system: string, prompt
   const text = (cand?.content?.parts || []).map((p: any) => p.text || '').join('');
   // deno-lint-ignore no-explicit-any
   const sources: Source[] = (cand?.groundingMetadata?.groundingChunks || []).map((c: any) => ({ url: c.web?.uri, title: c.web?.title })).filter((s: Source) => s.url);
-  return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0, searches: data.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length ?? 0, model, provider: 'gemini' };
+  return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0,
+    searches: cand?.groundingMetadata?.webSearchQueries?.length ?? 0, model: m, provider: 'gemini', toolErrors: withSearch ? [] : ['arama: ücretsiz Gemini planında Google arama kotası yok — aramasız çalışıldı'] };
 }
 
 const GROQ_RESEARCH_MODEL = () => Deno.env.get('GROQ_MODEL') || 'groq/compound';
@@ -250,21 +272,40 @@ async function groqResearch(key: string, model: string, system: string, prompt: 
     searches: tools.filter((t) => /search/i.test(String(t?.type ?? t?.name ?? ''))).length, model, provider: 'groq' };
 }
 
-const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', groq: 'Groq' };
+/** OpenRouter / GitHub Models: web araması yoktur — yalnızca görevdeki hedef sayfa içeriği ve verilen bilgilerle çalışır. */
+async function compatResearch(provider: 'openrouter' | 'github', key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+  const res = await fetch(COMPAT[provider].url, {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, max_tokens: 3000, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: prompt }] }),
+  });
+  const data = await res.json().catch(() => ({}));
+  const label = provider === 'github' ? 'GitHub Models' : 'OpenRouter';
+  if (!res.ok) {
+    const detail = JSON.stringify(data).slice(0, 300);
+    if (res.status === 401 || res.status === 403) throw new AiFatalError('ai_auth', `${label} anahtarı reddedildi (${res.status})`);
+    if (res.status === 429 || res.status === 402) throw new AiFatalError('ai_credit', `${label} ücretsiz kullanım sınırı doldu — daha sonra tekrar dener`);
+    throw new Error(`${label} ${res.status}: ${detail}`);
+  }
+  return { text: String(data.choices?.[0]?.message?.content ?? ''), sources: [], tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0, searches: 0, model, provider };
+}
+
+const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', github: 'GitHub Models' };
 function research(provider: string, key: string, model: string, system: string, prompt: string) {
   if (provider === 'anthropic') return anthropicResearch(key, model, system, prompt);
   if (provider === 'gemini') return geminiResearch(key, model, system, prompt);
+  if (provider === 'openrouter' || provider === 'github') return compatResearch(provider, key, model, system, prompt);
   return groqResearch(key, model, system, prompt);
 }
-const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p === 'gemini' ? (Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest') : GROQ_RESEARCH_MODEL());
+const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p === 'gemini' ? (Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest')
+  : p === 'openrouter' || p === 'github' ? COMPAT[p].agentModel : GROQ_RESEARCH_MODEL());
 
 /** Sırayla dener: seçilen sağlayıcı → diğerleri (Claude, Gemini, Groq). Kredi/anahtar/limit hatasında bir sonrakine geçer. */
 async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
-  const chain = [c.provider, ...['anthropic', 'gemini', 'groq'].filter((p) => p !== c.provider)];
+  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'openrouter', 'github'].filter((p) => p !== c.provider)];
   const errors: string[] = [];
   let firstErr: unknown = null; let prev: string = c.provider;
   for (const p of chain) {
-    const key = p === c.provider ? c.key : await getAiKey(p as 'anthropic' | 'gemini' | 'groq');
+    const key = p === c.provider ? c.key : await getAiKey(p as 'anthropic' | 'gemini' | 'groq' | 'openrouter' | 'github');
     if (!key) continue;
     if (p !== c.provider) {
       if (!isQuotaOrRateLimit(firstErr)) break; // ilk hata kredi/anahtar/limit değilse yedeğe geçme
