@@ -83,15 +83,17 @@ export function ConnectionsScreen() {
                       </div>
                     </div>
                   </button>
+                  {c.key === 'instagram' && c.status !== 'connected' && <p className="text-[11px] text-ink-400">Not: Instagram yalnızca <b>profesyonel hesap</b> (İşletme veya İçerik üreticisi) ile ve bir Facebook sayfasına bağlıyken otomatik paylaşıma izin verir. Kişisel hesap: Instagram → Ayarlar → Hesap türü → Profesyonel hesaba geç (ücretsiz).</p>}
                   {c.missing_env.length > 0 && c.implemented && <button type="button" onClick={() => go('system', null, { tab: 'credentials' })} className="text-left text-[11px] text-amber-700 underline">Bağlanmak için giriş bilgileri eksik — tamamla</button>}
                   {connectedAcc.map((a) => (
                     <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-950 px-2.5 py-1.5 text-[11px]">
                       <span className="text-ink-200 truncate">✓ {a.external_account_name ?? a.platform}<span className="text-ink-500"> · bağlı</span></span>
-                      {session.role === 'admin' && <button onClick={() => disconnect(a.id)} className="text-ink-500 hover:text-rose-700" title="Bağlantıyı kes">{busy === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unplug className="w-3.5 h-3.5" />}</button>}
+                      {session.role === 'admin' && <button onClick={() => { if (window.confirm(`${c.name} hesabından çıkış yapılsın mı? Botlar bu hesabı kullanamaz hale gelir.`)) disconnect(a.id); }} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{busy === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unplug className="w-3.5 h-3.5" />}Çıkış yap</button>}
                     </div>
                   ))}
                   <div className="mt-auto flex flex-wrap gap-2">
-                    {canOauth && session.role === 'admin' && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy === c.key} disabled={c.missing_env.length > 0} onClick={() => connect(c)} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : 'Hesabımla bağla'}</Button>}
+                    {canOauth && session.role === 'admin' && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy === c.key}
+                      onClick={() => (c.missing_env.length ? (window.scrollTo({ top: 0, behavior: 'smooth' }), setMsg({ tone: 'warn', text: `${c.name} bağlantısı için önce ${c.key === 'youtube' ? 'Google' : c.key === 'canva' ? 'Canva' : 'Meta (Facebook geliştirici)'} uygulama bilgileri girilmeli. Bağlantı & Sistem → Giriş bilgileri ekranında adım adım anlatılıyor.` })) : connect(c))} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : 'Hesabımla bağla'}</Button>}
                     {appUrl(c.key) && <Button variant={c.status === 'connected' ? 'primary' : 'subtle'} onClick={() => openApp(c.key)} icon={<Smartphone className="w-4 h-4" />}>Uygulamayı aç</Button>}
                     {c.key === 'telegram' && c.status === 'connected' && session.role === 'admin' && <Button variant="subtle" loading={busy === 'tg'} onClick={testTelegram} icon={<Send className="w-4 h-4" />}>Test mesajı</Button>}
                     <Button variant="subtle" onClick={() => setDetail(c.key)} icon={<LayoutGrid className="w-4 h-4" />}>Botlar & geçmiş</Button>

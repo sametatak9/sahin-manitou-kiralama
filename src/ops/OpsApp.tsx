@@ -3,6 +3,23 @@ import { OpsShell } from './Shell';
 import { RouterProvider, SessionContext, useRouter, type OpsSession } from './session';
 import { StateView } from './ui';
 import { HomeScreen } from './screens/Home';
+import { ErrorBoundary, reloadOnceForNewVersion } from './ErrorBoundary';
+
+// Eski sürüm dosyası yüklenemezse (yeni yayın sonrası) bir kez yenile
+if (typeof window !== 'undefined') window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnceForNewVersion(); });
+// Sayfa sorunsuz açıldıysa otomatik-yenileme hakkını sıfırla
+if (typeof window !== 'undefined') setTimeout(() => { try { sessionStorage.removeItem('ops-reloaded'); } catch { /* yok */ } }, 15_000);
+
+function RoutedBoundary() {
+  const { state } = useRouter();
+  return (
+    <ErrorBoundary resetKey={state.route}>
+      <Suspense fallback={<StateView kind="loading" />}>
+        <Screens />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
 
 const ApprovalsScreen = lazy(() => import('./screens/Approvals').then((m) => ({ default: m.ApprovalsScreen })));
 const BotsScreen = lazy(() => import('./screens/Bots').then((m) => ({ default: m.BotsScreen })));
@@ -46,9 +63,7 @@ export function OpsApp({ session, onLogout }: { session: OpsSession; onLogout: (
     <SessionContext.Provider value={session}>
       <RouterProvider>
         <OpsShell onLogout={onLogout}>
-          <Suspense fallback={<StateView kind="loading" />}>
-            <Screens />
-          </Suspense>
+          <RoutedBoundary />
         </OpsShell>
       </RouterProvider>
     </SessionContext.Provider>

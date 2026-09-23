@@ -83,6 +83,7 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
           <FlaskConical className="w-5 h-5 text-brand-green shrink-0" />
           <span className="text-xs text-ink-200"><b className="text-ink-100">1 dakikalık test görevi</b> — “3 ürün seç ve isimlerini yaz”. Formu doldurur; başlatınca sistemin uçtan uca çalıştığını görürsünüz.</span>
         </button>
+        {/(bağlan|baglan|giriş yap|giris yap|hesab[ıi] bağla|kurulum|sayfa kur|login|şifre)/i.test(`${f.title} ${f.goal}`) && <Notice tone="warn">Bu bir <b>araştırma görevi</b> ekranı: botlar internette araştırıp rapor hazırlar, hesaplara giriş yapmaz. Instagram/Facebook/YouTube hesabınızı bağlamak için <a className="underline font-semibold" href="?ops=connections">Uygulamalar → Hesabımla bağla</a>’yı kullanın.</Notice>}
         {noAi && <Notice tone="warn">AI anahtarı tanımlı değil: bot yalnızca verdiğiniz linki ve aynı sitedeki sayfaları tarar, web araması yapamaz. <a className="underline font-semibold" href="?ops=settings&tab=ai">Ayarlar → AI anahtarı</a> bölümüne anahtarı yapıştırmanız yeterli.</Notice>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Bot"><select className="ops-input" value={f.bot_id} onChange={(e) => setF({ ...f, bot_id: e.target.value })}>

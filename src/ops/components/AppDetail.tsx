@@ -44,7 +44,7 @@ export function AppDetail({ c, allBots, onClose, onConnect, canConnect, busy }: 
   return (
     <Modal open wide onClose={onClose} title={<span className="inline-flex items-center gap-2"><PlatformBadge platform={c.key} /> {c.name}</span>}
       footer={<>
-        {canConnect && onConnect && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy} disabled={c.missing_env.length > 0} onClick={onConnect} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : `${c.name} hesabıyla giriş yap`}</Button>}
+        {canConnect && onConnect && <Button variant={c.status === 'connected' ? 'subtle' : 'primary'} loading={busy} onClick={() => (c.missing_env.length ? (onClose(), go('system', null, { tab: 'credentials' })) : onConnect())} icon={<PlugZap className="w-4 h-4" />}>{c.status === 'connected' ? 'Yeniden bağla' : `${c.name} hesabıyla giriş yap`}</Button>}
         {appUrl(c.key) && <Button variant="ghost" onClick={() => openApp(c.key)} icon={<Smartphone className="w-4 h-4" />}>Uygulamayı aç</Button>}
         <Button variant="primary" onClick={() => setLaunch(true)} icon={<Target className="w-4 h-4" />}>Bu uygulama için görev ver</Button>
         <Button variant="ghost" onClick={onClose}>Kapat</Button></>}>

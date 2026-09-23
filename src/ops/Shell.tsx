@@ -160,6 +160,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               ))}
             </div>
 
+            <button type="button" onClick={() => { setDrawer(false); onLogout(); }} className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-2xl ring-1 ring-rose-200 bg-rose-50 text-rose-700 py-2.5 text-sm font-semibold"><LogOut className="w-4 h-4" />Programdan çıkış yap</button>
             <div className="pt-3 border-t border-ink-800 flex items-center justify-between text-xs text-ink-400">
               <span>Resmi Destek Hattı:</span>
               <a href="tel:05314362904" className="font-mono text-brand-green font-semibold hover:underline">
