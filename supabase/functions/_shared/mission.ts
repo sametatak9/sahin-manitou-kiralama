@@ -10,7 +10,7 @@ type Db = SupabaseClient;
 export interface MissionRow {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: string; finish_reason: string | null; started_at: string; deadline_at: string;
-  finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null;
+  finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null; schedule_id?: string | null;
   findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null;
 }
 export interface Finding {
@@ -297,8 +297,16 @@ export async function stepMission(db: Db, m: MissionRow) {
   let stopMet = false; let stopReason = '';
   const terms = searchTerms(m.search_for);
   let stepFailed = false;
+  // Otomatik (zamanlanmış) görev: önceki günlerde raporlanan kayıtları tekrar raporlama
+  const seenBefore = new Set<string>();
+  if (m.schedule_id) {
+    const { data: prev } = await db.from('bot_missions').select('findings').eq('schedule_id', m.schedule_id).neq('id', m.id)
+      .gte('created_at', new Date(Date.now() - 45 * 86400_000).toISOString()).order('created_at', { ascending: false }).limit(30);
+    for (const p of prev || []) for (const f of (p.findings || []) as Finding[]) if (f.url) seenBefore.add(canonical(f.url));
+  }
   const addFinding = (f: Omit<Finding, 'at' | 'step'>) => {
     if (!f.url || !f.title) return false;
+    if (seenBefore.has(canonical(f.url))) return false;
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
     findings.push({ ...f, at: new Date().toISOString(), step }); return true;
   };
@@ -328,6 +336,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         ctx.text ? `BOT PROFİLİ VE YETENEKLERİ:\n${ctx.text}` : '',
         `Adım ${step} / en fazla ${m.max_steps}. Kalan süre ≈ ${remainingMin} dk.`,
         pageNote ? `HEDEF SAYFANIN GERÇEK İÇERİĞİ (sunucu tarafında çekildi):\n${pageNote}` : '',
+        seenBefore.size ? `DAHA ÖNCEKİ GÜNLERDE RAPORLANMIŞ KAYITLAR (bunları tekrar verme, yalnızca YENİ olanları bul):\n${[...seenBefore].slice(0, 60).join('\n')}` : '',
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,

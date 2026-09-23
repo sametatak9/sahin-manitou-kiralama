@@ -55,8 +55,14 @@ async function api(c: Db, req: Request) {
         if (bot.status === 'archived' || bot.status === 'paused') throw new HttpError(409, `Bot ${bot.status === 'paused' ? 'duraklatılmış' : 'arşivlenmiş'}`);
       }
       const model = ALLOWED_MODELS.includes(String(body.model)) ? String(body.model) : null;
+      let schedule_id: string | null = null;
+      if (body.schedule_id) {
+        const { data: sch } = await c.from('mission_schedules').select('id').eq('id', body.schedule_id).maybeSingle();
+        if (!sch) throw new HttpError(404, 'Otomatik görev bulunamadı');
+        schedule_id = sch.id;
+      }
       const now = Date.now();
-      const { data: m, error } = await c.from('bot_missions').insert({ model,
+      const { data: m, error } = await c.from('bot_missions').insert({ model, schedule_id,
         bot_id: body.bot_id || null, title: title.slice(0, 200), goal: goal.slice(0, 4000), target_url: target || null,
         search_for: String(body.search_for || '').trim().slice(0, 1000) || null, report_spec: String(body.report_spec || '').trim().slice(0, 1000) || null,
         stop_condition: String(body.stop_condition || '').trim().slice(0, 1000) || null, duration_minutes: minutes,
@@ -65,6 +71,7 @@ async function api(c: Db, req: Request) {
       }).select('*').single();
       if (error) throw error;
       await audit(c, u.userId, 'mission_start', 'bot_missions', m.id, `Görev başlatıldı: ${m.title}`);
+      if (schedule_id) await c.from('mission_schedules').update({ last_mission_id: m.id }).eq('id', schedule_id);
       await background(stepMission(c, m as MissionRow).catch((e) => c.from('bot_missions').update({ locked_until: null, error: String(e).slice(0, 500) }).eq('id', m.id)));
       return { mission_id: m.id, deadline_at: m.deadline_at };
     }
