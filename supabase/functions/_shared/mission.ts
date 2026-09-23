@@ -447,9 +447,9 @@ export async function stepMission(db: Db, m: MissionRow) {
           company: opt(f.company), location: opt(f.location), posted: opt(f.posted, 60), phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300) })) added++;
       }
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
-      await logStep(db, m, step, 'ai_research', `${ai.provider}/${ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
+      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
         null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
-      await db.from('bot_missions').update({ provider: ai.provider, model: ai.model }).eq('id', m.id);
+      await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
     } catch (e) {
       if (!(e instanceof AiFatalError) || !m.target_url) throw e;
       m.error_kind = e.kind;
