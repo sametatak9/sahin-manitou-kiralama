@@ -12,7 +12,7 @@ import { FINISH_REASON, MISSION_STATUS, MissionDetail, MissionLauncher } from '.
 const DOMAINS: Record<string, string[]> = {
   instagram: ['instagram.com'], facebook: ['facebook.com', 'fb.com'], linkedin: ['linkedin.com'], x: ['x.com', 'twitter.com'], tiktok: ['tiktok.com'],
   youtube: ['youtube.com', 'youtu.be'], google_business: ['google.com/maps', 'g.page', 'business.google.com'], sahibinden: ['sahibinden.com'], armut: ['armut.com'],
-  whatsapp_cloud: ['wa.me', 'whatsapp.com'], telegram: ['t.me', 'telegram.org'], canva: ['canva.com'], website: [],
+  whatsapp: ['wa.me', 'whatsapp.com'], telegram: ['t.me', 'telegram.org'], canva: ['canva.com'], website: [],
 };
 
 interface AppData { bots: Bot[]; tasks: Task[]; runs: Run[]; missions: Mission[]; drafts: Draft[]; published: number; failed: number }
@@ -56,6 +56,18 @@ export function AppDetail({ c, allBots, onClose, onConnect, canConnect, busy }: 
           <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">GÖREVLİ BOT</div><div className="text-lg font-display font-semibold text-ink-100">{bots.length}</div></div>
           <div className="rounded-xl bg-ink-800 p-3"><div className="text-[10px] font-mono text-ink-500">PAYLAŞIMLAR</div><div className="text-ink-100"><b>{q.data.published}</b> başarılı · <span className={q.data.failed ? 'text-rose-700' : ''}>{q.data.failed} hatalı</span></div></div>
         </div>
+        {c.status === 'connected' && <div className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 text-xs text-ink-200 space-y-1">
+          <div className="font-semibold text-emerald-800">Bağlantıdan sonra ne olur?</div>
+          <ol className="list-decimal pl-4 space-y-0.5">
+            <li>{c.name} hesabı bu programda kalıcı kayıtlı; oturum yenilemesini sistem kendisi yapar.</li>
+            <li>{c.name}’a atanmış botlar “aktif” oldu{bots.length ? ` (${bots.map((b) => b.name).join(', ')})` : ''}.</li>
+            {c.capabilities.publish && <li><b>Yayın Kuyruğu</b>’na eklediğiniz gönderiler seçtiğiniz saatte bu hesaptan otomatik paylaşılır; sonuç ve link burada görünür.</li>}
+            {c.capabilities.metrics && <li>Paylaşımların erişim/etkileşim sayıları 6 saatte bir otomatik çekilir.</li>}
+            <li>Oturum süresi dolarsa veya hata olursa Sistem kontrolü ekranında uyarı çıkar; “Yeniden bağla” yeterli.</li>
+            <li>İstediğiniz an “Çıkış yap” ile bağlantıyı kesebilirsiniz; botlar bekleme moduna geçer.</li>
+          </ol>
+          {c.capabilities.publish && <button type="button" onClick={() => { onClose(); go('queue'); }} className="mt-1 underline font-semibold text-emerald-800">Yayın Kuyruğu’na git →</button>}
+        </div>}
         {c.status !== 'connected' && <div className="rounded-xl bg-amber-500/10 ring-1 ring-amber-400/30 p-3 text-xs text-amber-800">
           {c.missing_env.length ? <>Bağlanmak için önce <button className="underline font-semibold" onClick={() => { onClose(); go('system', null, { tab: 'credentials' }); }}>Bağlantı & Sistem → Giriş bilgileri</button> bölümüne {c.name} uygulama bilgileri girilmeli. Sonra “{c.name} hesabıyla giriş yap” butonu {c.name}’un kendi giriş ekranını açar; bir kez giriş yaparsınız, şifreniz programda tutulmaz.</>
             : c.implemented ? <>Hesap bağlı değil. “{c.name} hesabıyla giriş yap” ile {c.name}’un giriş ekranı açılır; bir kez izin verdiğinizde botlar bu hesabı programın içinden kullanır.</>

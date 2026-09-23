@@ -158,23 +158,35 @@ async function systemCheck(db: Db) {
 }
 
 // ── OAuth ───────────────────────────────────────────────────────────────────
-async function oauthStart(db: Db, userId: string, provider: string) {
+/** Bağlantı sonrası dönülecek panel adresi: yalnızca bizim panel adreslerimize izin verilir (açık yönlendirme yok). */
+function safeReturnTo(raw: unknown): string | null {
+  try {
+    const u = new URL(String(raw || ''));
+    const host = u.hostname;
+    const ok = (u.protocol === 'https:' && (host === 'embay-panel.vercel.app' || /^(embay-panel|sahin-manitou-kiralama)(-[a-z0-9-]+)?\.vercel\.app$/.test(host) || host === new URL(PANEL_URL()).hostname))
+      || (u.protocol === 'http:' && (host === 'localhost' || host === '127.0.0.1'));
+    return ok ? `${u.origin}${u.pathname}` : null;
+  } catch { return null; }
+}
+
+async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown) {
   const def = connectorByKey(provider === 'meta' ? 'instagram' : provider === 'google' ? 'youtube' : provider);
   if (!def) throw new HttpError(400, 'Bilinmeyen sağlayıcı');
   const missing = def.requiredEnv.filter((k) => !secret(k));
   if (missing.length) throw new HttpError(409, `Yapılandırma gerekli: ${missing.join(', ')}`, 'CONFIGURATION_REQUIRED');
   const state = crypto.randomUUID().replace(/-/g, '');
+  const return_to = safeReturnTo(returnTo);
   if (provider === 'meta' || provider === 'instagram' || provider === 'facebook') {
-    await db.from('oauth_states').insert({ state, provider: 'meta', user_id: userId });
+    await db.from('oauth_states').insert({ state, provider: 'meta', user_id: userId, return_to });
     return { url: metaAuthorizeUrl(state, REDIRECT_URI()) };
   }
   if (provider === 'canva') {
     const verifier = pkceVerifier();
-    await db.from('oauth_states').insert({ state, provider: 'canva', user_id: userId, code_verifier: verifier });
+    await db.from('oauth_states').insert({ state, provider: 'canva', user_id: userId, code_verifier: verifier, return_to });
     return { url: await canvaAuthorizeUrl(state, verifier, REDIRECT_URI()) };
   }
   if (provider === 'google' || provider === 'youtube') {
-    await db.from('oauth_states').insert({ state, provider: 'google', user_id: userId });
+    await db.from('oauth_states').insert({ state, provider: 'google', user_id: userId, return_to });
     return { url: googleAuthorizeUrl(state, REDIRECT_URI()) };
   }
   throw new HttpError(409, `${def.name} için OAuth akışı henüz uygulanmadı (ENTEGRASYON BEKLİYOR)`, 'NOT_IMPLEMENTED');
@@ -190,10 +202,12 @@ async function upsertAccount(db: Db, userId: string, row: Record<string, unknown
 }
 
 async function oauthCallback(db: Db, url: URL) {
-  const back = (q: string) => Response.redirect(`${PANEL_URL()}/?ops=connections&${q}`, 302);
   const state = url.searchParams.get('state') || '';
   const code = url.searchParams.get('code');
   const { data: st } = await db.from('oauth_states').select('*').eq('state', state).maybeSingle();
+  // Kullanıcıyı bağlantıyı başlattığı panel adresine geri gönder (oturumu orada); yoksa varsayılan panel
+  const base = safeReturnTo(st?.return_to) ?? `${PANEL_URL()}/`;
+  const back = (q: string) => Response.redirect(`${base}?ops=connections&${q}`, 302);
   if (!st || new Date(st.expires_at).getTime() < Date.now()) return back('oauth_error=' + encodeURIComponent('Geçersiz veya süresi dolmuş istek'));
   await db.from('oauth_states').delete().eq('state', state);
   if (!code) return back('oauth_error=' + encodeURIComponent(url.searchParams.get('error_description') || 'İzin verilmedi'));
@@ -207,8 +221,10 @@ async function oauthCallback(db: Db, url: URL) {
         if (p.igId) await upsertAccount(db, st.user_id, { platform: 'instagram', connector_key: 'instagram', account_name: p.igUsername, handle: p.igUsername ? `@${p.igUsername}` : null,
           external_account_id: p.igId, external_account_name: p.igUsername, profile_url: p.igUsername ? `https://instagram.com/${p.igUsername}` : null, metadata: { page_id: p.pageId }, capabilities: { publish: true, metrics: true } }, p.pageToken);
       }
-      await db.from('automation_bots').update({ status: 'active' }).in('connector_key', ['instagram', 'facebook']).eq('status', 'waiting_connection');
-      return back(`connected=meta&pages=${pages.length}`);
+      const igCount = pages.filter((p) => p.igId).length;
+      await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'facebook').eq('status', 'waiting_connection');
+      if (igCount) await db.from('automation_bots').update({ status: 'active' }).eq('connector_key', 'instagram').eq('status', 'waiting_connection');
+      return back(`connected=meta&pages=${pages.length}&ig=${igCount}`);
     }
     if (st.provider === 'canva') {
       const tokens = await canvaExchange(code, st.code_verifier, REDIRECT_URI());
@@ -310,12 +326,21 @@ async function api(db: Db, req: Request) {
 
     case 'sync_metrics': { await requireUser(db, req); return syncMetrics(db, 5, body.publication_id); }
 
-    case 'oauth_start': { const u = await requireUser(db, req, 'admin'); return oauthStart(db, u.userId, String(body.provider)); }
+    case 'oauth_start': { const u = await requireUser(db, req, 'admin'); return oauthStart(db, u.userId, String(body.provider), body.return_to); }
 
     case 'disconnect': {
-      await requireUser(db, req, 'admin');
-      await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null, token_expires_at: null }).eq('id', body.account_id);
-      return { ok: true };
+      const u = await requireUser(db, req, 'admin');
+      const { data: acc } = await db.from('social_accounts').select('id,connector_key,credential_secret_id,external_account_name').eq('id', body.account_id).maybeSingle();
+      if (!acc) throw new HttpError(404, 'Hesap bulunamadı');
+      // Token'ı Vault'ta geçersiz kıl, hesabı "bağlı değil" yap
+      if (acc.credential_secret_id) await db.rpc('store_connector_secret', { p_name: `${acc.connector_key}_revoked`, p_secret: 'revoked', p_existing: acc.credential_secret_id });
+      const { error } = await db.from('social_accounts').update({ connection_status: 'not_connected', credential_secret_id: null, token_expires_at: null }).eq('id', acc.id);
+      if (error) throw error;
+      // Bu uygulamada bağlı başka hesap kalmadıysa ilgili botlar "bağlantı bekliyor"a döner; sıradaki paylaşımlar bekler
+      const { count } = await db.from('social_accounts').select('id', { count: 'exact', head: true }).eq('connector_key', acc.connector_key).eq('connection_status', 'connected');
+      if (!count) await db.from('automation_bots').update({ status: 'waiting_connection' }).eq('connector_key', acc.connector_key).eq('status', 'active');
+      await db.rpc('write_audit_service', { p_actor: u.userId, p_action: 'disconnect', p_entity_type: 'social_accounts', p_entity_id: acc.id, p_summary: `Çıkış yapıldı: ${acc.connector_key} ${acc.external_account_name ?? ''}` });
+      return { ok: true, bots_waiting: !count };
     }
 
     case 'test_telegram': { await requireUser(db, req, 'admin'); return telegramSend('Embay Ops Center test mesajı ✅'); }

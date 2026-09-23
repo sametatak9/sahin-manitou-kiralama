@@ -28,18 +28,22 @@ export function ConnectionsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(() => {
     const p = state.params;
-    if (p.get('connected')) return { tone: 'ok', text: `${p.get('connected') === 'meta' ? `Meta bağlantısı tamamlandı (${p.get('pages')} sayfa)` : p.get('connected') === 'youtube' ? 'YouTube kanalı bağlandı' : 'Canva bağlantısı tamamlandı'} — hesap bilgisi API’den doğrulandı.` };
-    if (p.get('oauth_error')) return { tone: 'error', text: `OAuth hatası: ${p.get('oauth_error')}` };
+    if (p.get('connected') === 'meta' && p.get('ig') === '0') return { tone: 'warn', text: `Facebook sayfanız bağlandı (${p.get('pages')} sayfa), ancak sayfaya bağlı bir Instagram profesyonel hesabı bulunamadı. Instagram → Ayarlar → Hesap türü → Profesyonel hesap; ardından Facebook sayfası ayarlarından Instagram hesabını bağlayıp “Yeniden bağla”ya dokunun.` };
+    if (p.get('connected')) return { tone: 'ok', text: `${p.get('connected') === 'meta' ? `Facebook (${p.get('pages')} sayfa) ve Instagram (${p.get('ig')} hesap) bağlandı` : p.get('connected') === 'youtube' ? 'YouTube kanalı bağlandı' : 'Canva bağlandı'}. İlgili botlar aktif oldu; Yayın Kuyruğu’ndaki paylaşımlar saatinde gönderilecek.` };
+    if (p.get('oauth_error')) return { tone: 'error', text: `Bağlantı tamamlanamadı: ${p.get('oauth_error')}. Tekrar “Hesabımla bağla”ya dokunabilirsiniz.` };
     return null;
   });
 
   const connect = async (c: ConnectorStatus) => {
     setBusy(c.key); setMsg(null);
-    try { const r = await callOps<{ url: string }>('oauth_start', { provider: OAUTH_PROVIDER[c.key] ?? c.key }); window.location.href = r.url; }
+    // return_to: giriş sonrası tam bu panel adresine dönülür (oturum burada)
+    try { const r = await callOps<{ url: string }>('oauth_start', { provider: OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}` }); window.location.href = r.url; }
     catch (e) { setMsg({ tone: 'warn', text: errorText(e) }); setBusy(null); }
   };
   const disconnect = async (accountId: string) => {
-    setBusy(accountId); try { await callOps('disconnect', { account_id: accountId }); await q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+    setBusy(accountId);
+    try { const r = await callOps<{ bots_waiting: boolean }>('disconnect', { account_id: accountId }); setMsg({ tone: 'ok', text: `Çıkış yapıldı.${r.bots_waiting ? ' Bu uygulamanın botları “bağlantı bekliyor” durumuna alındı; sıradaki paylaşımlar yeniden bağlanana kadar bekler.' : ''}` }); await q.reload(); }
+    catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
   const testTelegram = async () => { setBusy('tg'); try { await callOps('test_telegram'); setMsg({ tone: 'ok', text: 'Telegram API test mesajını kabul etti.' }); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); } };
 
