@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, Truck, X,
+  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Globe, Inbox, LogOut, Mail, Menu, Phone, PlugZap, Radar, Settings, ShieldCheck, Sparkles, Truck, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -18,6 +18,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Sosyal & İçerik', items: [
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'Instagram, Facebook… bağlantı ve botlar' },
     { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Görsel/video yükle · saatinde paylaş' },
+    { id: 'videos', label: 'Video Havuzu', icon: Film, hint: 'Higgsfield AI · hazır reklamlar' },
     { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta · gün · kanban' },
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım + önizleme' },
   ] },
@@ -112,8 +113,65 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
     <div className="ops-root min-h-screen flex">
       <aside className="hidden lg:block w-64 shrink-0 border-r border-ink-800 sticky top-0 h-screen bg-ink-950/60 backdrop-blur">{sidebar}</aside>
       {drawer && (
-        <div className="lg:hidden fixed inset-0 z-[60] bg-ink-950/80 backdrop-blur-sm" onClick={() => setDrawer(false)}>
-          <aside className="w-72 h-full bg-ink-900 border-r border-ink-700 ops-fade-in" onClick={(e) => e.stopPropagation()}>{sidebar}</aside>
+        <div className="lg:hidden fixed inset-0 z-[60] bg-ink-950/80 backdrop-blur-sm flex flex-col justify-end p-3 sm:p-4" onClick={() => setDrawer(false)}>
+          <div className="w-full max-h-[85vh] overflow-y-auto ops-scroll bg-ink-900 border border-ink-700/80 rounded-3xl p-5 shadow-2xl ops-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between pb-3 border-b border-ink-800">
+              <div>
+                <h3 className="font-display text-lg font-bold text-ink-100 flex items-center gap-2">
+                  <Radar className="w-5 h-5 text-brand-green" /> Tüm Operasyon Menüsü
+                </h3>
+                <p className="text-xs text-ink-400 mt-0.5">Embay Yapı & Şahin Manitou Yönetim Portalı</p>
+              </div>
+              <button onClick={() => setDrawer(false)} className="p-2 rounded-xl bg-ink-800 text-ink-400 hover:text-ink-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 my-4">
+              {[
+                { id: 'home' as Route, label: 'Genel Bakış', hint: 'Özet ve Anlık Durum', icon: Gauge, color: 'text-brand-green' },
+                { id: 'portfolio' as Route, label: 'CRM & Portföy (2)', hint: 'Şantiyeler, Usta ve Firmalar', icon: Briefcase, color: 'text-blue-500' },
+                { id: 'videos' as Route, label: 'Video Havuzu (3)', hint: 'Higgsfield AI ve Reklamlar', icon: Film, color: 'text-amber-500' },
+                { id: 'connections' as Route, label: 'Uygulamalar (9)', hint: 'Gezgin, Kasa ve Eklentiler', icon: PlugZap, color: 'text-emerald-500' },
+                { id: 'leads' as Route, label: 'Lead Radarı', hint: 'Canlı Şantiye Fırsatları', icon: Radar, color: 'text-rose-500' },
+                { id: 'planner' as Route, label: 'İçerik Takvimi', hint: '30 Günlük Otomasyon', icon: CalendarRange, color: 'text-purple-500' },
+                { id: 'studio' as Route, label: 'Post Studio', hint: 'Sosyal Medya Üretimi', icon: Sparkles, color: 'text-amber-400' },
+                { id: 'bots' as Route, label: 'Bot Kontrol', hint: 'SEO ve Otomatik Görevler', icon: Bot, color: 'text-teal-500' },
+                { id: 'queue' as Route, label: 'Yayın Kuyruğu', hint: 'Görsel & Video Paylaşımı', icon: CalendarClock, color: 'text-pink-500' },
+                { id: 'reports' as Route, label: 'Bot Raporları', hint: 'İstihbarat & Analizler', icon: FileText, color: 'text-indigo-500' },
+                { id: 'system' as Route, label: 'Sistem Sağlığı', hint: 'Multi-AI ve Hata Günlükleri', icon: ShieldCheck, color: 'text-emerald-400' },
+                { id: 'settings' as Route, label: 'Ayarlar', hint: 'Marka, AI & Ekip', icon: Settings, color: 'text-ink-400' },
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = state.route === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { go(item.id); setDrawer(false); }}
+                    className={cx(
+                      'flex items-start gap-2.5 p-3 rounded-2xl text-left transition border',
+                      active
+                        ? 'bg-brand-green/15 border-brand-green/40 text-brand-green'
+                        : 'bg-ink-850/80 border-ink-800 text-ink-200 hover:bg-ink-800'
+                    )}
+                  >
+                    <Icon className={cx('w-4 h-4 shrink-0 mt-0.5', item.color)} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold truncate leading-tight">{item.label}</div>
+                      <div className="text-[10px] text-ink-400 truncate mt-0.5">{item.hint}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-3 border-t border-ink-800 flex items-center justify-between text-xs text-ink-400">
+              <span>Resmi Destek Hattı:</span>
+              <a href="tel:05314362904" className="font-mono text-brand-green font-semibold hover:underline">
+                0531 436 29 04
+              </a>
+            </div>
+          </div>
         </div>
       )}
       <div className="flex-1 min-w-0 flex flex-col">

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AlertTriangle, ArrowRight, Bot, CalendarClock, CheckCheck, Cpu, PlugZap, Radar, Sparkles, TrendingUp, UsersRound } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Bot, Briefcase, CalendarClock, CheckCheck, Cpu, FileText, Film, Gauge, PlugZap, Radar, Sparkles, TrendingUp, UsersRound } from 'lucide-react';
 import { callOps } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { approvalLabel, approvalTone, connectionLabel, connectionTone, dayKey, fmtDateTime, fmtTime, istanbulHour, platformMeta, relTime, RUN_LABELS, runTone, TONE_DOT, type Tone } from '../lib/format';
@@ -103,7 +103,32 @@ export function HomeScreen() {
   const hello = h < 12 ? 'Günaydın' : h < 18 ? 'İyi günler' : 'İyi akşamlar';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Hızlı Erişim Şeridi */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 ops-scroll -mx-1 px-1">
+        <button onClick={() => go('home')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-green text-white text-xs font-semibold shrink-0 shadow-sm">
+          <Gauge className="w-3.5 h-3.5" /> Özet
+        </button>
+        <button onClick={() => go('connections')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
+          <PlugZap className="w-3.5 h-3.5 text-brand-green" /> Eklentiler (9)
+        </button>
+        <button onClick={() => go('videos')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
+          <Film className="w-3.5 h-3.5 text-amber-500" /> Video Havuzu (3)
+        </button>
+        <button onClick={() => go('portfolio')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
+          <Briefcase className="w-3.5 h-3.5 text-blue-500" /> CRM & Portföy (2)
+        </button>
+        <button onClick={() => go('queue')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
+          <CalendarClock className="w-3.5 h-3.5 text-rose-500" /> Yayın Kuyruğu
+        </button>
+        <button onClick={() => go('bots')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
+          <Bot className="w-3.5 h-3.5 text-emerald-500" /> Botlar
+        </button>
+        <button onClick={() => go('reports')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
+          <FileText className="w-3.5 h-3.5 text-indigo-500" /> Raporlar
+        </button>
+      </div>
+
       {/* Başlık şeridi */}
       <section className="ops-panel p-5 sm:p-6 relative overflow-hidden">
         <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full border border-ink-700/60" />
