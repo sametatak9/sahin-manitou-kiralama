@@ -54,32 +54,34 @@ export const BotControlView: React.FC<BotControlViewProps> = ({
           </div>
         </div>
 
-        {/* Tab switchers */}
-        <div className="flex items-center gap-2 pt-6 border-t border-slate-100 mt-4 text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('BOTS')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              activeTab === 'BOTS' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🤖 Aktif Bot Portföyü ({botTasks.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('SEO')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              activeTab === 'SEO' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🔍 SEO Bot Analizi & Google Fırsatları
-          </button>
-          <button
-            onClick={() => setActiveTab('TRENDS')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              activeTab === 'TRENDS' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            📈 Trend Radarı & Sektörel Gündem ({trends.length})
-          </button>
+        {/* Tab switchers - Mobile Horizontal Scrollable */}
+        <div className="w-full overflow-x-auto no-scrollbar pt-4 border-t border-slate-100 mt-4">
+          <div className="flex items-center gap-2 min-w-max text-xs font-semibold pb-1">
+            <button
+              onClick={() => setActiveTab('BOTS')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                activeTab === 'BOTS' ? 'bg-emerald-700 text-white shadow-xs font-bold' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🤖 Aktif Bot Portföyü ({botTasks.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('SEO')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                activeTab === 'SEO' ? 'bg-emerald-700 text-white shadow-xs font-bold' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🔍 SEO Bot Analizi & Google Fırsatları
+            </button>
+            <button
+              onClick={() => setActiveTab('TRENDS')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                activeTab === 'TRENDS' ? 'bg-emerald-700 text-white shadow-xs font-bold' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              📈 Trend Radarı & Sektörel Gündem ({trends.length})
+            </button>
+          </div>
         </div>
       </div>
 

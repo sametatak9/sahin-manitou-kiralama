@@ -229,11 +229,39 @@ export const PostStudioView: React.FC<PostStudioViewProps> = ({ onSchedulePost }
             </div>
           </div>
 
+          {/* Master Plan Step 6: Canva & Figma Creative Design Links */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+            <span className="font-bold text-slate-700 block">🎨 Tasarım & Şablon Bağlantıları (Figma / Canva):</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://canva.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-semibold hover:bg-blue-100 flex items-center gap-1.5 transition-colors"
+              >
+                <span>Canva Şablonunu Aç</span>
+                <span className="text-[10px] text-blue-600">↗</span>
+              </a>
+              <a
+                href="https://figma.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-semibold hover:bg-purple-100 flex items-center gap-1.5 transition-colors"
+              >
+                <span>Figma Varlık Dosyası</span>
+                <span className="text-[10px] text-purple-600">↗</span>
+              </a>
+              <span className="text-[11px] text-slate-500">
+                Resmi şablon referansı: <code className="font-mono bg-white px-1 py-0.5 rounded border border-slate-200">#manitou-industrial-post-v1</code>
+              </span>
+            </div>
+          </div>
+
           {/* Schedule button */}
           <div className="pt-2 flex items-center justify-end gap-3">
             <button
               onClick={handleSaveToCalendar}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 transition-colors shadow-xs"
+              className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 transition-colors shadow-xs"
             >
               <CheckCircle2 className="w-4 h-4" />
               Onayla ve Takvime Ekle

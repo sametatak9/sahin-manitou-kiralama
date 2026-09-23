@@ -114,38 +114,40 @@ export const LeadRadarView: React.FC<LeadRadarViewProps> = ({ onConvertSignalToL
           </button>
         </div>
 
-        {/* Filter Badges */}
-        <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-4 text-xs font-semibold">
-          <button
-            onClick={() => setFilterType('ALL')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              filterType === 'ALL'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Tüm Sinyaller ({signals.length})
-          </button>
-          <button
-            onClick={() => setFilterType('MANITOU')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              filterType === 'MANITOU'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🚜 Manitou & Telehandler Arayanlar ({signals.filter(s => s.category === 'MANITOU').length})
-          </button>
-          <button
-            onClick={() => setFilterType('KENTSEL_DONUSUM')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              filterType === 'KENTSEL_DONUSUM'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🏗️ Tozkoparan & Kentsel Dönüşüm ({signals.filter(s => s.category === 'KENTSEL_DONUSUM').length})
-          </button>
+        {/* Filter Badges - Mobile Horizontal Scrollable */}
+        <div className="w-full overflow-x-auto no-scrollbar pt-4 border-t border-slate-100 mt-4">
+          <div className="flex items-center gap-2 min-w-max text-xs font-semibold pb-1">
+            <button
+              onClick={() => setFilterType('ALL')}
+              className={`px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                filterType === 'ALL'
+                  ? 'bg-emerald-700 text-white font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Tüm Sinyaller ({signals.length})
+            </button>
+            <button
+              onClick={() => setFilterType('MANITOU')}
+              className={`px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                filterType === 'MANITOU'
+                  ? 'bg-emerald-700 text-white font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🚜 Manitou & Telehandler Arayanlar ({signals.filter(s => s.category === 'MANITOU').length})
+            </button>
+            <button
+              onClick={() => setFilterType('KENTSEL_DONUSUM')}
+              className={`px-3 py-1.5 rounded-lg transition-all shrink-0 ${
+                filterType === 'KENTSEL_DONUSUM'
+                  ? 'bg-emerald-700 text-white font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🏢 Kentsel Dönüşüm Keşif Arayanlar ({signals.filter(s => s.category === 'KENTSEL_DONUSUM').length})
+            </button>
+          </div>
         </div>
       </div>
 

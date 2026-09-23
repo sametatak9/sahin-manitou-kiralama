@@ -122,48 +122,50 @@ export const CRMView: React.FC<CRMViewProps> = ({
           </button>
         </div>
 
-        {/* Sub-tabs */}
-        <div className="flex flex-wrap gap-2 pt-6 border-t border-slate-100 mt-4 text-xs font-semibold">
-          <button
-            onClick={() => setSubTab('leads')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              subTab === 'leads'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🎯 Lead Yaşam Döngüsü ({leads.length})
-          </button>
-          <button
-            onClick={() => setSubTab('firms')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              subTab === 'firms'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🏢 Firmalar ({companies.length})
-          </button>
-          <button
-            onClick={() => setSubTab('projects')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              subTab === 'projects'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🏗️ Projeler & Şantiyeler ({projects.length})
-          </button>
-          <button
-            onClick={() => setSubTab('opportunities')}
-            className={`px-3.5 py-2 rounded-xl transition-all ${
-              subTab === 'opportunities'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🚜 Makine Kiralama Fırsatları ({opportunities.length})
-          </button>
+        {/* Sub-tabs - Mobile Horizontal Scrollable (Prevents mobile overflow) */}
+        <div className="w-full overflow-x-auto no-scrollbar pt-4 border-t border-slate-100 mt-4">
+          <div className="flex items-center gap-2 min-w-max text-xs font-semibold pb-1">
+            <button
+              onClick={() => setSubTab('leads')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                subTab === 'leads'
+                  ? 'bg-emerald-700 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🎯 Lead Yaşam Döngüsü ({leads.length})
+            </button>
+            <button
+              onClick={() => setSubTab('firms')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                subTab === 'firms'
+                  ? 'bg-emerald-700 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🏢 Firmalar ({companies.length})
+            </button>
+            <button
+              onClick={() => setSubTab('projects')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                subTab === 'projects'
+                  ? 'bg-emerald-700 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🏗️ Projeler & Şantiyeler ({projects.length})
+            </button>
+            <button
+              onClick={() => setSubTab('opportunities')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                subTab === 'opportunities'
+                  ? 'bg-emerald-700 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🚜 Makine Kiralama Fırsatları ({opportunities.length})
+            </button>
+          </div>
         </div>
       </div>
 

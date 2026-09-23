@@ -429,9 +429,43 @@ export function App() {
 
       {/* VIEW 1: OPERATIONS CENTER PANEL (EMBAY-PANEL) */}
       {currentView === 'panel' ? (
-        <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 gap-6">
-          {/* Left Navigation Sidebar (Light Green + White) */}
-          <aside className="lg:w-64 shrink-0 space-y-4">
+        <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 gap-4 sm:gap-6">
+          {/* Mobile Horizontal Scrollable Tab Bar (Fixes mobile overflow!) */}
+          <div className="lg:hidden w-full overflow-x-auto no-scrollbar py-1">
+            <div className="flex items-center gap-1.5 min-w-max p-1 bg-white border border-slate-200/90 rounded-2xl shadow-xs">
+              {[
+                { id: 'dashboard', label: 'Özet', icon: LayoutDashboard },
+                { id: 'crm', label: `CRM (${leads.length})`, icon: Building2 },
+                { id: 'radar', label: 'Lead Radar', icon: Radar },
+                { id: 'calendar', label: 'İçerik Takvimi', icon: Calendar },
+                { id: 'studio', label: 'Post Studio', icon: PenTool },
+                { id: 'bots', label: 'Bot Kontrol', icon: Cpu },
+                { id: 'email', label: `Teklif (${emails.length})`, icon: Mail },
+                { id: 'connections', label: 'Bağlantılar', icon: Link2 },
+                { id: 'health', label: 'Sistem Sağlığı', icon: Activity }
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = currentTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setCurrentTab(item.id)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                      isActive
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Left Navigation Sidebar for Desktop */}
+          <aside className="hidden lg:block lg:w-64 shrink-0 space-y-4">
             <div className="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs">
               <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 Operasyon Menüsü
@@ -442,7 +476,7 @@ export function App() {
                   onClick={() => setCurrentTab('dashboard')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'dashboard'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -454,7 +488,7 @@ export function App() {
                   onClick={() => setCurrentTab('crm')}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'crm'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -471,7 +505,7 @@ export function App() {
                   onClick={() => setCurrentTab('radar')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'radar'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -483,7 +517,7 @@ export function App() {
                   onClick={() => setCurrentTab('calendar')}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'calendar'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -500,7 +534,7 @@ export function App() {
                   onClick={() => setCurrentTab('studio')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'studio'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -512,7 +546,7 @@ export function App() {
                   onClick={() => setCurrentTab('bots')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'bots'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -524,7 +558,7 @@ export function App() {
                   onClick={() => setCurrentTab('email')}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'email'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -541,7 +575,7 @@ export function App() {
                   onClick={() => setCurrentTab('connections')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'connections'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -553,7 +587,7 @@ export function App() {
                   onClick={() => setCurrentTab('health')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
                     currentTab === 'health'
-                      ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
