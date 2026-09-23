@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Building2,
@@ -55,6 +55,8 @@ import {
   PlatformConnection
 } from './types';
 
+import { dbService, isSupabaseConfigured } from './lib/supabase';
+
 export function App() {
   // Main View: 'panel' (Operations Center) or 'website' (Public Showcase)
   const [currentView, setCurrentView] = useState<'panel' | 'website'>('panel');
@@ -82,6 +84,39 @@ export function App() {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3500);
   };
+
+  // Sync with Supabase on mount if configured
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      dbService.fetchLeads().then((data) => {
+        if (data && data.length > 0) {
+          const mappedLeads: Lead[] = data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            companyName: d.company_name || 'Şantiye / Müşteri',
+            phone: d.phone,
+            status: (d.status as LeadStatus) || 'DISCOVERED',
+            opportunitySummary: d.opportunity_summary || 'Doğrudan canlı talep',
+            requiresHumanApproval: Boolean(d.requires_human_approval),
+            sourceEvidence: d.source_evidence || {
+              url: 'https://sahin-manitou-kiralama.vercel.app',
+              domain: 'sahin-manitou-kiralama.vercel.app',
+              sourceType: 'SUPABASE_DB',
+              title: 'Canlı Supabase Veritabanı Kaydı',
+              discoveredAt: 'Canlı',
+              evidenceSnippet: d.opportunity_summary || 'Canlı Müşteri',
+              confidenceScore: 100,
+              botName: 'Supabase Sync Engine',
+              query: 'Canlı Talep'
+            },
+            history: d.history || []
+          }));
+          setLeads(prev => [...mappedLeads, ...prev.filter(p => !mappedLeads.some(m => m.id === p.id))]);
+          showNotification('Supabase canlı veritabanı bağlandı ve kayıtlar senkronize edildi.');
+        }
+      });
+    }
+  }, []);
 
   // Bot Trigger
   const handleTriggerBot = (id: string) => {
@@ -161,25 +196,30 @@ export function App() {
 
   // Update Lead Lifecycle
   const handleUpdateLeadStatus = (leadId: string, newStatus: LeadStatus, note: string) => {
+    let updatedHistoryForDb: any[] = [];
     setLeads(prev =>
       prev.map(l => {
         if (l.id === leadId) {
+          const updatedHistory = [
+            ...l.history,
+            {
+              status: newStatus,
+              changedAt: 'Şimdi',
+              note
+            }
+          ];
+          updatedHistoryForDb = updatedHistory;
           return {
             ...l,
             status: newStatus,
-            history: [
-              ...l.history,
-              {
-                status: newStatus,
-                changedAt: 'Şimdi',
-                note
-              }
-            ]
+            history: updatedHistory
           };
         }
         return l;
       })
     );
+    // Persist to Supabase if available
+    dbService.updateLeadStatus(leadId, newStatus, updatedHistoryForDb);
     showNotification(`Lead durumu ${newStatus} olarak güncellendi.`);
   };
 
@@ -357,6 +397,7 @@ export function App() {
     };
 
     setLeads(prev => [newLead, ...prev]);
+    dbService.insertLead(newLead);
     showNotification(`Yeni talep (${leadData.name}) doğrudan Operasyon Paneli CRM'e eklendi!`);
   };
 

@@ -16,9 +16,11 @@ import {
   Mail,
   MapPin,
   Calendar,
-  Layers
+  Layers,
+  FileText
 } from 'lucide-react';
 import { Company, Project, Opportunity, Lead, LeadStatus } from '../../types';
+import { ProposalModal } from '../ProposalModal';
 
 interface CRMViewProps {
   companies: Company[];
@@ -52,6 +54,17 @@ export const CRMView: React.FC<CRMViewProps> = ({
   const [subTab, setSubTab] = useState<'firms' | 'projects' | 'opportunities' | 'leads'>('leads');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
+  const [proposalData, setProposalData] = useState<{
+    isOpen: boolean;
+    customerName: string;
+    phone: string;
+    service: string;
+  }>({
+    isOpen: false,
+    customerName: '',
+    phone: '',
+    service: ''
+  });
 
   // New company form state
   const [newCompanyName, setNewCompanyName] = useState('');
@@ -175,6 +188,20 @@ export const CRMView: React.FC<CRMViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setProposalData({
+                        isOpen: true,
+                        customerName: lead.companyName || lead.name,
+                        phone: lead.phone,
+                        service: lead.opportunitySummary || '18 Metre Teleskopik Manitou MT-X 1840 Kiralama'
+                      })
+                    }
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Teklif Hazırla / Yazdır
+                  </button>
                   <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                     Mevcut Durum: {lead.status}
                   </span>
@@ -443,6 +470,15 @@ export const CRMView: React.FC<CRMViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Proposal & Contract Print Modal */}
+      <ProposalModal
+        isOpen={proposalData.isOpen}
+        onClose={() => setProposalData(prev => ({ ...prev, isOpen: false }))}
+        defaultCustomerName={proposalData.customerName}
+        defaultPhone={proposalData.phone}
+        defaultService={proposalData.service}
+      />
     </div>
   );
 };
