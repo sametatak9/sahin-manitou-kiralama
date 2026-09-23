@@ -60,7 +60,7 @@ async function api(c: Db, req: Request) {
         bot_id: body.bot_id || null, title: title.slice(0, 200), goal: goal.slice(0, 4000), target_url: target || null,
         search_for: String(body.search_for || '').trim().slice(0, 1000) || null, report_spec: String(body.report_spec || '').trim().slice(0, 1000) || null,
         stop_condition: String(body.stop_condition || '').trim().slice(0, 1000) || null, duration_minutes: minutes,
-        max_steps: Math.min(60, Math.max(1, minutes)), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
+        max_steps: minutes <= 15 ? minutes : Math.min(40, Math.ceil(minutes / 3)), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
         locked_until: new Date(now + 150_000).toISOString(),
       }).select('*').single();
       if (error) throw error;

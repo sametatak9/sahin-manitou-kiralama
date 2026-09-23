@@ -74,6 +74,8 @@
 }
 .ops-input:focus { border-color: var(--color-brand-green); box-shadow: 0 0 0 3px rgba(22, 163, 74, .15); }
 .ops-input::placeholder { color: var(--color-ink-500); }
+.ops-chip { display: inline-flex; align-items: center; gap: .3rem; border-radius: .6rem; padding: .3rem .6rem; font-size: 11px; font-weight: 600; color: var(--color-ink-200); background: var(--color-ink-900); box-shadow: inset 0 0 0 1px var(--color-ink-700); }
+.ops-chip:hover { background: var(--color-ink-800); }
 select.ops-input option { background: #FFFFFF; }
 .ops-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
 .ops-scroll::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 8px; }

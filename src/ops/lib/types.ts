@@ -63,7 +63,10 @@ export interface ConnectorStatus {
 }
 export interface OpsStatus { ai: { anthropic: boolean; openai: boolean; gemini: boolean }; connectors: ConnectorStatus[]; worker_last_seen: string | null; canva_connected: boolean; redirect_uri: string }
 
-export interface MissionFinding { title: string; detail: string; url: string; evidence?: string; at: string; step: number }
+export interface MissionFinding {
+  title: string; detail: string; url: string; evidence?: string; at: string; step: number;
+  company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
+}
 export interface Mission {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: 'running' | 'finalizing' | 'completed' | 'stopped' | 'failed' | 'blocked';

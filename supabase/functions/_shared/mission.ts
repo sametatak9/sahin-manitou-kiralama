@@ -13,7 +13,11 @@ export interface MissionRow {
   finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null;
   findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null;
 }
-export interface Finding { title: string; detail: string; url: string; evidence?: string; at: string; step: number }
+export interface Finding {
+  title: string; detail: string; url: string; evidence?: string; at: string; step: number;
+  // Liste/ilan görevlerinde yapılandırılmış alanlar (yalnızca kurumun kendi yayınladığı bilgiler)
+  company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
+}
 interface Source { url: string; title?: string }
 
 const UA = 'Mozilla/5.0 (compatible; EmbayResearchBot/1.0; +https://embay-panel.vercel.app)';
@@ -50,6 +54,9 @@ async function robotsAllows(url: string): Promise<boolean> {
   } catch { return true; }
 }
 const STEP_INTERVAL_MS = 55_000;
+/** Uzun görevlerde adımlar seyrekleşir (ör. 60 dk → 3 dk'da bir): aynı süre, daha az AI kredisi. */
+export const stepIntervalMs = (m: Pick<MissionRow, 'duration_minutes' | 'max_steps'>) =>
+  Math.max(STEP_INTERVAL_MS, Math.floor((m.duration_minutes * 60_000) / Math.max(1, m.max_steps)) - 5_000);
 
 // ── Sayfa çekme (gerçek HTTP) ───────────────────────────────────────────────
 export interface PageFacts {
@@ -152,7 +159,7 @@ async function anthropicResearch(key: string, model: string, system: string, pro
   const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: 100_000 });
   const tools = [
     { type: 'web_search_20260209', name: 'web_search', max_uses: 3, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3, blocked_domains: NO_SCRAPE_HOSTS },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3, blocked_domains: NO_SCRAPE_HOSTS, max_content_tokens: 8000 },
   ];
   // deno-lint-ignore no-explicit-any
   const messages: any[] = [{ role: 'user', content: prompt }];
@@ -289,7 +296,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         COMPLIANCE_RULES,
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (gerekirse web araması / sayfa okuma). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz. Bilgi bulamazsan boş liste döndür; asla uydurma.',
         'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
-        'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
+        'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
       const t0 = Date.now();
       const r = await aiCall(ai, prompt);
@@ -297,11 +304,13 @@ export async function stepMission(db: Db, m: MissionRow) {
       for (const s of r.sources) if (!sources.some((x) => canonical(x.url) === canonical(s.url))) sources.push(s);
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
       const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text)) as
-        { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
+        { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
       let added = 0, dropped = 0;
       for (const f of j?.new_findings ?? []) {
         if (!f.url || !allowed.has(canonical(f.url))) { dropped++; continue; }
-        if (addFinding({ title: String(f.title || '').slice(0, 200), detail: String(f.detail || '').slice(0, 1500), url: f.url, evidence: f.evidence ? String(f.evidence).slice(0, 500) : undefined })) added++;
+        const opt = (v: unknown, n = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined);
+        if (addFinding({ title: String(f.title || '').slice(0, 200), detail: String(f.detail || '').slice(0, 1500), url: f.url, evidence: opt(f.evidence, 500),
+          company: opt(f.company), location: opt(f.location), posted: opt(f.posted, 60), phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300) })) added++;
       }
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
       await logStep(db, m, step, 'ai_research', `${ai.provider}/${ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
@@ -339,12 +348,12 @@ export async function stepMission(db: Db, m: MissionRow) {
 
   async function persist() {
     await db.from('bot_missions').update({ step_count: step, findings, sources: sources.slice(0, 200), visited: [...visited].slice(0, 200), tokens_in: tokensIn, tokens_out: tokensOut, ...(stepFailed ? {} : { error_count: 0 }),
-      next_step_at: new Date(Date.now() + STEP_INTERVAL_MS).toISOString(), locked_until: null }).eq('id', m.id);
+      next_step_at: new Date(Date.now() + stepIntervalMs(m)).toISOString(), locked_until: null }).eq('id', m.id);
   }
   await persist();
   const next: MissionRow = { ...m, step_count: step, findings, sources, visited: [...visited], tokens_in: tokensIn, tokens_out: tokensOut };
   if (stopMet) { await logStep(db, m, step, 'stop', `Bitiş koşulu sağlandı: ${stopReason || m.stop_condition}`); return await finalizeMission(db, next, 'stop_condition'); }
-  if (Date.now() + STEP_INTERVAL_MS / 2 >= new Date(m.deadline_at).getTime()) return await finalizeMission(db, next, 'deadline');
+  if (Date.now() + stepIntervalMs(m) / 2 >= new Date(m.deadline_at).getTime()) return await finalizeMission(db, next, 'deadline');
   if (step >= m.max_steps) return await finalizeMission(db, next, 'max_steps');
   return { mission_id: m.id, step, findings: findings.length };
 }
@@ -352,6 +361,14 @@ export async function stepMission(db: Db, m: MissionRow) {
 // ── Rapor ───────────────────────────────────────────────────────────────────
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const safeHref = (u: string) => (/^https?:\/\//i.test(u) ? esc(u) : '#');
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#16a34a"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs><rect width="128" height="128" rx="30" fill="url(#g)"/><path d="M28 32h54v13H43v14h32v12H43v13h39v13H28z" fill="white"/><path d="M83 28l18 18-8 8-18-18zM86 65l20 20-9 9-20-20z" fill="#dcfce7"/><circle cx="98" cy="31" r="9" fill="#f0fdf4"/><path d="M94 31h8M98 27v8" stroke="#15803d" stroke-width="3" stroke-linecap="round"/></svg>`;
+const telHref = (p: string) => `tel:${p.replace(/[^\d+]/g, '')}`;
+/** Yapılandırılmış alanları (firma, konum, tarih, kurumsal iletişim) rapor satırına çevirir. */
+function factsHtml(f: Finding) {
+  const parts = [f.company && `<span>🏢 ${esc(f.company)}</span>`, f.location && `<span>📍 ${esc(f.location)}</span>`, f.posted && `<span>🗓 ${esc(f.posted)}</span>`,
+    f.phone && `<a href="${telHref(f.phone)}">📞 ${esc(f.phone)}</a>`, f.email && `<a href="mailto:${esc(f.email)}">✉️ ${esc(f.email)}</a>`, f.website && `<a href="${safeHref(f.website)}" target="_blank" rel="noopener">🌐 web</a>`].filter(Boolean);
+  return parts.length ? `<div class="facts">${parts.join('')}</div>` : '';
+}
 const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', error: 'Hata', no_ai: 'AI anahtarı yok — yalnızca sayfa taraması yapıldı' };
 const fmt = (iso: string | null) => (iso ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '—');
 
@@ -396,8 +413,10 @@ h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 8px;color:#115a
 table{width:100%;border-collapse:collapse;font-size:13px}td{padding:4px 6px;border-bottom:1px solid #eef7f1;vertical-align:top}td:first-child{color:#5a7266;width:170px}
 .f{border:1px solid #e1f3e7;border-radius:12px;padding:10px 12px;margin:8px 0}.f b{display:block}.f q{display:block;color:#3e5549;font-size:12px;margin-top:4px;font-style:italic}
 a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;line-height:1.6}.log{font-family:ui-monospace,monospace;font-size:11px;color:#3e5549}.badge{display:inline-block;background:#e1f3e7;color:#115a31;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #16a34a}.brand svg{width:44px;height:44px}.brand b{font-size:15px;display:block}.brand small{color:#5a7266;font-size:11px}
+.facts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px}.facts span,.facts a{background:#f3f9f5;border-radius:8px;padding:2px 8px;text-decoration:none}
 @media print{body{background:#fff;padding:0}main{border:0}}</style></head>
-<body><main><div class="k">EMBAY YAPI & ŞAHİN MANİTOU · BOT GÖREV RAPORU</div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}${reason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
+<body><main><div class="brand">${LOGO_SVG}<div><b>Embay Yapı & Şahin Manitou</b><small>Bot görev raporu · 0531 436 29 04 · sahin-manitou-kiralama.vercel.app</small></div></div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}${reason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
 <h2>Görev</h2><table><tr><td>Bot</td><td>${esc(ctx.name)}</td></tr><tr><td>Amaç</td><td>${esc(cur.goal)}</td></tr>
 ${cur.target_url ? `<tr><td>Hedef link</td><td><a href="${safeHref(cur.target_url)}">${esc(cur.target_url)}</a></td></tr>` : ''}
 ${cur.search_for ? `<tr><td>Aranan</td><td>${esc(cur.search_for)}</td></tr>` : ''}${cur.report_spec ? `<tr><td>Raporda istenen</td><td>${esc(cur.report_spec)}</td></tr>` : ''}
@@ -405,7 +424,7 @@ ${cur.stop_condition ? `<tr><td>Bitiş koşulu</td><td>${esc(cur.stop_condition)
 <tr><td>Başlangıç / bitiş</td><td>${esc(fmt(cur.started_at))} → ${esc(fmt(finishedAt))} (${cur.duration_minutes} dk süre tanımlı)</td></tr>
 <tr><td>Adım · kaynak · bulgu</td><td>${cur.step_count} · ${sources.length} · ${findings.length}</td></tr>${cur.provider ? `<tr><td>AI</td><td>${esc(cur.provider)} / ${esc(cur.model)}</td></tr>` : ''}</table>
 <h2>Özet</h2><div class="sum">${esc(summary)}</div>
-<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}</b>${esc(f.detail)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
+<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}</b>${esc(f.detail)}${factsHtml(f)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
 <h2>İncelenen kaynaklar (${sources.length})</h2><ul>${sources.slice(0, 60).map((s) => `<li><a href="${safeHref(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join('')}</ul>
 <h2>Adım günlüğü</h2><div class="log">${(steps || []).map((s) => `<div>#${s.step_no} [${esc(s.action)}] ${esc(s.message)}</div>`).join('')}</div>
 <p class="k" style="margin-top:24px">Bu rapor gerçek HTTP istekleri ve AI araştırma çağrılarından üretilmiştir; kaynağı doğrulanamayan bilgiler rapora alınmaz. Veriler yalnızca herkese açık kurumsal kaynaklardan, KVKK ve site kullanım koşullarına uygun toplanır.</p></main></body></html>`;
@@ -421,7 +440,7 @@ export async function runDueMissions(db: Db) {
   if (error) return { error: error.message };
   const rows = (data || []) as MissionRow[];
   const results = await Promise.all(rows.map((m) => stepMission(db, m).catch(async (e) => {
-    await db.from('bot_missions').update({ locked_until: null, error: String((e as Error).message).slice(0, 500), next_step_at: new Date(Date.now() + STEP_INTERVAL_MS).toISOString() }).eq('id', m.id);
+    await db.from('bot_missions').update({ locked_until: null, error: String((e as Error).message).slice(0, 500), next_step_at: new Date(Date.now() + stepIntervalMs(m)).toISOString() }).eq('id', m.id);
     return { mission_id: m.id, error: String(e) };
   })));
   return results;

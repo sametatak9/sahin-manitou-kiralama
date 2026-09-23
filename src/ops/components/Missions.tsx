@@ -1,11 +1,12 @@
 // Bot görevleri: görev ver (amaç, link, aranan, rapor, süre, bitiş koşulu) → canlı adım günlüğü → rapor (HTML).
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Archive, CheckCircle2, CircleSlash, Download, ExternalLink, FileText, FlaskConical, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, Archive, Radio, CheckCircle2, CircleSlash, Download, ExternalLink, FileText, FlaskConical, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2, XCircle } from 'lucide-react';
 import { callMissions, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
 import type { Bot, Mission, MissionStep } from '../lib/types';
 import { useSession } from '../session';
+import { LiveReport } from './LiveReport';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
 
 export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: Tone }> = {
@@ -30,6 +31,19 @@ export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'>)
   const p = m.model ? PRICE[m.model] : undefined; if (!p || !(m.tokens_in + m.tokens_out)) return null;
   return `≈ $${((m.tokens_in * p[0] + m.tokens_out * p[1]) / 1e6).toFixed(2)}`;
 }
+const LEGAL = 'Yalnızca herkese açık ve kurumların kendi yayınladığı bilgileri kullan; bireylerin kişisel cep numarası/profil bilgisi toplama, giriş gerektiren sayfalara (Facebook grupları vb.) girme.';
+const TEMPLATES: Array<{ id: string; label: string; data: Partial<typeof TEST_MISSION> & { title: string; goal: string } }> = [
+  { id: 'sahibinden', label: 'Sahibinden inşaat ilanları (20)', data: { title: 'Sahibinden inşaat iş ilanları — en güncel 20', duration_minutes: 10,
+    goal: `sahibinden.com'da inşaat sektörüne ait (şantiye, yapı, kaba inşaat, usta, operatör, taşeron, müteahhit) en güncel 20 iş ilanını listele. Her ilan ayrı bulgu: ilan başlığı, firma, konum, tarih, kısa açıklama, ilanda firmanın kendi yayınladığı kurumsal iletişim (varsa), ilan linki. Sahibinden sayfasını doğrudan okuma; arama motorundaki herkese açık başlık/özetleri kullan. ${LEGAL}`,
+    search_for: 'inşaat iş ilanı, şantiye, operatör, taşeron, müteahhit, İstanbul', report_spec: '20 ilanlık liste: başlık, firma, konum, tarih, açıklama, kurumsal iletişim, link', stop_condition: '20 ilan listelendiğinde dur', target_url: '' } },
+  { id: 'kesif', label: 'Müşteri keşfi — yapı ilanları (1 saat)', data: { title: 'Müşteri keşfi — yapı / prefabrik / hobi bahçesi ilanları', duration_minutes: 60, stop_condition: '',
+    goal: `İstanbul ve çevresinde yapı işi arayan ya da yaptıran farklı müşterileri bul: müteahhit ve inşaat firmalarının ilanları, ev / prefabrik ev / hobi bahçesi / bina yapım ilanları, kentsel dönüşüm ve yeni şantiye duyuruları. Kaynak: firma web siteleri, herkese açık ilan sitelerinin arama sonuçları, belediye/kamu duyuruları, EKAP ihale ilanları, haberler. Her kayıt ayrı bulgu: firma/ilan sahibi (kurum), ne iş istediği, konum, tarih, kurumsal iletişim (varsa), link. Her adımda FARKLI müşteriler bul, tekrar etme. ${LEGAL}`,
+    search_for: 'müteahhit, prefabrik ev, hobi bahçesi, bina yapımı, kentsel dönüşüm, şantiye, inşaat ihalesi', report_spec: 'Müşteri listesi: kurum, talep, konum, tarih, kurumsal iletişim, link', target_url: '' } },
+  { id: 'rakip', label: 'Rakip kiralama firmaları', data: { title: 'Rakip Manitou kiralama firmaları', duration_minutes: 10, stop_condition: '',
+    goal: `İstanbul Avrupa Yakası'nda teleskopik yükleyici / Manitou kiralama yapan firmaları bul: firma adı, hizmet bölgesi, filo bilgisi, web sitesi ve kurumsal iletişim. ${LEGAL}`,
+    search_for: 'manitou kiralama, telehandler kiralama, teleskopik yükleyici', report_spec: 'Rakip listesi', target_url: '' } },
+];
+
 const TEST_MISSION = {
   title: 'Test görevi — 3 ürün', goal: 'Test amaçlı: teleskopik yükleyici (Manitou) kategorisinden 3 adet ürün seç ve isimlerini yaz. Her ürün için üreticinin kendi ürün sayfasını kaynak olarak ver.',
   search_for: 'ürün adı, model, kaldırma yüksekliği', report_spec: '3 ürünün adı ve kısa açıklaması, kaynak linkiyle', stop_condition: '3 ürün bulunduğunda dur', duration_minutes: 1, target_url: '',
@@ -61,6 +75,10 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
       footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} disabled={!valid} onClick={start} icon={<Play className="w-4 h-4" />}>Görevi başlat</Button></>}>
       <div className="space-y-3">
         <Notice tone="info">Bot görevi süre boyunca her dakika bir adım ilerletir. Süre dolduğunda, bitiş koşulu sağlandığında ya da siz durdurduğunuzda rapor hazırlanır. Raporda yalnızca kaynağı gösterilebilen bulgular yer alır; bulunamazsa “Veri bulunamadı” yazar.</Notice>
+        <div className="flex flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-ink-400 self-center">Hazır görevler:</span>
+          {TEMPLATES.map((t) => <button key={t.id} type="button" onClick={() => setF({ ...f, ...TEST_MISSION, stop_condition: '', ...t.data })} className="rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ring-ink-700 text-ink-200 hover:bg-ink-800">{t.label}</button>)}
+        </div>
         <button type="button" onClick={() => setF({ ...f, ...TEST_MISSION })} className="w-full flex items-center gap-3 rounded-xl ring-1 ring-dashed ring-brand-green/50 bg-emerald-50/60 px-3 py-2.5 text-left hover:bg-emerald-50">
           <FlaskConical className="w-5 h-5 text-brand-green shrink-0" />
           <span className="text-xs text-ink-200"><b className="text-ink-100">1 dakikalık test görevi</b> — “3 ürün seç ve isimlerini yaz”. Formu doldurur; başlatınca sistemin uçtan uca çalıştığını görürsünüz.</span>
@@ -160,6 +178,7 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
     return { mission: unwrap(m) as Mission, steps: unwrap(s) as MissionStep[] };
   }, null as { mission: Mission; steps: MissionStep[] } | null, [id], ['bot_missions', 'bot_mission_steps']);
   const [tab, setTab] = useState<'report' | 'findings' | 'steps'>('steps');
+  const [liveOpen, setLiveOpen] = useState(false);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const m = q.data?.mission;
   const live = m && (m.status === 'running' || m.status === 'finalizing');
@@ -187,9 +206,10 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
     setArchived((a) => ({ ...a, [i]: error ? `Hata: ${error.message}` : (data as { action: string }).action === 'merged' ? 'Mevcut kayıtla birleştirildi' : 'Portföye eklendi' }));
   };
 
-  return (
+  return (<>
     <Modal open wide onClose={onClose} title={m ? <span className="inline-flex items-center gap-2"><FileText className="w-4 h-4 text-brand-green" />{m.title}</span> : 'Görev'}
       footer={m && <>
+        <Button variant="primary" onClick={() => setLiveOpen(true)} icon={<Radio className="w-4 h-4" />}>{live ? 'Canlı rapor' : 'Rapor penceresi'}</Button>
         {live && <Button variant="danger" loading={busy} onClick={stop} icon={<Square className="w-4 h-4" />}>Durdur ve raporla</Button>}
         {m.report_html && <><Button variant="ghost" onClick={shareWhatsApp} icon={<MessageCircle className="w-4 h-4" />}>WhatsApp ile gönder</Button><Button variant="ghost" onClick={print} icon={<Printer className="w-4 h-4" />}>PDF kaydet / yazdır</Button><Button variant="primary" onClick={download} icon={<Download className="w-4 h-4" />}>HTML indir</Button></>}
         <Button variant="ghost" onClick={onClose}>Kapat</Button></>}>
@@ -244,7 +264,8 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
         </div>
       )}
     </Modal>
-  );
+    {liveOpen && <LiveReport id={id} onClose={() => setLiveOpen(false)} />}
+  </>);
 }
 
 /** Sonuç kutusu: görev nasıl bitti + yönetici onayı (onaylanan sonuç veritabanına "onaylı" olarak yazılır ve listelenir). */
