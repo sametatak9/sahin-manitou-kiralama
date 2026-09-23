@@ -523,6 +523,19 @@ Deno.serve(async (req) => {
       if (!ok) return json({ error: 'forbidden' }, 403);
       return json(await runWorker(db, `cron:${crypto.randomUUID().slice(0, 8)}`));
     }
+    // Sunucu içi anahtar sağlık testi (yalnızca iç gizli anahtarla): her AI sağlayıcısı için gerçek cevap testi; anahtarın kendisi döndürülmez
+    if (path.startsWith('/key-health') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const { data: panelRows } = await db.from('ai_provider_keys').select('provider');
+      const panel = new Set((panelRows || []).map((r: { provider: string }) => r.provider));
+      const out: Record<string, unknown> = {};
+      for (const p of ['anthropic', 'gemini', 'openai'] as const) {
+        const key = await getAiKey(p);
+        out[p] = key ? { source: panel.has(p) ? 'panel' : 'sunucu', last4: key.slice(-4), ...(await liveKeyTest(p, key)) } : { source: null };
+      }
+      return json(out);
+    }
     if (path.startsWith('/api') && req.method === 'POST') return json(await api(db, req));
     return json({ error: 'not found' }, 404);
   } catch (e) {
