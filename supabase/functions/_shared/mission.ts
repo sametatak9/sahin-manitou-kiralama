@@ -3,6 +3,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.127.0';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, extractJson } from './ai/types.ts';
+import { getAiKey } from './ai/keys.ts';
 
 type Db = SupabaseClient;
 
@@ -16,6 +17,38 @@ export interface Finding { title: string; detail: string; url: string; evidence?
 interface Source { url: string; title?: string }
 
 const UA = 'Mozilla/5.0 (compatible; EmbayResearchBot/1.0; +https://embay-panel.vercel.app)';
+// Kullanım koşullarında otomatik veri toplamayı yasaklayan / giriş gerektiren platformlar: doğrudan sayfa okunmaz,
+// yalnızca arama motorlarında herkese açık görünen başlık/özet ve ilan linki kullanılır.
+export const NO_SCRAPE_HOSTS = ['sahibinden.com', 'armut.com', 'linkedin.com', 'facebook.com', 'instagram.com', 'x.com', 'twitter.com', 'tiktok.com'];
+const noScrape = (u: string) => { try { const h = new URL(u).hostname.replace(/^www\./, ''); return NO_SCRAPE_HOSTS.find((d) => h === d || h.endsWith('.' + d)) ?? null; } catch { return null; } };
+export const COMPLIANCE_RULES = [
+  'VERİ TOPLAMA KURALLARI (KVKK ve site kullanım koşullarına uygun, resmi prosedür):',
+  '- Yalnızca herkese açık ve kurumların KENDİ yayınladığı kurumsal bilgileri kullan: firma adı, web sitesi, kurumsal telefon/e-posta, adres, faaliyet alanı, ilan başlığı/açıklaması.',
+  '- Bireylerin kişisel verilerini (kişisel cep telefonu, kişisel e-posta, TC no, özel hesaplar, ev adresi) toplama. Bir ilanda yalnızca bireyin kişisel numarası varsa numarayı yazma; ilan linkini ver.',
+  `- Giriş gerektiren sayfaları ve otomatik veri toplamayı kullanım koşullarında yasaklayan platformları (${NO_SCRAPE_HOSTS.join(', ')}) doğrudan kazıma; bu platformlar için yalnızca arama sonuçlarında herkese açık görünen başlık/özet ve linki ver.`,
+  '- Her bilgiyi kaynak URL ile ver. Kaynağı olmayan bilgiyi yazma, uydurma. Bulamazsan boş liste döndür.',
+].join('\n');
+
+async function robotsAllows(url: string): Promise<boolean> {
+  try {
+    const u = new URL(url);
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(`${u.origin}/robots.txt`, { signal: ctrl.signal, headers: { 'user-agent': UA } }); clearTimeout(t);
+    if (!r.ok) return true;
+    const txt = (await r.text()).slice(0, 100_000);
+    let applies = false; const dis: string[] = []; const allow: string[] = [];
+    for (const raw of txt.split(/\r?\n/)) {
+      const line = raw.replace(/#.*/, '').trim(); if (!line) continue;
+      const [k, ...rest] = line.split(':'); const v = rest.join(':').trim(); const key = k.trim().toLowerCase();
+      if (key === 'user-agent') applies = v === '*' || /embay/i.test(v);
+      else if (applies && key === 'disallow' && v) dis.push(v);
+      else if (applies && key === 'allow' && v) allow.push(v);
+    }
+    const path = u.pathname + u.search;
+    const longest = (arr: string[]) => arr.filter((p) => path.startsWith(p)).reduce((a, p) => Math.max(a, p.length), -1);
+    return longest(allow) >= longest(dis);
+  } catch { return true; }
+}
 const STEP_INTERVAL_MS = 55_000;
 
 // ── Sayfa çekme (gerçek HTTP) ───────────────────────────────────────────────
@@ -28,6 +61,9 @@ const decode = (s: string) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').r
 
 export async function fetchPage(url: string): Promise<PageFacts> {
   const empty: PageFacts = { ok: false, status: 0, url, title: null, description: null, og: {}, headings: [], text: '', links: [], jsonld: [] };
+  const blocked = noScrape(url);
+  if (blocked) return { ...empty, error: `${blocked} otomatik sayfa okumayı kullanım koşullarında yasaklıyor / giriş istiyor — doğrudan okunmadı, yalnızca herkese açık arama sonuçları kullanılır` };
+  if (!(await robotsAllows(url))) return { ...empty, error: 'robots.txt bu sayfanın botlarca okunmasına izin vermiyor — okunmadı' };
   try {
     const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 15_000);
     const res = await fetch(url, { redirect: 'follow', signal: ctrl.signal, headers: { 'user-agent': UA, 'accept-language': 'tr-TR,tr;q=0.9,en;q=0.7' } });
@@ -63,7 +99,7 @@ export async function fetchPage(url: string): Promise<PageFacts> {
   }
 }
 
-const norm = (s: string) => s.toLocaleLowerCase('tr-TR').normalize('NFKD').replace(/[̀-ͯ]/g, '');
+const norm = (s: string) => s.toLocaleLowerCase('tr-TR').normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 export function searchTerms(searchFor: string | null): string[] {
   return (searchFor || '').split(/[,;\n]|\sve\s/).map((t) => t.trim()).filter((t) => t.length >= 2).slice(0, 12);
 }
@@ -82,7 +118,7 @@ export function keywordSnippets(text: string, terms: string[], max = 6): Array<{
 }
 
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
-interface AiChoice { provider: 'anthropic' | 'gemini'; model: string; system: string }
+interface AiChoice { provider: 'anthropic' | 'gemini'; model: string; system: string; key: string }
 async function chooseAi(db: Db, botId: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
   if (botId) {
@@ -91,19 +127,21 @@ async function chooseAi(db: Db, botId: string | null): Promise<AiChoice | null> 
     const a = (data as any)?.ai_agents; agent = Array.isArray(a) ? a[0] : a;
   }
   const base = agent?.system_prompt || 'Sen Embay Yapı ve Şahin Manitou Kiralama için çalışan titiz bir araştırma botusun. Türkçe yaz. Asla bilgi uydurma.';
-  if (Deno.env.get('ANTHROPIC_API_KEY')) return { provider: 'anthropic', model: agent?.provider === 'anthropic' ? agent.model : 'claude-opus-5', system: base };
-  if (Deno.env.get('GEMINI_API_KEY')) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base };
+  const ak = await getAiKey('anthropic');
+  if (ak) return { provider: 'anthropic', model: agent?.provider === 'anthropic' ? agent.model : 'claude-opus-5', system: base, key: ak };
+  const gk = await getAiKey('gemini');
+  if (gk) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base, key: gk };
   return null;
 }
 
 interface AiResult { text: string; sources: Source[]; tokensIn: number; tokensOut: number; searches: number }
 
-async function anthropicResearch(model: string, system: string, prompt: string): Promise<AiResult> {
-  const key = Deno.env.get('ANTHROPIC_API_KEY'); if (!key) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
+async function anthropicResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+  if (!key) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
   const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: 100_000 });
   const tools = [
     { type: 'web_search_20260209', name: 'web_search', max_uses: 3, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3 },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3, blocked_domains: NO_SCRAPE_HOSTS },
   ];
   // deno-lint-ignore no-explicit-any
   const messages: any[] = [{ role: 'user', content: prompt }];
@@ -126,8 +164,8 @@ async function anthropicResearch(model: string, system: string, prompt: string):
   return { text, sources, tokensIn, tokensOut, searches };
 }
 
-async function geminiResearch(model: string, system: string, prompt: string): Promise<AiResult> {
-  const key = Deno.env.get('GEMINI_API_KEY'); if (!key) throw new ConfigurationRequiredError('GEMINI_API_KEY');
+async function geminiResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+  if (!key) throw new ConfigurationRequiredError('GEMINI_API_KEY');
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 4000 } }),
@@ -142,7 +180,7 @@ async function geminiResearch(model: string, system: string, prompt: string): Pr
   return { text, sources, tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0, searches: data.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length ?? 0 };
 }
 
-const aiCall = (c: AiChoice, prompt: string) => c.provider === 'anthropic' ? anthropicResearch(c.model, c.system, prompt) : geminiResearch(c.model, c.system, prompt);
+const aiCall = (c: AiChoice, prompt: string) => c.provider === 'anthropic' ? anthropicResearch(c.key, c.model, c.system, prompt) : geminiResearch(c.key, c.model, c.system, prompt);
 
 // ── Yardımcılar ─────────────────────────────────────────────────────────────
 async function logStep(db: Db, m: MissionRow, step: number, action: string, message: string, target?: string | null, data?: unknown, started?: number) {
@@ -196,14 +234,13 @@ export async function stepMission(db: Db, m: MissionRow) {
   };
 
   try {
-    // 1) Hedef link henüz incelenmediyse: gerçek HTTP ile çek
     let pageNote = '';
     if (m.target_url && !visited.has(canonical(m.target_url))) {
       const t0 = Date.now();
       const p = await fetchPage(m.target_url);
       visited.add(canonical(m.target_url)); sources.push({ url: p.url || m.target_url, title: p.title ?? undefined });
       await logStep(db, m, step, 'fetch', p.ok ? `Hedef sayfa okundu: ${p.title || p.url} (HTTP ${p.status}, ${p.text.length} karakter metin, ${p.links.length} link)`
-        : `Hedef sayfa okunamadı: HTTP ${p.status}${p.error ? ` · ${p.error}` : ''} (site bot erişimini engelliyor olabilir)`, m.target_url,
+        : `Hedef sayfa doğrudan okunmadı: ${p.error ?? `HTTP ${p.status} (site bot erişimini engelliyor olabilir)`}`, m.target_url,
         { title: p.title, description: p.description, og: p.og, headings: p.headings.slice(0, 10), links: p.links.length }, t0);
       pageNote = pageDigest(p);
       for (const h of keywordSnippets(p.text, terms)) addFinding({ title: `“${h.term}” hedef sayfada geçiyor`, detail: h.snippet, url: p.url || m.target_url, evidence: h.snippet });
@@ -223,7 +260,9 @@ export async function stepMission(db: Db, m: MissionRow) {
         pageNote ? `HEDEF SAYFANIN GERÇEK İÇERİĞİ (sunucu tarafında çekildi):\n${pageNote}` : '',
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
+        COMPLIANCE_RULES,
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (gerekirse web araması / sayfa okuma). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz. Bilgi bulamazsan boş liste döndür; asla uydurma.',
+        'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
       const t0 = Date.now();
@@ -243,7 +282,6 @@ export async function stepMission(db: Db, m: MissionRow) {
         null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j) }, t0);
       await db.from('bot_missions').update({ provider: ai.provider, model: ai.model }).eq('id', m.id);
     } else {
-      // AI anahtarı yok: aynı sitedeki ilgili sayfaları gerçek HTTP ile tarayıp aranan terimleri bul
       const t0 = Date.now();
       let nextUrl: string | null = null;
       if (m.target_url) {
@@ -258,7 +296,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         for (const h of keywordSnippets(p.text, terms)) if (addFinding({ title: `“${h.term}” — ${p.title || 'sayfa'}`, detail: h.snippet, url: p.url || nextUrl, evidence: h.snippet })) added++;
         await logStep(db, m, step, 'fetch', `AI anahtarı tanımlı değil → sayfa taraması: ${p.title || nextUrl} (HTTP ${p.status}) · ${added} eşleşme`, nextUrl, null, t0);
       } else {
-        await logStep(db, m, step, 'analyze', 'AI anahtarı tanımlı değil ve taranacak yeni sayfa kalmadı. Web araması için Supabase Secrets’a ANTHROPIC_API_KEY (veya GEMINI_API_KEY) eklenmeli.', null, null, t0);
+        await logStep(db, m, step, 'analyze', 'AI anahtarı tanımlı değil ve taranacak yeni sayfa kalmadı. Web araması için Ayarlar → AI anahtarı bölümüne anahtar eklenmeli.', null, null, t0);
         if (!m.target_url || step > 1) { await persist(); return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut }, 'no_ai'); }
       }
     }
@@ -323,7 +361,8 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
 h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 8px;color:#115a31;border-bottom:1px solid #e1f3e7;padding-bottom:4px}.k{color:#5a7266;font-size:12px}
 table{width:100%;border-collapse:collapse;font-size:13px}td{padding:4px 6px;border-bottom:1px solid #eef7f1;vertical-align:top}td:first-child{color:#5a7266;width:170px}
 .f{border:1px solid #e1f3e7;border-radius:12px;padding:10px 12px;margin:8px 0}.f b{display:block}.f q{display:block;color:#3e5549;font-size:12px;margin-top:4px;font-style:italic}
-a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;line-height:1.6}.log{font-family:ui-monospace,monospace;font-size:11px;color:#3e5549}.badge{display:inline-block;background:#e1f3e7;color:#115a31;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}</style></head>
+a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;line-height:1.6}.log{font-family:ui-monospace,monospace;font-size:11px;color:#3e5549}.badge{display:inline-block;background:#e1f3e7;color:#115a31;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
+@media print{body{background:#fff;padding:0}main{border:0}}</style></head>
 <body><main><div class="k">EMBAY YAPI & ŞAHİN MANİTOU · BOT GÖREV RAPORU</div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}</span>
 <h2>Görev</h2><table><tr><td>Bot</td><td>${esc(ctx.name)}</td></tr><tr><td>Amaç</td><td>${esc(cur.goal)}</td></tr>
 ${cur.target_url ? `<tr><td>Hedef link</td><td><a href="${safeHref(cur.target_url)}">${esc(cur.target_url)}</a></td></tr>` : ''}
@@ -332,10 +371,10 @@ ${cur.stop_condition ? `<tr><td>Bitiş koşulu</td><td>${esc(cur.stop_condition)
 <tr><td>Başlangıç / bitiş</td><td>${esc(fmt(cur.started_at))} → ${esc(fmt(finishedAt))} (${cur.duration_minutes} dk süre tanımlı)</td></tr>
 <tr><td>Adım · kaynak · bulgu</td><td>${cur.step_count} · ${sources.length} · ${findings.length}</td></tr>${cur.provider ? `<tr><td>AI</td><td>${esc(cur.provider)} / ${esc(cur.model)}</td></tr>` : ''}</table>
 <h2>Özet</h2><div class="sum">${esc(summary)}</div>
-<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f) => `<div class="f"><b>${esc(f.title)}</b>${esc(f.detail)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
+<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}</b>${esc(f.detail)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
 <h2>İncelenen kaynaklar (${sources.length})</h2><ul>${sources.slice(0, 60).map((s) => `<li><a href="${safeHref(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join('')}</ul>
 <h2>Adım günlüğü</h2><div class="log">${(steps || []).map((s) => `<div>#${s.step_no} [${esc(s.action)}] ${esc(s.message)}</div>`).join('')}</div>
-<p class="k" style="margin-top:24px">Bu rapor gerçek HTTP istekleri ve AI araştırma çağrılarından üretilmiştir; kaynağı doğrulanamayan bilgiler rapora alınmaz.</p></main></body></html>`;
+<p class="k" style="margin-top:24px">Bu rapor gerçek HTTP istekleri ve AI araştırma çağrılarından üretilmiştir; kaynağı doğrulanamayan bilgiler rapora alınmaz. Veriler yalnızca herkese açık kurumsal kaynaklardan, KVKK ve site kullanım koşullarına uygun toplanır.</p></main></body></html>`;
 
   await db.from('bot_missions').update({ status, finish_reason: reason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null }).eq('id', m.id);
   await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu`);

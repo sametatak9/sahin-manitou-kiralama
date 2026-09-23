@@ -6,21 +6,22 @@ import { fmtDateTime } from '../lib/format';
 import type { BrandKit, OpsStatus } from '../lib/types';
 import { useSession } from '../session';
 import { Button, ErrorState, Field, Notice, Panel, Pill, StateView, Tabs } from '../ui';
+import { AiKeysPanel } from '../components/AiKeys';
 
 interface Agent { id: string; agent_key: string; name: string; provider: 'anthropic' | 'openai' | 'gemini'; model: string; temperature: number; max_tokens: number; system_prompt: string; active: boolean }
 interface Member { user_id: string; role: string; display_name: string | null; created_at: string }
 interface AuditRow { id: number; at: string; actor: string | null; actor_kind: string; action: string; entity_type: string; entity_id: string | null; summary: string | null; diff: Record<string, unknown> }
 
 export function SettingsScreen() {
-  const [tab, setTab] = useState<'brand' | 'ai' | 'team' | 'audit'>('brand');
+  const [tab, setTab] = useState<'brand' | 'ai' | 'team' | 'audit'>(() => (new URLSearchParams(window.location.search).get('tab') === 'ai' ? 'ai' : 'brand'));
   return (
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div><h2 className="font-display text-xl font-semibold text-ink-100">Ayarlar</h2><p className="text-xs text-ink-400">Marka kiti, AI model katmanı, ekip rolleri ve denetim kaydı.</p></div>
-        <Tabs value={tab} onChange={setTab} items={[{ id: 'brand', label: 'Marka kiti' }, { id: 'ai', label: 'AI modelleri' }, { id: 'team', label: 'Ekip' }, { id: 'audit', label: 'Audit log' }]} />
+        <Tabs value={tab} onChange={setTab} items={[{ id: 'brand', label: 'Marka kiti' }, { id: 'ai', label: 'AI anahtarı & modeller' }, { id: 'team', label: 'Ekip' }, { id: 'audit', label: 'Audit log' }]} />
       </div>
       {tab === 'brand' && <BrandKits />}
-      {tab === 'ai' && <Agents />}
+      {tab === 'ai' && <div className="space-y-4"><AiKeysPanel /><Agents /></div>}
       {tab === 'team' && <Team />}
       {tab === 'audit' && <Audit />}
     </div>

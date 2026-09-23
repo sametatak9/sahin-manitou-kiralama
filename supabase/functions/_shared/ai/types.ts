@@ -61,7 +61,7 @@ export interface AIProvider {
 export class ConfigurationRequiredError extends Error {
   code = 'CONFIGURATION_REQUIRED';
   constructor(public missing: string) {
-    super(`${missing} tanımlı değil (Supabase Edge Function Secrets)`);
+    super(`${missing} tanımlı değil (Ayarlar → AI anahtarı)`);
   }
 }
 

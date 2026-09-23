@@ -1,6 +1,6 @@
 // Bot görevleri: görev ver (amaç, link, aranan, rapor, süre, bitiş koşulu) → canlı adım günlüğü → rapor (HTML).
 import { useEffect, useState } from 'react';
-import { Download, ExternalLink, FileText, Loader2, Play, Printer, Sparkles, Square, Target, Timer, Wand2 } from 'lucide-react';
+import { Archive, Download, ExternalLink, FileText, Loader2, MessageCircle, Play, Printer, Sparkles, Square, Target, Timer, Wand2 } from 'lucide-react';
 import { callMissions, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
@@ -34,7 +34,7 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
       footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} disabled={!valid} onClick={start} icon={<Play className="w-4 h-4" />}>Görevi başlat</Button></>}>
       <div className="space-y-3">
         <Notice tone="info">Bot görevi süre boyunca her dakika bir adım ilerletir. Süre dolduğunda, bitiş koşulu sağlandığında ya da siz durdurduğunuzda rapor hazırlanır. Raporda yalnızca kaynağı gösterilebilen bulgular yer alır; bulunamazsa “Veri bulunamadı” yazar.</Notice>
-        {noAi && <Notice tone="warn">AI anahtarı tanımlı değil. Bot yalnızca verdiğiniz linki ve aynı sitedeki sayfaları gerçek HTTP ile tarar; web araması için Supabase → Edge Functions → Secrets bölümüne <b>ANTHROPIC_API_KEY</b> eklenmeli.</Notice>}
+        {noAi && <Notice tone="warn">AI anahtarı tanımlı değil: bot yalnızca verdiğiniz linki ve aynı sitedeki sayfaları tarar, web araması yapamaz. <a className="underline font-semibold" href="?ops=settings&tab=ai">Ayarlar → AI anahtarı</a> bölümüne anahtarı yapıştırmanız yeterli.</Notice>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Bot"><select className="ops-input" value={f.bot_id} onChange={(e) => setF({ ...f, bot_id: e.target.value })}>
             <option value="">— Genel araştırma botu —</option>{bots.filter((b) => b.status !== 'archived').map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
@@ -135,13 +135,27 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
     const url = URL.createObjectURL(new Blob([m.report_html], { type: 'text/html;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `${m.title.replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 60)}-rapor.html`; a.click(); URL.revokeObjectURL(url);
   };
-  const print = () => { if (!m?.report_html) return; const w = window.open('', '_blank', 'noopener'); if (w) { w.document.write(m.report_html); w.document.close(); w.focus(); w.print(); } };
+  const print = () => { if (!m?.report_html) return; const w = window.open('', '_blank'); if (w) { w.document.write(m.report_html); w.document.close(); w.focus(); setTimeout(() => w.print(), 300); } };
+  // WhatsApp ile dağıt: rapor özeti + liste (kaynak linkleriyle). Gönderim kullanıcının kendi WhatsApp'ından, alıcıyı kendisi seçer.
+  const shareWhatsApp = () => {
+    if (!m) return;
+    const lines = [`*${m.title}* — Embay bot raporu`, fmtDateTime(m.finished_at ?? m.created_at), '', (m.summary ?? '').slice(0, 1200), '',
+      ...m.findings.slice(0, 20).map((f, i) => `${i + 1}. ${f.title}\n${f.detail.slice(0, 220)}\n${f.url}`)];
+    const text = lines.join('\n').slice(0, 3800);
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  };
+  const [archived, setArchived] = useState<Record<number, string>>({});
+  const archive = async (i: number) => {
+    const f = m!.findings[i];
+    const { data, error } = await db().rpc('portfolio_upsert_company', { p: { firm_name: f.title.slice(0, 160), source_url: f.url, ai_notes: `${f.detail}${f.evidence ? ` — “${f.evidence}”` : ''}`.slice(0, 1500), source: 'bot_mission', need: m!.search_for ?? null }, p_bot_id: m!.bot_id, p_run_id: null, p_finding_id: null });
+    setArchived((a) => ({ ...a, [i]: error ? `Hata: ${error.message}` : (data as { action: string }).action === 'merged' ? 'Mevcut kayıtla birleştirildi' : 'Portföye eklendi' }));
+  };
 
   return (
     <Modal open wide onClose={onClose} title={m ? <span className="inline-flex items-center gap-2"><FileText className="w-4 h-4 text-brand-green" />{m.title}</span> : 'Görev'}
       footer={m && <>
         {live && <Button variant="danger" loading={busy} onClick={stop} icon={<Square className="w-4 h-4" />}>Durdur ve raporla</Button>}
-        {m.report_html && <><Button variant="ghost" onClick={print} icon={<Printer className="w-4 h-4" />}>Yazdır / PDF</Button><Button variant="primary" onClick={download} icon={<Download className="w-4 h-4" />}>HTML indir</Button></>}
+        {m.report_html && <><Button variant="ghost" onClick={shareWhatsApp} icon={<MessageCircle className="w-4 h-4" />}>WhatsApp ile gönder</Button><Button variant="ghost" onClick={print} icon={<Printer className="w-4 h-4" />}>PDF kaydet / yazdır</Button><Button variant="primary" onClick={download} icon={<Download className="w-4 h-4" />}>HTML indir</Button></>}
         <Button variant="ghost" onClick={onClose}>Kapat</Button></>}>
       {!m ? <StateView kind="loading" compact /> : (
         <div className="space-y-3">
@@ -180,7 +194,11 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
                 <div className="text-sm font-semibold text-ink-100">{f.title}</div>
                 <div className="text-xs text-ink-300 mt-0.5 whitespace-pre-line">{f.detail}</div>
                 {f.evidence && <div className="text-[11px] italic text-ink-400 mt-1">“{f.evidence}”</div>}
-                <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-brand-green mt-1 break-all"><ExternalLink className="w-3 h-3" />{f.url}</a>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-brand-green break-all"><ExternalLink className="w-3 h-3" />{f.url}</a>
+                  {archived[i] ? <span className="text-[11px] text-emerald-700 font-semibold">{archived[i]}</span>
+                    : <button onClick={() => archive(i)} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-ink-700 px-2 py-0.5 text-[11px] text-ink-300 hover:bg-ink-800"><Archive className="w-3 h-3" /> Firma portföyüne arşivle</button>}
+                </div>
               </div>))}</div>))}
 
           {tab === 'report' && (m.report_html

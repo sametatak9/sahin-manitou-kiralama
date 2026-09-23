@@ -1,8 +1,9 @@
 // EMBAY bot görev (mission) edge function:
 //   POST /missions/worker            → pg_cron (x-worker-secret): çalışan görevlerin bir sonraki adımı / raporu
-//   POST /missions/api {action,...}  → panel (kullanıcı JWT + ekip rolü): mission_start · mission_stop · skill_create
+//   POST /missions/api {action,...}  → panel (kullanıcı JWT + ekip rolü): mission_start · mission_stop · skill_create · ai_status · ai_test
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { finalizeMission, runDueMissions, stepMission, type MissionRow } from '../_shared/mission.ts';
+import { aiKeyAvailability, getAiKey, initKeyStore, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
 
 type Db = SupabaseClient;
 const cors = {
@@ -61,7 +62,6 @@ async function api(c: Db, req: Request) {
       }).select('*').single();
       if (error) throw error;
       await audit(c, u.userId, 'mission_start', 'bot_missions', m.id, `Görev başlatıldı: ${m.title}`);
-      // İlk adım hemen (arka planda) başlar; sonraki adımlar her dakika pg_cron worker ile devam eder.
       await background(stepMission(c, m as MissionRow).catch((e) => c.from('bot_missions').update({ locked_until: null, error: String(e).slice(0, 500) }).eq('id', m.id)));
       return { mission_id: m.id, deadline_at: m.deadline_at };
     }
@@ -80,7 +80,7 @@ async function api(c: Db, req: Request) {
       const u = await requireUser(c, req, 'admin');
       const name = String(body.name || '').trim(); const prompt = String(body.prompt || '').trim();
       if (name.length < 2 || prompt.length < 10) throw new HttpError(400, 'Yetenek adı ve en az 10 karakterlik tanım (prompt) gerekli');
-      const base = name.toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'yetenek';
+      const base = name.toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'yetenek';
       const { data: existing } = await c.from('automation_skills').select('id').eq('skill_key', base).maybeSingle();
       const skillKey = existing ? `${base}_${Date.now().toString(36)}` : base;
       const { data: sk, error } = await c.from('automation_skills').insert({
@@ -99,7 +99,23 @@ async function api(c: Db, req: Request) {
 
     case 'ai_status': {
       await requireUser(c, req);
-      return { anthropic: Boolean(Deno.env.get('ANTHROPIC_API_KEY')), gemini: Boolean(Deno.env.get('GEMINI_API_KEY')), openai: Boolean(Deno.env.get('OPENAI_API_KEY')) };
+      return await aiKeyAvailability();
+    }
+
+    // Kayıtlı anahtarı sağlayıcıya küçük bir istekle doğrular (sonuç panelde "doğrulandı" olarak görünür)
+    case 'ai_test': {
+      await requireUser(c, req, 'admin');
+      const p = String(body.provider || 'anthropic') as KeyProvider;
+      const key = await getAiKey(p);
+      if (!key) throw new HttpError(409, 'Anahtar tanımlı değil', 'CONFIGURATION_REQUIRED');
+      let res: Response;
+      if (p === 'anthropic') res = await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
+      else if (p === 'gemini') res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': key } });
+      else res = await fetch('https://api.openai.com/v1/models', { headers: { authorization: `Bearer ${key}` } });
+      const ok = res.ok; const err = ok ? undefined : `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      await markAiKey(p, ok, err);
+      if (!ok) throw new HttpError(400, `Anahtar doğrulanamadı (${err})`, 'INVALID_KEY');
+      return { provider: p, ok: true };
     }
 
     default: throw new HttpError(400, `Bilinmeyen işlem: ${action}`);
@@ -110,6 +126,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const path = new URL(req.url).pathname.replace(/^\/functions\/v1/, '').replace(/^\/missions/, '') || '/';
   const c = db();
+  initKeyStore(c);
   try {
     if (path.startsWith('/worker') && req.method === 'POST') {
       const { data: ok } = await c.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
