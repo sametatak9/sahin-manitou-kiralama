@@ -325,8 +325,11 @@ export async function stepMission(db: Db, m: MissionRow) {
       if (p.og['og:description'] && !m.search_for) addFinding({ title: 'Sayfanın kendi tanımı (meta)', detail: p.og['og:description'], url: p.url || m.target_url, evidence: p.og['og:description'] });
     }
 
-    const ai = await chooseAi(db, m.bot_id, m.model);
-    if (ai) {
+    // AI kredisi/anahtarı çalışmıyorsa ve hedef link varsa görev durmaz: AI'sız sayfa taramasıyla sürer
+    const aiDown = Boolean(m.target_url && (m.error_kind === 'ai_credit' || m.error_kind === 'ai_auth'));
+    const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model);
+    let useScan = !ai;
+    if (ai) try {
       const ctx = await botContext(db, m.bot_id);
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
       const prompt = [
@@ -363,7 +366,14 @@ export async function stepMission(db: Db, m: MissionRow) {
       await logStep(db, m, step, 'ai_research', `${ai.provider}/${ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
         null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: ai.provider, model: ai.model }).eq('id', m.id);
-    } else {
+    } catch (e) {
+      if (!(e instanceof AiFatalError) || !m.target_url) throw e;
+      m.error_kind = e.kind;
+      await db.from('bot_missions').update({ error_kind: e.kind, error: String(e.message).slice(0, 500) }).eq('id', m.id);
+      await logStep(db, m, step, 'ai_failover', `Yapay zekâ kullanılamıyor (${String(e.message).slice(0, 160)}) → görev AI'sız sayfa taramasıyla sürüyor.`);
+      useScan = true;
+    }
+    if (useScan) {
       const t0 = Date.now();
       let nextUrl: string | null = null;
       if (m.target_url) {
@@ -376,9 +386,9 @@ export async function stepMission(db: Db, m: MissionRow) {
         const p = await fetchPage(nextUrl); visited.add(canonical(nextUrl)); sources.push({ url: p.url || nextUrl, title: p.title ?? undefined });
         let added = 0;
         for (const h of keywordSnippets(p.text, terms)) if (addFinding({ title: `“${h.term}” — ${p.title || 'sayfa'}`, detail: h.snippet, url: p.url || nextUrl, evidence: h.snippet })) added++;
-        await logStep(db, m, step, 'fetch', `AI anahtarı tanımlı değil → sayfa taraması: ${p.title || nextUrl} (HTTP ${p.status}) · ${added} eşleşme`, nextUrl, null, t0);
+        await logStep(db, m, step, 'fetch', `AI'sız sayfa taraması: ${p.title || nextUrl} (HTTP ${p.status}) · ${added} eşleşme`, nextUrl, null, t0);
       } else {
-        await logStep(db, m, step, 'analyze', 'AI anahtarı tanımlı değil ve taranacak yeni sayfa kalmadı. Web araması için Ayarlar → AI anahtarı bölümüne anahtar eklenmeli.', null, null, t0);
+        await logStep(db, m, step, 'analyze', 'Taranacak yeni sayfa kalmadı. Web araması için çalışan bir AI anahtarı/bakiyesi gerekir (Ayarlar → AI anahtarı).', null, null, t0);
         if (!m.target_url || step > 1) { await persist(); return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut }, 'no_ai'); }
       }
     }
@@ -416,7 +426,7 @@ function factsHtml(f: Finding) {
     f.phone && `<a href="${telHref(f.phone)}">📞 ${esc(f.phone)}</a>`, f.email && `<a href="mailto:${esc(f.email)}">✉️ ${esc(f.email)}</a>`, f.website && `<a href="${safeHref(f.website)}" target="_blank" rel="noopener">🌐 web</a>`].filter(Boolean);
   return parts.length ? `<div class="facts">${parts.join('')}</div>` : '';
 }
-const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', error: 'Hata', no_ai: 'AI anahtarı yok — yalnızca sayfa taraması yapıldı' };
+const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', error: 'Hata', no_ai: 'AI kullanılamadı — yalnızca sayfa taraması yapıldı' };
 const fmt = (iso: string | null) => (iso ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '—');
 
 export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
@@ -431,7 +441,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
 
   let summary = '';
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
-  const ai = reason === 'error' ? null : await chooseAi(db, cur.bot_id, cur.model);
+  const ai = reason === 'error' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' ? null : await chooseAi(db, cur.bot_id, cur.model);
   if (ai && findings.length) {
     try {
       const r = await aiCall(ai, [

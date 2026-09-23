@@ -14,7 +14,7 @@ export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: To
   stopped: { label: 'DURDURULDU', tone: 'wait' }, failed: { label: 'BAŞARISIZ', tone: 'stop' }, blocked: { label: 'ENGELLENDİ', tone: 'stop' },
 };
 export const FINISH_REASON: Record<string, string> = {
-  deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', error: 'Hata', no_ai: 'AI anahtarı yok (yalnızca sayfa taraması)',
+  deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', error: 'Hata', no_ai: 'AI kullanılamadı (yalnızca sayfa taraması)',
 };
 const DURATIONS = [1, 5, 10, 15, 30, 60, 120];
 export const ERROR_KIND: Record<string, string> = {
@@ -52,7 +52,7 @@ const TEST_MISSION = {
 /** Görev sonucu: başarı / veri yok / durduruldu / hata (kredi, anahtar…). */
 export function outcomeOf(m: Mission): { tone: 'ok' | 'warn' | 'error' | 'info'; title: string; text: string } {
   if (m.status === 'failed') return { tone: 'error', title: 'Hata ile bitti', text: ERROR_KIND[m.error_kind ?? ''] ?? m.error ?? 'Bilinmeyen hata' };
-  if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı', text: 'AI anahtarı tanımlı değil; yalnızca sayfa taraması yapıldı.' };
+  if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı — sayfa taraması yapıldı', text: `${m.findings.length} bulgu (AI'sız). ${m.error_kind === 'ai_credit' ? 'AI kredisi/bakiyesi bitmiş; bakiye yüklenince web araması da yapılır.' : m.error_kind === 'ai_auth' ? 'AI anahtarı geçersiz.' : 'AI anahtarı tanımlı değil.'}` };
   if (m.status === 'stopped') return { tone: 'info', title: 'Yönetici durdurdu', text: `${m.findings.length} bulgu ile raporlandı.` };
   if (!m.findings.length) return { tone: 'warn', title: 'Sonuç bulunamadı', text: 'Kaynağı doğrulanabilen bir bulgu çıkmadı (Veri bulunamadı).' };
   return { tone: 'ok', title: 'Başarılı', text: `${m.findings.length} kaynaklı bulgu · ${FINISH_REASON[m.finish_reason ?? ''] ?? ''}` };
