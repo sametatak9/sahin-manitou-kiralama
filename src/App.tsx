@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SupabaseAuthGate } from './components/SupabaseAuthGate';
 import { Header } from './components/Header';
-import { MobileQuickActions } from './components/MobileQuickActions';
 import { SocialIntelligenceCockpit } from './components/SocialIntelligenceCockpit';
 import { ClientInvestorCrm } from './components/ClientInvestorCrm';
 import { GbpSeoSection } from './components/GbpSeoSection';
@@ -78,7 +77,6 @@ export default function App() {
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
-        <MobileQuickActions />
         <AdminWorkspacePicker activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <div className="flex items-center gap-2 text-xs text-slate-500 bg-white p-2.5 rounded-xl border border-emerald-100 w-fit">
