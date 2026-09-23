@@ -6,52 +6,17 @@ import { callOps, errorCode, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDateTime, istanbulToIso, relTime, type Tone } from '../lib/format';
 import type { Draft, OpsStatus, Publication } from '../lib/types';
+import { TARGETS, uploadMedia } from '../lib/media';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
 
-type Target = { key: string; platform: 'instagram' | 'facebook' | 'youtube'; format: string; label: string; needsVideo?: boolean };
-const TARGETS: Target[] = [
-  { key: 'ig_post', platform: 'instagram', format: 'post', label: 'Instagram gönderi' },
-  { key: 'ig_reel', platform: 'instagram', format: 'reel', label: 'Instagram Reels', needsVideo: true },
-  { key: 'ig_story', platform: 'instagram', format: 'story', label: 'Instagram hikâye' },
-  { key: 'fb_post', platform: 'facebook', format: 'post', label: 'Facebook gönderi' },
-  { key: 'yt_short', platform: 'youtube', format: 'short', label: 'YouTube Shorts', needsVideo: true },
-  { key: 'yt_video', platform: 'youtube', format: 'video', label: 'YouTube video', needsVideo: true },
-];
 const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Reels', story: 'Hikâye', short: 'Shorts', video: 'Video' };
 const WF: Record<string, { label: string; tone: Tone }> = {
   pending_approval: { label: 'ONAY BEKLİYOR', tone: 'wait' }, scheduled: { label: 'ZAMANLANDI', tone: 'info' }, approved: { label: 'ONAYLI', tone: 'info' },
   processing: { label: 'PAYLAŞILIYOR', tone: 'run' }, published: { label: 'PAYLAŞILDI', tone: 'go' }, failed: { label: 'BAŞARISIZ', tone: 'stop' },
   cancelled: { label: 'İPTAL', tone: 'idle' }, draft: { label: 'TASLAK', tone: 'idle' }, rejected: { label: 'REDDEDİLDİ', tone: 'stop' },
 };
-const MAX_BYTES = 50 * 1024 * 1024;
 const isVideoUrl = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);
-
-/** Instagram yalnızca JPEG kabul eder: PNG/WebP/HEIC görselleri tarayıcıda JPEG'e çevirir (en fazla 1440 px). */
-async function toJpeg(file: File): Promise<Blob> {
-  if (file.type === 'image/jpeg') return file;
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1440 / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale);
-  const g = canvas.getContext('2d'); if (!g) throw new Error('Görsel dönüştürülemedi');
-  g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height); g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Görsel dönüştürülemedi'))), 'image/jpeg', 0.9));
-}
-
-async function uploadMedia(file: File): Promise<string> {
-  const video = file.type.startsWith('video/');
-  if (!video && !file.type.startsWith('image/')) throw new Error(`${file.name}: yalnızca görsel veya video yüklenebilir`);
-  const blob = video ? file : await toJpeg(file);
-  if (blob.size > MAX_BYTES) throw new Error(`${file.name}: dosya 50 MB sınırını aşıyor`);
-  const ext = video ? (file.type === 'video/quicktime' ? 'mov' : 'mp4') : 'jpg';
-  const contentType = video ? (file.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
-  const path = `${dayKey(new Date()).slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
-  const s = db();
-  const { error } = await s.storage.from('media-uploads').upload(path, blob, { contentType, upsert: false });
-  if (error) throw new Error(`${file.name}: yükleme başarısız (${error.message})`);
-  return s.storage.from('media-uploads').getPublicUrl(path).data.publicUrl;
-}
 
 function tomorrow() { const d = new Date(Date.now() + 86400_000); return dayKey(d); }
 function addDays(key: string, n: number) { const d = new Date(`${key}T12:00:00+03:00`); d.setUTCDate(d.getUTCDate() + n); return dayKey(d); }

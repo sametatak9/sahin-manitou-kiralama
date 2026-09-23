@@ -6,6 +6,7 @@ import { Button, Panel, Pill, Notice, StateView, cx } from '../ui';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
 import { useRouter } from '../session';
+import { VideoPool } from '../components/VideoPool';
 
 // Video havuzu yalnızca gerçekten yüklenmiş videoları gösterir (Yayın Kuyruğu'ndan yüklenen, social_drafts.video_url).
 interface VideoRow { id: string; title: string; caption: string | null; video_url: string; primary_platform: string | null; format: string | null; workflow_status: string; scheduled_at: string | null; created_at: string }
@@ -50,7 +51,7 @@ export function VideoStudioScreen() {
               <Film className="w-6 h-6 text-brand-green" /> Video Havuzu & AI Üretim
             </h2>
             <p className="text-xs text-ink-300 mt-1">
-              Yüklediğiniz videolar ve AI video araçları (Higgsfield, Runway, Luma) için hazır komut (istem) hazırlayıcı. Video üretimi o araçlarda yapılır; üretilen videoyu Yayın Kuyruğu’na yükleyin.
+              Videolarınızı buraya yükleyin: havuza kaydolur, uygulamasını seçer, kırpar/kapak seçer ve istediğiniz saatte paylaşılmak üzere kuyruğa gönderirsiniz.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -59,7 +60,7 @@ export function VideoStudioScreen() {
               onClick={() => setActiveTab('pool')}
               icon={<Film className="w-4 h-4" />}
             >
-              Videolarım ({videos.data.length})
+              Video havuzu
             </Button>
             <Button
               variant={activeTab === 'generator' ? 'primary' : 'ghost'}
@@ -72,11 +73,9 @@ export function VideoStudioScreen() {
         </div>
       </section>
 
-      {activeTab === 'pool' && (videos.loading ? <StateView kind="loading" compact /> : videos.data.length === 0 ? (
-        <StateView kind="empty" title="Henüz video yok" message="Videoları Yayın Kuyruğu’ndan telefonunuzdan yükleyin; burada listelenir ve paylaşım durumları görünür. Aşağıdaki istem hazırlayıcıyla AI video araçları için komut da oluşturabilirsiniz."
-          action={<Button variant="primary" onClick={() => go('queue')} icon={<CalendarClock className="w-4 h-4" />}>Yayın Kuyruğu’na git</Button>} />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {activeTab === 'pool' && <VideoPool />}
+      {activeTab === 'pool' && videos.data.length > 0 && <h3 className="text-sm font-semibold text-ink-100 pt-2">Yayın Kuyruğu’ndaki videolar ({videos.data.length})</h3>}
+      {activeTab === 'pool' && (videos.loading ? null : videos.data.length === 0 ? null : (        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {videos.data.map((v) => (
             <Panel key={v.id} className="flex flex-col justify-between overflow-hidden">
               <div>

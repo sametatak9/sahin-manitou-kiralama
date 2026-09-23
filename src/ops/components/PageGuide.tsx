@@ -11,7 +11,7 @@ const GUIDE: Partial<Record<Route, { what: string; tips: string[] }>> = {
   approvals: { what: 'Botların hazırladığı paylaşım, mesaj ve teklifler burada onayınızı bekler.', tips: ['Onaylamadığınız hiçbir şey dışarıya gönderilmez.', 'Hatırlatma mesajlarında “WhatsApp’ta aç” ile tek dokunuşla gönderirsiniz.'] },
   connections: { what: 'Instagram, Facebook, YouTube ve diğer uygulamalar.', tips: ['“Hesabımla bağla” ile bir kez giriş yapın; botlar hesabı programın içinden kullanır.', '“Uygulamayı aç” uygulamanın kendisini açar.'] },
   queue: { what: 'Telefondan fotoğraf/video yükleyin, nerede ve ne zaman paylaşılacağını seçin.', tips: ['Birden çok dosya seçip “her gün bir tane” derseniz günlük paylaşım planı kurulur.', 'Hesap bağlı değilse paylaşım sırada bekler, bağlanınca gider.'] },
-  videos: { what: 'Yüklediğiniz videolar ve AI video araçları için hazır komut (istem) üretici.', tips: ['Videoyu Yayın Kuyruğu’ndan yükleyin; burada durumu görünür.'] },
+  videos: { what: 'Video yükleyin, havuzda saklayın, uygulamasını seçin, kırpın ve paylaşım saatini belirleyin.', tips: ['“Telefondan video seç” → video havuza kaydolur.', 'Videoya dokunun: uygulama seçimi, kırpma, kapak, açıklama ve “Kaydet ve kuyruğa gönder”.'] },
   planner: { what: 'Paylaşımların takvimi: ay, hafta, gün görünümü.', tips: ['Bir gönderiyi sürükleyip başka güne bırakarak tarihini değiştirebilirsiniz.'] },
   studio: { what: 'AI ile gönderi metni ve tasarımı hazırlayın, önizleyin, onaya gönderin.', tips: ['Konu ve amacı yazın → “AI ile üret”.'] },
   portfolio: { what: 'Botların ve sizin bulduğunuz firmalar arşivi; belirli aralıklarla hatırlatma.', tips: ['Firmayı açın → hatırlatma sıklığını seçip kaydedin.', 'Her sabah zamanı gelen firmalar için hazır mesaj Onay Merkezi’ne düşer.'] },
