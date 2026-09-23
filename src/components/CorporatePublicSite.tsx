@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { BUSINESS_INFO } from '../data/marketingData';
+import { PublicQuoteForm } from './PublicQuoteForm';
 
 export function CorporatePublicSite() {
   // Current active view: 'construction' (/) or 'manitou' (/manitou)
@@ -480,6 +481,9 @@ export function CorporatePublicSite() {
           </div>
         </section>
 
+        <section id="teklif" className="max-w-3xl mx-auto px-4 sm:px-6 mt-16">
+          <PublicQuoteForm defaultDemand={activePage === 'manitou' ? 'manitou_kiralama' : 'kentsel_donusum'} />
+        </section>
       </main>
 
       {/* 3. KURUMSAL FOOTER (NAP TUTARLILIĞI) */}

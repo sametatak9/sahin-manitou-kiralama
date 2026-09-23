@@ -4,6 +4,28 @@
   --color-brand-green: #3DAA5C;
   --color-brand-darkgreen: #115A31;
   --color-brand-lightbg: #E7F6EC;
+
+  /* EMBAY AI Operations Center — grafit + saha yeşili + sinyal renkleri */
+  --color-ink-950: #060D0A;
+  --color-ink-900: #0A1410;
+  --color-ink-850: #0E1A15;
+  --color-ink-800: #12211B;
+  --color-ink-750: #172A22;
+  --color-ink-700: #1E352B;
+  --color-ink-600: #2A4739;
+  --color-ink-500: #4A6A5B;
+  --color-ink-400: #6F8D7F;
+  --color-ink-300: #9CB4A8;
+  --color-ink-200: #C7D8CF;
+  --color-ink-100: #E6F0EA;
+  --color-signal-go: #3DDC84;
+  --color-signal-wait: #F5B301;
+  --color-signal-run: #38BDF8;
+  --color-signal-stop: #F43F5E;
+  --color-signal-idle: #64748B;
+
+  --font-display: "Space Grotesk", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* The social workspace is an operational surface, not a dark reference page. */
@@ -22,3 +44,46 @@
 .social-workspace .bg-amber-950\/20 { background-color: #fffbeb !important; }
 .social-workspace .bg-cyan-500\/10 { background-color: #ecfeff !important; }
 .social-workspace .bg-violet-500\/10 { background-color: #f5f3ff !important; }
+
+/* ── Ops Center ─────────────────────────────────────────────────────────── */
+.ops-root {
+  background:
+    radial-gradient(1200px 600px at 110% -10%, rgba(61, 170, 92, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(56, 189, 248, 0.06), transparent 60%),
+    var(--color-ink-950);
+  color: var(--color-ink-100);
+}
+.ops-grid-bg {
+  background-image:
+    linear-gradient(rgba(156, 180, 168, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(156, 180, 168, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.ops-panel {
+  background: linear-gradient(180deg, rgba(23, 42, 34, 0.72), rgba(14, 26, 21, 0.72));
+  border: 1px solid var(--color-ink-700);
+  border-radius: 18px;
+  backdrop-filter: blur(6px);
+}
+.ops-input {
+  width: 100%;
+  background: var(--color-ink-900);
+  border: 1px solid var(--color-ink-700);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  color: var(--color-ink-100);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.ops-input:focus { border-color: var(--color-brand-green); box-shadow: 0 0 0 3px rgba(61, 170, 92, .18); }
+.ops-input::placeholder { color: var(--color-ink-500); }
+select.ops-input option { background: var(--color-ink-900); }
+.ops-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+.ops-scroll::-webkit-scrollbar-thumb { background: var(--color-ink-700); border-radius: 8px; }
+.ops-pulse { animation: ops-pulse 1.8s ease-in-out infinite; }
+@keyframes ops-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
+.ops-sweep { animation: ops-sweep 4s linear infinite; transform-origin: 50% 50%; }
+@keyframes ops-sweep { to { transform: rotate(360deg); } }
+.ops-fade-in { animation: ops-fade .25s ease-out both; }
+@keyframes ops-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

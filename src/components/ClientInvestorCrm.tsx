@@ -129,7 +129,7 @@ export function ClientInvestorCrm() {
           <div className="space-y-1.5 max-w-2xl">
             <div className="text-[11px] font-bold text-emerald-400 tracking-wider uppercase flex items-center gap-2">
               <Briefcase className="w-3.5 h-3.5" />
-              <span>Supabase Kalıcı Müşteri & Sermaye Veritabanı (KVKK Uyumlu)</span>
+              <span>Yerel Müşteri & Sermaye Defteri (bu tarayıcıda saklanır)</span>
             </div>
             <h2 className="text-2xl font-black text-white">
               Müşteri & Yatırımcı Portföyü, Sermaye Planı & Otomatik Reklam Stratejisi
@@ -178,7 +178,7 @@ export function ClientInvestorCrm() {
           <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block">Kayıtlı Yatırımcı / Müşteri</span>
             <div className="text-lg font-black text-amber-400 mt-0.5">{totalProfilesCount} Profil</div>
-            <span className="text-[10px] text-slate-500">Supabase & LocalStorage Senkron</span>
+            <span className="text-[10px] text-slate-500">Yalnızca bu tarayıcı (LocalStorage)</span>
           </div>
 
           <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
@@ -356,7 +356,7 @@ export function ClientInvestorCrm() {
           <div className="border-b border-slate-800 pb-3">
             <h3 className="font-bold text-white text-base">Yeni Müşteri & Yatırımcı Profili Kayıt Formu</h3>
             <p className="text-xs text-slate-400 mt-1">
-              Toplanan veriler Supabase veritabanına ve yerel hafızaya şifreli olarak kaydedilir. Belirlenen reklam stratejisi ile bu müşteriye periyodik tanıtım yapılır.
+              Bu klasik araç verileri yalnızca bu tarayıcının yerel hafızasında tutar; kalıcı CRM için Ops Center → İnşaat / Makine Kiralama modüllerini kullanın. Belirlenen reklam stratejisi ile bu müşteriye periyodik tanıtım yapılır.
             </p>
           </div>
 
@@ -503,7 +503,7 @@ export function ClientInvestorCrm() {
                 <span>Müşteri açık rıza beyanı alınmış olup, KVKK kapsamında veritabanına kaydedilmesini onaylıyorum.</span>
               </label>
               <span className="text-[10px] text-slate-500 block">
-                Kayıt Tarihi: {new Date().toLocaleDateString('tr-TR')} · Supabase ve yerel şifreli depoda saklanır.
+                Kayıt Tarihi: {new Date().toLocaleDateString('tr-TR')} · Yalnızca bu tarayıcıda saklanır.
               </span>
             </div>
 
