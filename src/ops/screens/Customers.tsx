@@ -69,14 +69,18 @@ export function CustomersScreen({ module }: { module: Module }) {
   const today = q.data.filter((r) => dayKey(r.created_at) === dayKey(new Date())).length;
   const pipelineValue = q.data.filter((r) => !['kaybedildi'].includes(r.status)).reduce((a, r) => a + (Number(r[cfg.valueKey]) || 0), 0);
 
+  const [statusErr, setStatusErr] = useState<string | null>(null);
   const setStatus = async (id: string, status: string) => {
     q.setData((cur) => cur.map((r) => (r.id === id ? { ...r, status } : r)));
-    await db().from(cfg.table).update({ status }).eq('id', id);
+    const { error } = await db().from(cfg.table).update({ status }).eq('id', id);
+    if (error) { setStatusErr(`Durum kaydedilemedi: ${errorText(error)}`); q.reload(); return; }
+    setStatusErr(null);
     await db().from('customer_activities').insert({ customer_module: module, customer_id: id, activity_type: 'durum', body: `Durum: ${cfg.statuses.find((s) => s[0] === status)?.[1]}` });
   };
 
   return (
     <div className="space-y-4">
+      {statusErr && <Notice tone="error">{statusErr}</Notice>}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div><h2 className="font-display text-xl font-semibold text-ink-100">{cfg.title}</h2><p className="text-xs text-ink-400">{cfg.subtitle}</p></div>
         <div className="flex flex-wrap gap-2">
@@ -168,7 +172,11 @@ function CustomerEditor({ module, row, onClose, onSaved }: { module: Module; row
       onSaved();
     } catch (e) { setErr(errorText(e)); } finally { setBusy(null); }
   };
-  const archive = async () => { if (!row) return; setBusy('archive'); await db().from(cfg.table).update({ archived_at: new Date().toISOString() }).eq('id', row.id); onSaved(); };
+  const archive = async () => {
+    if (!row) return; setBusy('archive'); setErr(null);
+    const { error } = await db().from(cfg.table).update({ archived_at: new Date().toISOString() }).eq('id', row.id);
+    setBusy(null); if (error) setErr(errorText(error)); else onSaved();
+  };
 
   const input = (d: FieldDef) => {
     const v = f[d.key];
@@ -210,7 +218,12 @@ function CustomerEditor({ module, row, onClose, onSaved }: { module: Module; row
 function Activities({ module, row }: { module: Module; row: Row }) {
   const q = useQuery(async () => unwrap(await db().from('customer_activities').select('*').eq('customer_module', module).eq('customer_id', row.id).order('created_at', { ascending: false })) as Array<{ id: string; activity_type: string; body: string; due_at: string | null; done: boolean; created_at: string }>, [], [row.id]);
   const [type, setType] = useState('not'); const [body, setBody] = useState(''); const [msg, setMsg] = useState<string | null>(null);
-  const add = async () => { if (!body.trim()) return; await db().from('customer_activities').insert({ customer_module: module, customer_id: row.id, activity_type: type, body }); setBody(''); q.reload(); };
+  const add = async () => {
+    if (!body.trim()) return;
+    const { data, error } = await db().from('customer_activities').insert({ customer_module: module, customer_id: row.id, activity_type: type, body }).select('created_at').single();
+    if (error) { setMsg(`Kaydedilemedi: ${errorText(error)}`); return; }
+    setBody(''); setMsg(`✓ Veritabanına kaydedildi · ${new Date(data.created_at).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}`); q.reload();
+  };
   const phone = String(row.phone ?? '');
   const prepareFollowUp = async () => {
     const text = body.trim() || `Merhaba, Embay Yapı’dan yazıyoruz. ${module === 'rental' ? 'Manitou kiralama talebiniz' : 'Projeniz'} hakkında görüşmek isteriz.`;

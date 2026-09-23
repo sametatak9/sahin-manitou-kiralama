@@ -164,3 +164,10 @@ export function PlatformBadge({ platform, size = 'sm' }: { platform?: string | n
     </span>
   );
 }
+
+/** Kaydetme garantisi: veritabanının döndürdüğü kayıt zamanını gösterir (yalnızca yazma başarılıysa). */
+export function SavedStamp({ at, className = '' }: { at?: string | null; className?: string }) {
+  if (!at) return null;
+  const t = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(at));
+  return <div className={cx('inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700', className)}>✓ Veritabanına kaydedildi · {t}</div>;
+}

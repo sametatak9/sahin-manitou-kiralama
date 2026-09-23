@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
 import { useRouter, useSession, type Route } from './session';
 import { cx } from './ui';
+import { PageGuide } from './components/PageGuide';
 
 interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
@@ -183,7 +184,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
           </div>
         </header>
         <main className="flex-1 px-4 sm:px-6 py-5 pb-28 lg:pb-8 ops-grid-bg">
-          <div className="max-w-[1400px] mx-auto">{children}</div>
+          <div className="max-w-[1400px] mx-auto"><PageGuide route={current.id} />{children}</div>
         </main>
       </div>
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-ink-700 bg-ink-900/95 backdrop-blur px-2 pb-[env(safe-area-inset-bottom)]">

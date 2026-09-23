@@ -5,7 +5,7 @@ import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
 import type { BrandKit, OpsStatus } from '../lib/types';
 import { useSession } from '../session';
-import { Button, ErrorState, Field, Notice, Panel, Pill, StateView, Tabs } from '../ui';
+import { Button, ErrorState, Field, Notice, Panel, Pill, SavedStamp, StateView, Tabs } from '../ui';
 import { AiKeysPanel } from '../components/AiKeys';
 
 interface Agent { id: string; agent_key: string; name: string; provider: 'anthropic' | 'openai' | 'gemini'; model: string; temperature: number; max_tokens: number; system_prompt: string; active: boolean }
@@ -45,17 +45,18 @@ function BrandKits() {
 function BrandCard({ kit, disabled, onSaved }: { kit: BrandKit; disabled: boolean; onSaved: () => void }) {
   const [f, setF] = useState(kit);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const save = async () => {
     setBusy(true); setErr(null);
     const { id, ...rest } = f;
-    const { error } = await db().from('brand_kits').update(rest).eq('id', id);
-    setBusy(false); if (error) setErr(errorText(error)); else onSaved();
+    const { data, error } = await db().from('brand_kits').update(rest).eq('id', id).select('updated_at').single();
+    setBusy(false); if (error) setErr(errorText(error)); else { setSavedAt(data.updated_at); onSaved(); }
   };
   const color = (k: 'primary_color' | 'secondary_color' | 'accent_color' | 'text_color', label: string) => (
     <Field label={label}><div className="flex gap-2"><input type="color" disabled={disabled} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value.toUpperCase() })} className="h-10 w-12 rounded-lg bg-transparent" /><input disabled={disabled} className="ops-input font-mono" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div></Field>
   );
   return (
-    <Panel kicker={kit.is_default ? 'Varsayılan marka kiti' : 'Marka kiti'} title={kit.name} action={!disabled && <Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button>}>
+    <Panel kicker={kit.is_default ? 'Varsayılan marka kiti' : 'Marka kiti'} title={kit.name} action={!disabled && <div className="flex flex-col items-end gap-1"><Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button><SavedStamp at={savedAt} /></div>}>
       <div className="flex gap-2 mb-4">{[f.primary_color, f.secondary_color, f.accent_color, f.text_color].map((c, i) => <span key={i} className="h-10 flex-1 rounded-xl ring-1 ring-ink-700" style={{ background: c }} />)}</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Şirket adı"><input disabled={disabled} className="ops-input" value={f.company_name} onChange={(e) => setF({ ...f, company_name: e.target.value })} /></Field>
@@ -97,9 +98,10 @@ function Agents() {
 function AgentCard({ agent, disabled, onSaved }: { agent: Agent; disabled: boolean; onSaved: () => void }) {
   const [f, setF] = useState(agent);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
-  const save = async () => { setBusy(true); const { id, agent_key: _k, ...rest } = f; const { error } = await db().from('ai_agents').update(rest).eq('id', id); setBusy(false); if (error) setErr(errorText(error)); else onSaved(); };
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const save = async () => { setBusy(true); setErr(null); const { id, agent_key: _k, ...rest } = f; const { data, error } = await db().from('ai_agents').update(rest).eq('id', id).select('updated_at').single(); setBusy(false); if (error) setErr(errorText(error)); else { setSavedAt(data.updated_at); onSaved(); } };
   return (
-    <Panel kicker={agent.agent_key} title={agent.name} action={!disabled && <Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button>}>
+    <Panel kicker={agent.agent_key} title={agent.name} action={!disabled && <div className="flex flex-col items-end gap-1"><Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button><SavedStamp at={savedAt} /></div>}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <Field label="Sağlayıcı"><select disabled={disabled} className="ops-input" value={f.provider} onChange={(e) => setF({ ...f, provider: e.target.value as Agent['provider'] })}><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select></Field>
@@ -120,7 +122,7 @@ function Team() {
   const [f, setF] = useState({ user_id: '', role: 'staff', display_name: '' });
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const add = async () => { const { error } = await db().from('team_members').insert(f); setMsg(error ? { tone: 'error', text: errorText(error) } : { tone: 'ok', text: 'Ekip üyesi eklendi.' }); if (!error) { setF({ user_id: '', role: 'staff', display_name: '' }); q.reload(); } };
-  const setRole = async (m: Member, role: string) => { await db().from('team_members').update({ role }).eq('user_id', m.user_id); q.reload(); };
+  const setRole = async (m: Member, role: string) => { const { error } = await db().from('team_members').update({ role }).eq('user_id', m.user_id); setMsg(error ? { tone: 'error', text: errorText(error) } : { tone: 'ok', text: `${m.display_name ?? 'Üye'} rolü kaydedildi.` }); q.reload(); };
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">

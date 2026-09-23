@@ -228,14 +228,16 @@ async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) =>
       if (c.provider === 'anthropic') {
         const gk = await getAiKey('gemini');
         if (gk) {
-          if (onFailover) await onFailover(`Anthropic limiti/bakiyesi (${errStr.slice(0, 80)}) nedeniyle Gemini modeline otomatik geçildi (Failover).`);
-          return await geminiResearch(gk, Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', c.system, prompt);
+          if (onFailover) await onFailover(`Claude kullanılamadı (${errStr.slice(0, 80)}) — yedek Gemini ile devam ediliyor.`);
+          try { return await geminiResearch(gk, Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', c.system, prompt); }
+          catch (e2) { throw new AiFatalError(err instanceof AiFatalError ? err.kind : 'ai_credit', `${errStr.slice(0, 120)} · yedek Gemini de çalışmadı: ${String((e2 as Error).message).slice(0, 120)}`); }
         }
       } else if (c.provider === 'gemini') {
         const ak = await getAiKey('anthropic');
         if (ak) {
-          if (onFailover) await onFailover(`Gemini limiti (${errStr.slice(0, 80)}) nedeniyle Claude modeline otomatik geçildi (Failover).`);
-          return await anthropicResearch(ak, 'claude-opus-5', c.system, prompt);
+          if (onFailover) await onFailover(`Gemini kullanılamadı (${errStr.slice(0, 80)}) — yedek Claude ile devam ediliyor.`);
+          try { return await anthropicResearch(ak, 'claude-opus-5', c.system, prompt); }
+          catch (e2) { throw new AiFatalError(err instanceof AiFatalError ? err.kind : 'ai_credit', `${errStr.slice(0, 120)} · yedek Claude da çalışmadı: ${String((e2 as Error).message).slice(0, 120)}`); }
         }
       }
     }

@@ -7,7 +7,7 @@ import { approvalLabel, approvalTone, BOT_STATUS, dayKey, fmtDateTime, istanbulT
 import { computeNextRun, describeSchedule, isValidCron } from '../../../supabase/functions/_shared/pure/schedule.ts';
 import type { Approval, Bot, Run, RunLog, Skill, Task, Tool } from '../lib/types';
 import { useRouter, useSession } from '../session';
-import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, Stat, StateView, Tabs } from '../ui';
+import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, SavedStamp, Stat, StateView, Tabs } from '../ui';
 
 interface Portfolio { bots: Bot[]; skills: Skill[]; tools: Tool[]; tasks: Task[]; runs: Run[]; agents: Array<{ id: string; name: string; model: string; provider: string }> }
 const EMPTY: Portfolio = { bots: [], skills: [], tools: [], tasks: [], runs: [], agents: [] };
@@ -88,7 +88,7 @@ export function BotsScreen() {
                   <div><div className="font-mono text-ink-500">BAŞARI</div><div className={cx('font-semibold', st.success === null ? 'text-ink-400' : st.success >= 80 ? 'text-emerald-700' : 'text-amber-700')}>{st.success === null ? '—' : `%${st.success}`}</div></div>
                   <div><div className="font-mono text-ink-500">HATA</div><div className={st.errors ? 'text-rose-700 font-semibold' : 'text-ink-300'}>{st.errors}{st.blocked ? ` · ${st.blocked}⛔` : ''}</div></div>
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 text-[10px] text-ink-500"><PlatformBadge platform={b.platform || 'system'} /> {platformMeta(b.platform).name}{b.connector_key && ` · connector: ${b.connector_key}`}</div>
+                <div className="flex items-center gap-1.5 mt-2 text-[10px] text-ink-500"><PlatformBadge platform={b.platform || 'system'} /> {platformMeta(b.platform).name}</div>
               </button>
             );
           })}
@@ -314,7 +314,7 @@ function SkillsTab({ bot, p, skills, reload, isAdmin }: { bot: Bot; p: Portfolio
     {prompting && <SkillPromptModal botId={bot.id} botName={bot.name} onClose={() => setPrompting(false)} onSaved={() => { setPrompting(false); reload(); }} />}
     <Panel title="Bağlı yetenekler" kicker="Bot yetenekleri" action={isAdmin && (
       <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => setPrompting(true)} icon={<Wand2 className="w-4 h-4" />}>Prompt ile yetenek ekle</Button><select className="ops-input !py-1.5 text-xs" value={add} onChange={(e) => setAdd(e.target.value)}><option value="">Skill ekle…</option>{available.map((s) => <option key={s.id} value={s.id}>{s.display_name}</option>)}</select>
-        <Button variant="primary" disabled={!add} onClick={async () => { await db().from('automation_bot_skills').insert({ bot_id: bot.id, skill_id: add, position: skills.length }); setAdd(''); reload(); }} icon={<Plus className="w-4 h-4" />} /></div>)}>
+        <Button variant="primary" disabled={!add} onClick={async () => { const { error } = await db().from('automation_bot_skills').insert({ bot_id: bot.id, skill_id: add, position: skills.length }); if (error) { window.alert(`Yetenek eklenemedi: ${errorText(error)}`); return; } setAdd(''); reload(); }} icon={<Plus className="w-4 h-4" />} /></div>)}>
       {skills.length === 0 ? <StateView kind="empty" compact /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {skills.map((s) => (
@@ -408,6 +408,7 @@ function BotEditor({ p, bot, onClose, onSaved, inline = false }: { p: Portfolio;
   });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const slugify = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const save = async () => {
     setBusy(true); setErr(null);
     try {
@@ -416,7 +417,9 @@ function BotEditor({ p, bot, onClose, onSaved, inline = false }: { p: Portfolio;
       let id = bot?.id;
       if (bot) { const { error } = await db().from('automation_bots').update(row).eq('id', bot.id); if (error) throw error; }
       else { const { data, error } = await db().from('automation_bots').insert(row).select('id').single(); if (error) throw error; id = data.id; }
-      if (!bot) await db().from('automation_bot_skills').insert(f.skills.map((s, i) => ({ bot_id: id, skill_id: s, position: i })));
+      if (!bot && f.skills.length) { const { error } = await db().from('automation_bot_skills').insert(f.skills.map((s, i) => ({ bot_id: id, skill_id: s, position: i }))); if (error) throw error; }
+      const { data: saved } = await db().from('automation_bots').select('updated_at').eq('id', id!).single();
+      setSavedAt(saved?.updated_at ?? new Date().toISOString());
       onSaved(id!);
     } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
   };
@@ -436,6 +439,6 @@ function BotEditor({ p, bot, onClose, onSaved, inline = false }: { p: Portfolio;
       {err && <div className="sm:col-span-2"><Notice tone="error">{err}</Notice></div>}
     </div>
   );
-  if (inline) return <Panel title="Bot ayarları" kicker="Settings" action={<Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button>}>{form}</Panel>;
+  if (inline) return <Panel title="Bot ayarları" action={<div className="flex flex-col items-end gap-1"><Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button><SavedStamp at={savedAt} /></div>}>{form}</Panel>;
   return <Modal open wide onClose={onClose} title={bot ? 'Botu düzenle' : 'Yeni bot'} footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} disabled={!f.name} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button></>}>{form}</Modal>;
 }

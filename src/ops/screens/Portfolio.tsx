@@ -5,7 +5,7 @@ import { errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDate, relTime, type Tone } from '../lib/format';
 import { useSession } from '../session';
-import { Button, cx, ErrorState, Field, Modal, Notice, Pill, StateView, Tabs } from '../ui';
+import { Button, cx, ErrorState, Field, Modal, Notice, Pill, SavedStamp, StateView, Tabs } from '../ui';
 
 interface Company {
   id: string; firm_name: string; sector: string | null; il: string | null; ilce: string | null; website: string | null; public_phone: string | null; public_email: string | null;
@@ -145,10 +145,11 @@ function CompanyDetail({ c, onClose, onSaved }: { c: Company; onClose: () => voi
   const [to, setTo] = useState(''); const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const events = useQuery(async () => unwrap(await db().from('lifecycle_events').select('from_stage,to_stage,note,source,actor_kind,created_at').eq('entity_type', 'company').eq('entity_id', c.id).order('created_at', { ascending: false }).limit(20)) as Array<{ from_stage: string | null; to_stage: string; note: string | null; source: string; actor_kind: string; created_at: string }>, [], [c.id]);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const saveSettings = async () => {
     setBusy(true); setErr(null);
-    const { error } = await db().from('companies').update({ follow_up_days: days, opt_out: optOut }).eq('id', c.id);
-    setBusy(false); if (error) setErr(errorText(error)); else onSaved();
+    const { data, error } = await db().from('companies').update({ follow_up_days: days, opt_out: optOut }).eq('id', c.id).select('updated_at').single();
+    setBusy(false); if (error) setErr(errorText(error)); else { setSavedAt(data.updated_at); onSaved(); }
   };
   const advance = async () => {
     setBusy(true); setErr(null);
@@ -170,7 +171,7 @@ function CompanyDetail({ c, onClose, onSaved }: { c: Company; onClose: () => voi
           <div className="flex flex-wrap items-center gap-2">{[7, 14, 30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={cx('rounded-lg px-2.5 py-1.5 font-semibold ring-1', days === d ? 'bg-brand-green text-white ring-brand-green' : 'ring-ink-700 text-ink-300')}>{d} gün</button>)}</div>
           <label className="flex items-center gap-2 text-ink-200"><input type="checkbox" checked={optOut} onChange={(e) => setOptOut(e.target.checked)} /> İletişim istemiyor (RET) — hatırlatma oluşturma</label>
           <div className="text-ink-500">Son hatırlatma: {c.last_reminded_at ? fmtDate(c.last_reminded_at) : '—'} · sonraki: {c.next_action_at ? fmtDate(c.next_action_at) : `${c.follow_up_days} gün sonra`}</div>
-          <Button variant="primary" loading={busy} onClick={saveSettings}>Kaydet</Button>
+          <div className="flex items-center gap-3"><Button variant="primary" loading={busy} onClick={saveSettings}>Kaydet</Button><SavedStamp at={savedAt} /></div>
         </div>
         {session && (
           <div className="rounded-xl ring-1 ring-ink-700 p-3 space-y-2">
