@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import {
   Phone,
   MessageCircle,
@@ -19,49 +20,50 @@ import {
   FileCheck
 } from 'lucide-react';
 
-interface PublicWebsiteViewProps {
-  onLeadSubmitted: (leadData: {
-    name: string;
-    phone: string;
-    companyName: string;
-    serviceType: string;
-    notes: string;
-  }) => void;
-}
+const DEMAND: Record<string, 'manitou_kiralama' | 'kentsel_donusum' | 'konut_insaati' | 'diger'> = {
+  '18 Metre Manitou MT-X 1840 Kiralama': 'manitou_kiralama',
+  '14 Metre Manitou MT-X 1440 Kiralama': 'manitou_kiralama',
+  'Sepetli / Çatallı Yüksek İrtifa Montaj': 'manitou_kiralama',
+  'Güngören Tozkoparan Kentsel Dönüşüm Keşfi': 'kentsel_donusum',
+  'Anahtar Teslim Müteahhitlik': 'konut_insaati',
+};
 
-export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({ onLeadSubmitted }) => {
+/** Kurumsal vitrin. Teklif formu KVKK onayıyla doğrudan Supabase lead_inbox tablosuna yazar (anon insert politikası). */
+export const PublicWebsiteView: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'MANITOU' | 'URBAN'>('ALL');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [serviceType, setServiceType] = useState('18 Metre Manitou MT-X 1840 Kiralama');
   const [notes, setNotes] = useState('');
+  const [kvkk, setKvkk] = useState(false);
+  const [ticari, setTicari] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [formError, setFormError] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
   const PHONE_DISPLAY = '0531 436 29 04';
   const PHONE_CLEAN = '05314362904';
   const WHATSAPP_URL = `https://wa.me/90${PHONE_CLEAN}?text=${encodeURIComponent('Merhaba Samet Bey, şantiye iş makinesi / kentsel dönüşüm için bilgi almak istiyorum.')}`;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !phone) return;
-
-    onLeadSubmitted({
-      name: fullName,
-      phone,
-      companyName: companyName || 'Bireysel / Şantiye',
-      serviceType,
-      notes: notes || 'Web sitesi üzerinden iletildi.'
+    setFormError('');
+    const digits = phone.replace(/\D/g, '');
+    if (!fullName.trim() || digits.length < 10 || digits.length > 13) { setFormError('Lütfen ad soyad ve geçerli bir telefon numarası girin.'); return; }
+    if (!kvkk) { setFormError('Devam etmek için KVKK aydınlatma metnini onaylayın.'); return; }
+    if (!supabase) { setFormError(`Form şu an kullanılamıyor. Lütfen arayın: ${PHONE_DISPLAY}`); return; }
+    setSending(true);
+    const note = [companyName && `Firma/Şantiye: ${companyName}`, `Hizmet: ${serviceType}`, notes].filter(Boolean).join(' · ');
+    const { error } = await supabase.from('lead_inbox').insert({
+      full_name: fullName.trim().slice(0, 120), phone: phone.trim(), demand: DEMAND[serviceType] ?? 'diger', note: note.slice(0, 1000),
+      kvkk_aydinlatma_onay: true, aydinlatma_version: 'web-2026-09', ticari_ileti_izni: ticari, izin_kanallari: ticari ? ['arama', 'whatsapp'] : [],
+      consent_source: 'web_form', page_url: window.location.href.slice(0, 300), user_agent: navigator.userAgent.slice(0, 300),
     });
-
+    setSending(false);
+    if (error) { setFormError(`Talebiniz gönderilemedi. Lütfen telefonla ulaşın: ${PHONE_DISPLAY}`); return; }
     setIsSuccess(true);
-    setTimeout(() => {
-      setFullName('');
-      setPhone('');
-      setCompanyName('');
-      setNotes('');
-      setIsSuccess(false);
-    }, 4000);
+    setFullName(''); setPhone(''); setCompanyName(''); setNotes(''); setKvkk(false); setTicari(false);
   };
 
   return (
@@ -169,7 +171,7 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({ onLeadSubm
                 {isSuccess && (
                   <div className="mb-4 p-3.5 rounded-xl bg-emerald-900/60 border border-emerald-500 text-emerald-200 text-xs font-bold flex items-center gap-2 animate-pulse">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Talebiniz Operasyon Paneline aktarıldı! En kısa sürede aranacaksınız.</span>
+                    <span>Talebiniz alındı. Ekibimiz en kısa sürede sizi arayacak.</span>
                   </div>
                 )}
 
@@ -236,12 +238,18 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({ onLeadSubm
                     />
                   </div>
 
+                  <label className="flex items-start gap-2 text-[11px] text-slate-400"><input type="checkbox" className="mt-0.5" checked={kvkk} onChange={(e) => setKvkk(e.target.checked)} />
+                    <span>Kişisel verilerimin talebime dönüş yapılması amacıyla işlenmesine ilişkin aydınlatma metnini okudum ve onaylıyorum. (Veriler 2 yıl saklanır, talep halinde silinir.) *</span></label>
+                  <label className="flex items-start gap-2 text-[11px] text-slate-400"><input type="checkbox" className="mt-0.5" checked={ticari} onChange={(e) => setTicari(e.target.checked)} />
+                    <span>Kampanya ve bilgilendirme amaçlı arama / WhatsApp mesajı almak istiyorum (isteğe bağlı).</span></label>
+                  {formError && <p className="text-xs text-rose-400 font-semibold">{formError}</p>}
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/20 active:scale-95"
+                    disabled={sending}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/20 active:scale-95 disabled:opacity-60"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>Hemen Teklif İste</span>
+                    <span>{sending ? 'Gönderiliyor…' : 'Hemen Teklif İste'}</span>
                   </button>
                 </form>
               </div>
