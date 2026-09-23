@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, Sparkles, Truck, X,
+  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, Sparkles, Truck, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -17,6 +17,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   ] },
   { title: 'Sosyal & İçerik', items: [
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'Instagram, Facebook… bağlantı ve botlar' },
+    { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Görsel/video yükle · saatinde paylaş' },
     { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta · gün · kanban' },
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım + önizleme' },
   ] },
@@ -31,7 +32,8 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka, AI, ekip, kayıtlar' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'bots', 'reports', 'connections'];
+const MOBILE: Route[] = ['home', 'bots', 'queue', 'reports', 'connections'];
+const MOBILE_LABEL: Partial<Record<Route, string>> = { home: 'Genel', bots: 'Botlar', queue: 'Yayın', reports: 'Raporlar', connections: 'Uygulamalar' };
 
 function useBadges() {
   return useQuery(async () => {
@@ -133,13 +135,13 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         </main>
       </div>
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-ink-700 bg-ink-900/95 backdrop-blur px-2 pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {MOBILE.map((id) => {
             const item = all.find((i) => i.id === id)!;
             const Icon = item.icon; const active = state.route === id;
             return (
               <button key={id} onClick={() => go(id)} className={cx('relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold', active ? 'text-brand-green' : 'text-ink-400')}>
-                <Icon className="w-5 h-5" />{item.label.split(' ')[0]}
+                <Icon className="w-5 h-5" />{MOBILE_LABEL[id] ?? item.label.split(' ')[0]}
                 {id === 'approvals' && badges.data.approvals > 0 && <span className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full bg-amber-400" />}
               </button>
             );

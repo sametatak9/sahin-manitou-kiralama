@@ -16,7 +16,7 @@ const CATEGORY: Record<string, { title: string; kicker: string }> = {
   communication: { title: 'İletişim', kicker: 'CommunicationConnector' },
   design: { title: 'Tasarım', kicker: 'DesignConnector' },
 };
-const OAUTH_PROVIDER: Record<string, string> = { instagram: 'meta', facebook: 'meta', canva: 'canva' };
+const OAUTH_PROVIDER: Record<string, string> = { instagram: 'meta', facebook: 'meta', canva: 'canva', youtube: 'google' };
 
 export function ConnectionsScreen() {
   const { state } = useRouter();
@@ -27,7 +27,7 @@ export function ConnectionsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(() => {
     const p = state.params;
-    if (p.get('connected')) return { tone: 'ok', text: `${p.get('connected') === 'meta' ? `Meta bağlantısı tamamlandı (${p.get('pages')} sayfa)` : 'Canva bağlantısı tamamlandı'} — hesap bilgisi API’den doğrulandı.` };
+    if (p.get('connected')) return { tone: 'ok', text: `${p.get('connected') === 'meta' ? `Meta bağlantısı tamamlandı (${p.get('pages')} sayfa)` : p.get('connected') === 'youtube' ? 'YouTube kanalı bağlandı' : 'Canva bağlantısı tamamlandı'} — hesap bilgisi API’den doğrulandı.` };
     if (p.get('oauth_error')) return { tone: 'error', text: `OAuth hatası: ${p.get('oauth_error')}` };
     return null;
   });

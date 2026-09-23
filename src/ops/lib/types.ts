@@ -36,7 +36,7 @@ export interface Draft {
   id: string; title: string; body: string; caption: string | null; headline: string | null; hashtags: string[]; cta: string | null; audience: string | null;
   objective: string | null; tone: string | null; image_brief: string | null; design_brief: string | null; platform_targets: string[]; primary_platform: string | null;
   scheduled_at: string | null; status: string; workflow_status: string; design_id: string | null; media_urls: string[]; bot_id: string | null; campaign_id: string | null;
-  content_pillar: string | null; approval_request_id: string | null; error: string | null; created_at: string; archive_status: string;
+  content_pillar: string | null; approval_request_id: string | null; error: string | null; created_at: string; archive_status: string; format?: string | null;
 }
 export interface Design {
   id: string; content_id: string | null; template_id: string | null; brand_kit_id: string | null; provider: 'embay_studio' | 'canva'; name: string; format_key: string;

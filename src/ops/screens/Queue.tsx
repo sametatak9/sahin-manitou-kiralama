@@ -1,0 +1,309 @@
+// Yayın Kuyruğu: telefondan görsel/video yükle → platform + format + tarih/saat seç → bot o saatte resmi API ile paylaşır.
+// Başarı yalnızca platform API yanıtıyla (social_publications.external_post_id) gösterilir.
+import { useMemo, useRef, useState } from 'react';
+import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { callOps, errorCode, errorText } from '../lib/api';
+import { db, unwrap, useQuery } from '../lib/hooks';
+import { dayKey, fmtDateTime, istanbulToIso, relTime, type Tone } from '../lib/format';
+import type { Draft, OpsStatus, Publication } from '../lib/types';
+import { useRouter, useSession } from '../session';
+import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
+
+type Target = { key: string; platform: 'instagram' | 'facebook' | 'youtube'; format: string; label: string; needsVideo?: boolean };
+const TARGETS: Target[] = [
+  { key: 'ig_post', platform: 'instagram', format: 'post', label: 'Instagram gönderi' },
+  { key: 'ig_reel', platform: 'instagram', format: 'reel', label: 'Instagram Reels', needsVideo: true },
+  { key: 'ig_story', platform: 'instagram', format: 'story', label: 'Instagram hikâye' },
+  { key: 'fb_post', platform: 'facebook', format: 'post', label: 'Facebook gönderi' },
+  { key: 'yt_short', platform: 'youtube', format: 'short', label: 'YouTube Shorts', needsVideo: true },
+  { key: 'yt_video', platform: 'youtube', format: 'video', label: 'YouTube video', needsVideo: true },
+];
+const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Reels', story: 'Hikâye', short: 'Shorts', video: 'Video' };
+const WF: Record<string, { label: string; tone: Tone }> = {
+  pending_approval: { label: 'ONAY BEKLİYOR', tone: 'wait' }, scheduled: { label: 'ZAMANLANDI', tone: 'info' }, approved: { label: 'ONAYLI', tone: 'info' },
+  processing: { label: 'PAYLAŞILIYOR', tone: 'run' }, published: { label: 'PAYLAŞILDI', tone: 'go' }, failed: { label: 'BAŞARISIZ', tone: 'stop' },
+  cancelled: { label: 'İPTAL', tone: 'idle' }, draft: { label: 'TASLAK', tone: 'idle' }, rejected: { label: 'REDDEDİLDİ', tone: 'stop' },
+};
+const MAX_BYTES = 50 * 1024 * 1024;
+const isVideoUrl = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);
+
+/** Instagram yalnızca JPEG kabul eder: PNG/WebP/HEIC görselleri tarayıcıda JPEG'e çevirir (en fazla 1440 px). */
+async function toJpeg(file: File): Promise<Blob> {
+  if (file.type === 'image/jpeg') return file;
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1440 / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale);
+  const g = canvas.getContext('2d'); if (!g) throw new Error('Görsel dönüştürülemedi');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height); g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Görsel dönüştürülemedi'))), 'image/jpeg', 0.9));
+}
+
+async function uploadMedia(file: File): Promise<string> {
+  const video = file.type.startsWith('video/');
+  if (!video && !file.type.startsWith('image/')) throw new Error(`${file.name}: yalnızca görsel veya video yüklenebilir`);
+  const blob = video ? file : await toJpeg(file);
+  if (blob.size > MAX_BYTES) throw new Error(`${file.name}: dosya 50 MB sınırını aşıyor`);
+  const ext = video ? (file.type === 'video/quicktime' ? 'mov' : 'mp4') : 'jpg';
+  const contentType = video ? (file.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg';
+  const path = `${dayKey(new Date()).slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
+  const s = db();
+  const { error } = await s.storage.from('media-uploads').upload(path, blob, { contentType, upsert: false });
+  if (error) throw new Error(`${file.name}: yükleme başarısız (${error.message})`);
+  return s.storage.from('media-uploads').getPublicUrl(path).data.publicUrl;
+}
+
+function tomorrow() { const d = new Date(Date.now() + 86400_000); return dayKey(d); }
+function addDays(key: string, n: number) { const d = new Date(`${key}T12:00:00+03:00`); d.setUTCDate(d.getUTCDate() + n); return dayKey(d); }
+
+interface Picked { file: File; preview: string; video: boolean }
+
+function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: string) => void }) {
+  const session = useSession();
+  const admin = session.role === 'admin';
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<Picked[]>([]);
+  const [targets, setTargets] = useState<string[]>(['ig_post']);
+  const [title, setTitle] = useState('');
+  const [caption, setCaption] = useState('');
+  const [hashtags, setHashtags] = useState('#şahinmanitou #manitou #teleskopikyükleyici #inşaat');
+  const [date, setDate] = useState(tomorrow());
+  const [time, setTime] = useState('10:00');
+  const [daily, setDaily] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const hasImage = files.some((f) => !f.video);
+  const hasVideo = files.some((f) => f.video);
+  const conn = (p: string) => status?.connectors.find((c) => c.key === p);
+  const chosen = TARGETS.filter((t) => targets.includes(t.key));
+  const problems = [
+    !files.length && 'En az bir görsel veya video seçin.',
+    !chosen.length && 'En az bir paylaşım yeri seçin.',
+    !hasVideo && chosen.some((t) => t.needsVideo) && `${chosen.filter((t) => t.needsVideo).map((t) => t.label).join(', ')} yalnızca video kabul eder — video seçin.`,
+    !caption.trim() && 'Açıklama (caption) yazın.',
+  ].filter(Boolean) as string[];
+  const notConnected = [...new Set(chosen.map((t) => t.platform))].filter((p) => conn(p)?.status !== 'connected');
+  const slotIso = (i: number) => istanbulToIso(daily ? addDays(date, i) : date, time);
+  const inPast = new Date(slotIso(0)).getTime() < Date.now() - 60_000;
+
+  const pick = (list: FileList | null) => {
+    if (!list) return;
+    const next = [...list].slice(0, 30).map((file) => ({ file, preview: URL.createObjectURL(file), video: file.type.startsWith('video/') }));
+    setFiles((cur) => [...cur, ...next].slice(0, 30));
+  };
+
+  const aiCaption = async () => {
+    setBusy('ai'); setErr(null);
+    try {
+      const p = chosen[0]?.platform ?? 'instagram';
+      const out = await callOps<Record<string, unknown>>('generate_post', { input: { platform: p, topic: title || 'Şahin Manitou operatörlü teleskopik yükleyici kiralama', objective: 'Teklif talebi / bilinirlik', audience: 'İnşaat firmaları, şantiye şefleri', tone: 'Güven veren, net', cta: 'Teklif için 0531 436 29 04' } });
+      if (out.caption) setCaption(String(out.caption));
+      if (Array.isArray(out.hashtags) && out.hashtags.length) setHashtags((out.hashtags as string[]).join(' '));
+      if (!title && out.title) setTitle(String(out.title));
+    } catch (e) {
+      setErr(errorCode(e) === 'CONFIGURATION_REQUIRED' ? 'AI anahtarı tanımlı değil — açıklamayı elle yazın ya da Ayarlar → AI anahtarı bölümüne anahtar ekleyin.' : errorText(e));
+    } finally { setBusy(null); }
+  };
+
+  const submit = async () => {
+    setErr(null);
+    try {
+      const tags = hashtags.split(/\s+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`)).slice(0, 30);
+      const rows: Record<string, unknown>[] = [];
+      for (let i = 0; i < files.length; i++) {
+        setBusy(`Yükleniyor ${i + 1}/${files.length}`);
+        const url = await uploadMedia(files[i].file);
+        const when = slotIso(daily ? i : 0);
+        for (const t of chosen) {
+          if (t.needsVideo && !files[i].video) continue;
+          const now = new Date().toISOString();
+          rows.push({
+            title: (title.trim() || caption.trim().split('\n')[0]).slice(0, 120) + (files.length > 1 ? ` (${i + 1}/${files.length})` : ''),
+            body: caption.trim(), caption: caption.trim(), headline: title.trim() || null, hashtags: tags,
+            networks: [t.platform], platform_targets: [t.platform], primary_platform: t.platform, format: t.format, post_type: t.format,
+            media_urls: [url], video_url: files[i].video ? url : null, scheduled_at: when, content_pillar: 'yayin_kuyrugu',
+            workflow_status: admin ? 'scheduled' : 'pending_approval', status: admin ? 'planlandi' : 'onay_bekliyor',
+            ...(admin ? { approved_by: session.userId, approved_at: now } : {}),
+          });
+        }
+      }
+      setBusy('Kuyruğa ekleniyor');
+      unwrap(await db().from('social_drafts').insert(rows).select('id'));
+      files.forEach((f) => URL.revokeObjectURL(f.preview));
+      setFiles([]); setCaption(''); setTitle('');
+      onDone(admin
+        ? `${rows.length} paylaşım kuyruğa eklendi. Hesap bağlıysa bot zamanı geldiğinde paylaşır; sonuç aşağıda API yanıtıyla görünür.`
+        : `${rows.length} paylaşım yönetici onayına gönderildi.`);
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(null); }
+  };
+
+  return (
+    <Panel title="Yeni paylaşım planla" kicker="Görsel/video → platform → zaman">
+      <div className="space-y-4">
+        <div>
+          <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
+          {files.length === 0 ? (
+            <button type="button" onClick={() => fileRef.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-ink-700 bg-ink-900/40 hover:bg-ink-800 p-6 flex flex-col items-center gap-2 text-ink-300">
+              <Upload className="w-7 h-7 text-brand-green" />
+              <span className="font-semibold text-ink-100">Telefondan görsel veya video seç</span>
+              <span className="text-xs">Birden fazla seçebilirsiniz (en fazla 30) · video en fazla 50 MB</span>
+            </button>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {files.map((f, i) => (
+                <div key={f.preview} className="relative shrink-0 w-24 h-32 rounded-xl overflow-hidden ring-1 ring-ink-700 bg-ink-900">
+                  {f.video ? <video src={f.preview} className="w-full h-full object-cover" muted playsInline /> : <img src={f.preview} alt="" className="w-full h-full object-cover" />}
+                  <span className="absolute left-1 top-1 rounded bg-white/90 px-1 text-[10px] font-bold text-slate-800">{f.video ? 'VİDEO' : 'GÖRSEL'}</span>
+                  {daily && files.length > 1 && <span className="absolute left-1 bottom-1 rounded bg-brand-green px-1 text-[10px] font-bold text-white">{addDays(date, i).slice(5).split('-').reverse().join('.')}</span>}
+                  <button type="button" aria-label="Kaldır" onClick={() => { URL.revokeObjectURL(f.preview); setFiles(files.filter((_, j) => j !== i)); }} className="absolute right-1 top-1 rounded-full bg-white/90 p-0.5 text-slate-800"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+              <button type="button" onClick={() => fileRef.current?.click()} className="shrink-0 w-24 h-32 rounded-xl border-2 border-dashed border-ink-700 flex flex-col items-center justify-center text-ink-400 text-xs gap-1"><ImagePlus className="w-5 h-5" />Ekle</button>
+            </div>
+          )}
+        </div>
+
+        <Field label="Nerede paylaşılsın?">
+          <div className="flex flex-wrap gap-1.5">
+            {TARGETS.map((t) => {
+              const on = targets.includes(t.key);
+              return (
+                <button key={t.key} type="button" onClick={() => setTargets(on ? targets.filter((x) => x !== t.key) : [...targets, t.key])}
+                  className={cx('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ring-1', on ? 'bg-brand-green text-white ring-brand-green' : 'ring-ink-700 text-ink-300 hover:bg-ink-800')}>
+                  {t.needsVideo && <Film className="w-3.5 h-3.5" />}{t.label}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Başlık (YouTube başlığı / iç not)"><input className="ops-input" maxLength={100} placeholder="Örn: Manitou MRT 2150 şantiyede" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+          <Field label="Hashtag'ler"><input className="ops-input" value={hashtags} onChange={(e) => setHashtags(e.target.value)} /></Field>
+          <Field label="Açıklama (caption) *" className="sm:col-span-2">
+            <textarea className="ops-input min-h-[90px]" placeholder="Paylaşım metni…" value={caption} onChange={(e) => setCaption(e.target.value)} />
+            <div className="mt-1.5"><Button variant="ghost" loading={busy === 'ai'} onClick={aiCaption} icon={<Sparkles className="w-4 h-4" />}>AI ile açıklama yaz</Button></div>
+          </Field>
+          <Field label="Tarih"><input type="date" className="ops-input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+          <Field label="Saat (İstanbul)"><input type="time" className="ops-input" value={time} onChange={(e) => setTime(e.target.value)} /></Field>
+        </div>
+        {files.length > 1 && (
+          <label className="flex items-center gap-2 text-sm text-ink-200">
+            <input type="checkbox" checked={daily} onChange={(e) => setDaily(e.target.checked)} className="accent-[var(--color-brand-green)]" />
+            Her gün bir tane paylaş ({fmtDateTime(slotIso(0))} → {fmtDateTime(slotIso(files.length - 1))})
+          </label>
+        )}
+
+        {hasImage && hasVideo && chosen.some((t) => t.needsVideo) && <Notice tone="info">Görseller {chosen.filter((t) => t.needsVideo).map((t) => t.label).join(', ')} için atlanır; yalnızca videolar oraya yüklenir.</Notice>}
+        {notConnected.length > 0 && <Notice tone="warn">{notConnected.map((p) => conn(p)?.name ?? p).join(', ')} hesabı henüz bağlı değil. Paylaşım kuyrukta bekler; hesap Uygulamalar sekmesinden bağlandığında zamanı gelmiş olanlar hemen paylaşılır.</Notice>}
+        {inPast && <Notice tone="info">Seçilen zaman geçmişte — hesap bağlıysa ilk paylaşım bir dakika içinde yapılır.</Notice>}
+        {!admin && <Notice tone="info">Yönetici onayından sonra paylaşılır.</Notice>}
+        {err && <Notice tone="error">{err}</Notice>}
+        {problems.length > 0 && files.length > 0 && <div className="text-xs text-amber-700">{problems.join(' ')}</div>}
+        <div className="flex justify-end">
+          <Button variant="primary" disabled={problems.length > 0 || Boolean(busy)} loading={Boolean(busy) && busy !== 'ai'} onClick={submit} icon={<CalendarClock className="w-4 h-4" />}>
+            {busy && busy !== 'ai' ? busy : admin ? 'Kuyruğa ekle' : 'Onaya gönder'}
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+export function QueueScreen() {
+  const session = useSession();
+  const { go } = useRouter();
+  const admin = session.role === 'admin';
+  const [tab, setTab] = useState<'upcoming' | 'done'>('upcoming');
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const status = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
+  const q = useQuery(async () => {
+    const s = db();
+    const [drafts, pubs] = await Promise.all([
+      s.from('social_drafts').select('*').in('primary_platform', ['instagram', 'facebook', 'youtube']).neq('archive_status', 'archived')
+        .not('scheduled_at', 'is', null).order('scheduled_at', { ascending: true }).limit(300),
+      s.from('social_publications').select('id,content_id,platform,status,external_url,published_at,error,external_post_id,scheduled_at,created_at').order('created_at', { ascending: false }).limit(300),
+    ]);
+    return { drafts: unwrap(drafts) as Draft[], pubs: unwrap(pubs) as Publication[] };
+  }, { drafts: [] as Draft[], pubs: [] as Publication[] }, [], ['social_drafts', 'social_publications']);
+
+  const pubBy = useMemo(() => { const m = new Map<string, Publication>(); q.data.pubs.forEach((p) => p.content_id && !m.has(p.content_id) && m.set(p.content_id, p)); return m; }, [q.data.pubs]);
+  const upcoming = q.data.drafts.filter((d) => ['pending_approval', 'scheduled', 'approved', 'processing'].includes(d.workflow_status));
+  const done = q.data.drafts.filter((d) => ['published', 'failed', 'cancelled'].includes(d.workflow_status)).reverse();
+  const list = tab === 'upcoming' ? upcoming : done;
+
+  const act = async (id: string, fn: () => Promise<unknown>, ok: string) => {
+    setBusy(id); setMsg(null);
+    try { await fn(); setMsg({ tone: 'ok', text: ok }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+  };
+  const update = (id: string, patch: Record<string, unknown>, from: string[]) => async () => {
+    const r = await db().from('social_drafts').update(patch).eq('id', id).in('workflow_status', from).select('id');
+    if (!unwrap(r).length) throw new Error('Durum değişmiş — liste yenilendi');
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="font-display text-xl font-semibold text-ink-100">Yayın Kuyruğu</h1>
+        <p className="text-sm text-ink-400">Instagram (gönderi · Reels · hikâye), Facebook ve YouTube (Shorts · video) için verdiğiniz içerikleri belirlediğiniz saatte bot paylaşır.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {(['instagram', 'facebook', 'youtube'] as const).map((p) => {
+          const c = status.data?.connectors.find((x) => x.key === p);
+          const ok = c?.status === 'connected';
+          return (
+            <button key={p} type="button" onClick={() => go('connections')} className="rounded-xl ring-1 ring-ink-700 bg-ink-900/60 p-2.5 flex items-center gap-2 text-left hover:bg-ink-800">
+              <PlatformBadge platform={p} />
+              <div className="min-w-0"><div className="text-xs font-semibold text-ink-100 truncate">{c?.name ?? p}</div>
+                <div className={cx('text-[10px] font-bold', ok ? 'text-emerald-700' : 'text-amber-700')}>{status.loading ? '…' : ok ? 'BAĞLI' : 'BAĞLI DEĞİL'}</div></div>
+            </button>
+          );
+        })}
+      </div>
+
+      <Composer status={status.data} onDone={(text) => { setMsg({ tone: 'ok', text }); setTab('upcoming'); q.reload(); }} />
+      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+
+      <Panel>
+        <Tabs className="mb-3" value={tab} onChange={setTab} items={[{ id: 'upcoming', label: 'Sıradaki paylaşımlar', count: upcoming.length }, { id: 'done', label: 'Geçmiş', count: done.length }]} />
+        {q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" compact /> : list.length === 0 ? (
+          <StateView kind="empty" compact title={tab === 'upcoming' ? 'Sırada paylaşım yok' : 'Henüz paylaşım yapılmadı'} message={tab === 'upcoming' ? 'Yukarıdan görsel/video seçip zaman belirleyin.' : 'Paylaşımlar platform API yanıtıyla burada görünür.'} />
+        ) : (
+          <ul className="divide-y divide-ink-800">
+            {list.map((d) => {
+              const pub = pubBy.get(d.id); const media = d.media_urls?.[0];
+              const wf = WF[d.workflow_status] ?? { label: d.workflow_status, tone: 'idle' as Tone };
+              return (
+                <li key={d.id} className="py-3 flex gap-3">
+                  <div className="w-16 h-20 shrink-0 rounded-lg overflow-hidden bg-ink-800 ring-1 ring-ink-700">
+                    {media ? (isVideoUrl(media) ? <video src={media} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={media} alt="" className="w-full h-full object-cover" loading="lazy" />) : null}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <PlatformBadge platform={d.primary_platform} /><span className="text-xs font-semibold text-ink-200">{FORMAT_LABEL[d.format ?? ''] ?? 'Gönderi'}</span>
+                      <Pill tone={wf.tone}>{wf.label}</Pill>
+                    </div>
+                    <div className="text-sm text-ink-100 line-clamp-2">{d.caption || d.body}</div>
+                    <div className="text-[11px] text-ink-400 font-mono">{d.scheduled_at ? `${fmtDateTime(d.scheduled_at)} · ${relTime(d.scheduled_at)}` : '—'}</div>
+                    {pub?.external_url && <a href={pub.external_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 underline"><ExternalLink className="w-3.5 h-3.5" />Paylaşımı aç</a>}
+                    {(d.error || (pub?.status === 'failed' && pub.error)) && <div className="text-xs text-rose-700">{pub?.error || d.error}</div>}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {admin && d.workflow_status === 'pending_approval' && <Button variant="primary" loading={busy === d.id} onClick={() => act(d.id, update(d.id, { workflow_status: 'scheduled', status: 'planlandi', approved_by: session.userId, approved_at: new Date().toISOString() }, ['pending_approval']), 'Onaylandı ve zamanlandı.')}>Onayla</Button>}
+                      {admin && ['scheduled', 'approved', 'failed'].includes(d.workflow_status) && <Button variant="ghost" loading={busy === `now-${d.id}`} icon={<Send className="w-4 h-4" />}
+                        onClick={async () => { setBusy(`now-${d.id}`); setMsg(null); try { const r = await callOps<{ external_url?: string }>('publish_content', { content_id: d.id }); setMsg({ tone: 'ok', text: `Paylaşıldı (API doğruladı)${r.external_url ? `: ${r.external_url}` : ''}` }); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); q.reload(); } }}>Şimdi paylaş</Button>}
+                      {admin && d.workflow_status === 'failed' && <Button variant="ghost" loading={busy === d.id} icon={<RotateCcw className="w-4 h-4" />} onClick={() => act(d.id, update(d.id, { workflow_status: 'scheduled', status: 'planlandi', error: null, scheduled_at: new Date(Date.now() + 60_000).toISOString() }, ['failed']), 'Yeniden denenecek (1 dk içinde).')}>Tekrar dene</Button>}
+                      {['pending_approval', 'scheduled', 'approved'].includes(d.workflow_status) && <Button variant="ghost" loading={busy === d.id} icon={<Trash2 className="w-4 h-4" />} onClick={() => act(d.id, update(d.id, { workflow_status: 'cancelled' }, ['pending_approval', 'scheduled', 'approved']), 'Paylaşım iptal edildi.')}>İptal</Button>}
+                      {d.workflow_status === 'processing' && <span className="inline-flex items-center gap-1 text-xs text-ink-400"><Loader2 className="w-3.5 h-3.5 animate-spin" />Platforma gönderiliyor</span>}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+    </div>
+  );
+}
