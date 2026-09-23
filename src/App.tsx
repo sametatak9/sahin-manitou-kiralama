@@ -462,16 +462,17 @@ export function App() {
     showNotification('Bot sistemden kaldırıldı.');
   };
 
-  // Reset to only Real Concrete Bots
+  // Reset to only Real Concrete Bots (Clean all test / mock entries)
   const handleClearFakeBots = () => {
     setBotTasks(INITIAL_BOT_TASKS);
     try {
       localStorage.setItem('sahin_real_bots', JSON.stringify(INITIAL_BOT_TASKS));
+      localStorage.removeItem('sahin_fake_logs');
     } catch (e) {
       // ignore
     }
     INITIAL_BOT_TASKS.forEach(b => dbService.upsertBotTask(b));
-    showNotification('Test kayıtları temizlendi. Yalnızca doğrulanmış reel botlar devrede.');
+    showNotification('Tüm deneme ve sahte bot kayıtları silindi. Yalnızca Supabase uyumlu reel botlar aktif.');
   };
 
   // Add Platform Connection

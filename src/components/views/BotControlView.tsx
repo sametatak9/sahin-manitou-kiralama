@@ -231,15 +231,15 @@ export const BotControlView: React.FC<BotControlViewProps> = ({
             {onClearFakeBots && (
               <button
                 onClick={() => {
-                  if (confirm('Tüm test botlarını kaldırıp yalnızca doğrulanmış gerçek şantiye ve SEO botlarını bırakmak istiyor musunuz?')) {
+                  if (confirm('Tüm deneme ve sahte bot kayıtlarını temizleyip yalnızca Supabase uyumlu gerçek botları bırakmak istiyor musunuz?')) {
                     onClearFakeBots();
                   }
                 }}
                 className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all"
-                title="Sahte/test kayıtlarını temizler ve sadece reel botları bırakır"
+                title="Sahte ve deneme bot kayıtlarını siler, yalnızca doğrulanmış reel kayıtları bırakır"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                <span>Sadece Reel Kayıtları Tut</span>
+                <span>Deneme Kayıtlarını Temizle & Sıfırla</span>
               </button>
             )}
 

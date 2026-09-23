@@ -300,65 +300,35 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     id: 'bot-sahin-seo',
     name: 'Google Sıralama & Web SEO Radarı',
     category: 'SEO',
-    status: 'TAMAMLANDI',
+    status: 'BEKLEMEDE',
     schedule: 'Her gün 06:00',
-    lastRunAt: 'Bugün 06:00',
-    duration: '1.2 sn',
-    report: 'Canlı site H1, meta ve Schema.org tarandı. "Hadımköy kiralık manitou" 2. sıra tespit edildi.',
-    findingsCount: 3,
+    lastRunAt: 'Henüz çalıştırılmadı',
+    duration: '0.0 sn',
+    report: 'Canlı site H1, meta ve Schema.org tarayıcısı hazır. İlk canlı test tetiklemesi bekleniyor.',
+    findingsCount: 0,
     model: 'Gemini 2.5 Flash / Built-in SEO Inspector',
     targetUrl: 'https://sahin-manitou-kiralama.vercel.app',
     targetJobDescription: 'Canlı web sitesindeki H1, meta etiketleri, robots.txt, sitemap ve schema verilerini tarayıp Google sıralama fırsatlarını çıkartır.',
     maxRunDurationMinutes: 5,
-    lastRunOutcome: 'SUCCESS_WITH_LEAD',
-    executionHistory: [
-      {
-        runAt: 'Bugün 06:00',
-        duration: '1.2 sn',
-        outcome: 'BULGU_VAR',
-        summary: '3 adet Google anahtar kelime fırsatı ve site hız skoru (%94) tespit edildi.',
-        targetScanned: 'https://sahin-manitou-kiralama.vercel.app'
-      },
-      {
-        runAt: 'Dün 06:00',
-        duration: '1.1 sn',
-        outcome: 'TEMIZ_BOS_DONDU',
-        summary: 'Tarama tamamlandı; yeni kritik hata veya indeks kayması tespit edilmedi (Temiz Rapor).',
-        targetScanned: 'https://sahin-manitou-kiralama.vercel.app'
-      }
-    ]
+    lastRunOutcome: 'EMPTY_BUT_COMPLETED',
+    executionHistory: []
   },
   {
     id: 'bot-lead-listener',
     name: 'Web & WhatsApp Keşif Talebi Dinleyicisi',
     category: 'LEAD_RADAR',
-    status: 'TAMAMLANDI',
+    status: 'BEKLEMEDE',
     schedule: 'Sürekli Dinle (Event-driven Webhook)',
-    lastRunAt: 'Bugün 21:15',
-    duration: '0.8 sn',
-    report: 'Güngören Tozkoparan kentsel dönüşüm web keşif formu ve telefon sinyali CRM havuzuna başarıyla yazıldı.',
-    findingsCount: 1,
+    lastRunAt: 'Henüz çalıştırılmadı',
+    duration: '0.0 sn',
+    report: 'Web sitesi teklif formu ve 0531 436 29 04 WhatsApp hattı gelen talep dinleyicisi aktif durumda.',
+    findingsCount: 0,
     model: 'Edge Webhook Listener',
     targetUrl: 'https://sahin-manitou-kiralama.vercel.app/#teklif',
     targetJobDescription: 'Web sitesi teklif formu ve 0531 436 29 04 WhatsApp kanalından düşen kiralama/keşif taleplerini anında yakalayıp CRM fırsatına dönüştürür.',
     maxRunDurationMinutes: 1,
-    lastRunOutcome: 'SUCCESS_WITH_LEAD',
-    executionHistory: [
-      {
-        runAt: 'Bugün 21:15',
-        duration: '0.8 sn',
-        outcome: 'BULGU_VAR',
-        summary: 'Tozkoparan Mahallesinden Embay Yapı kat karşılığı inşaat keşif talebi yakalandı.',
-        targetScanned: 'https://sahin-manitou-kiralama.vercel.app/#teklif'
-      },
-      {
-        runAt: 'Bugün 20:00',
-        duration: '0.5 sn',
-        outcome: 'TEMIZ_BOS_DONDU',
-        summary: 'Son 1 saatte yeni form girişi olmadı; sistem dinleme modunda hazır bekliyor.',
-        targetScanned: 'Webhook Gateway'
-      }
-    ]
+    lastRunOutcome: 'EMPTY_BUT_COMPLETED',
+    executionHistory: []
   },
   {
     id: 'bot-hadimkoy-radar',
@@ -366,24 +336,16 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     category: 'LEAD_RADAR',
     status: 'BEKLEMEDE',
     schedule: 'Her saat başı (08:00 - 20:00)',
-    lastRunAt: 'Bugün 19:00',
-    duration: '2.1 sn',
-    report: 'Hadımköy lojistik depo çatı panel montajı için 18m Manitou MT-X 1840 ihtiyacı tarandı.',
+    lastRunAt: 'Henüz çalıştırılmadı',
+    duration: '0.0 sn',
+    report: 'Hadımköy, Kıraç ve Trakya şantiyelerinde Manitou ve iş makinesi kiralama talepleri için hazır bekliyor.',
     findingsCount: 0,
     model: 'Gemini 2.5 Flash / Web Radar',
     targetUrl: 'https://facebook.com/groups/insaat.makineleri.istanbul',
     targetJobDescription: 'İstanbul Hadımköy, Kıraç ve Çorlu sanayi gruplarında kiralık teleskopik forklift arayan taşeron ve müteahhit paylaşımlarını tarar.',
     maxRunDurationMinutes: 15,
     lastRunOutcome: 'EMPTY_BUT_COMPLETED',
-    executionHistory: [
-      {
-        runAt: 'Bugün 19:00',
-        duration: '2.1 sn',
-        outcome: 'TEMIZ_BOS_DONDU',
-        summary: 'Hedef grupta son 1 saatte manitou/teleskopik vinç talebi bulunamadı (Temiz Rapor).',
-        targetScanned: 'https://facebook.com/groups/insaat.makineleri.istanbul'
-      }
-    ]
+    executionHistory: []
   }
 ];
 
