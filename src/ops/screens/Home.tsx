@@ -110,13 +110,13 @@ export function HomeScreen() {
           <Gauge className="w-3.5 h-3.5" /> Özet
         </button>
         <button onClick={() => go('connections')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <PlugZap className="w-3.5 h-3.5 text-brand-green" /> Eklentiler (9)
+          <PlugZap className="w-3.5 h-3.5 text-brand-green" /> Uygulamalar
         </button>
         <button onClick={() => go('videos')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <Film className="w-3.5 h-3.5 text-amber-500" /> Video Havuzu (3)
+          <Film className="w-3.5 h-3.5 text-amber-500" /> Video Havuzu
         </button>
         <button onClick={() => go('portfolio')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <Briefcase className="w-3.5 h-3.5 text-blue-500" /> CRM & Portföy (2)
+          <Briefcase className="w-3.5 h-3.5 text-blue-500" /> Firma Portföyü
         </button>
         <button onClick={() => go('queue')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
           <CalendarClock className="w-3.5 h-3.5 text-rose-500" /> Yayın Kuyruğu

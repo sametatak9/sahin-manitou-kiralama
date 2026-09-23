@@ -223,8 +223,6 @@ async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) =>
     }
   } catch (err) {
     const errStr = String((err as Error)?.message || err);
-    const isCreditOrRate = (err instanceof AiFatalError && (err.kind === 'ai_credit' || err.kind === 'ai_auth')) ||
-      /credit|balance|quota|rate_limit|too_many_requests|429|overloaded/i.test(errStr);
 
     if (isQuotaOrRateLimit(err)) {
       if (c.provider === 'anthropic') {

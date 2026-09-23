@@ -1,6 +1,7 @@
 // EMBAY BOT ENGINE: Bot = configuration + skills + tools + permissions + schedule.
 // Görev → bot/skill/tool yükle → izin kontrolü → (pipeline | AI agent) → run/log → retry/next_run.
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
+import type { AgentRunResult } from './ai/types.ts';
 import { loadAgent, makeLogger, type BotRow, type Db, type EngineCtx, type SkillRow, type TaskRow, type ToolRow } from './context.ts';
 import { decideToolUse } from './pure/rules.ts';
 import { computeNextRun, retryDelaySeconds } from './pure/schedule.ts';
@@ -122,7 +123,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
       const system = [ctx.agent!.system_prompt, `Bot: ${bot?.name ?? '-'} — ${bot?.instructions ?? ''}`, `Skill: ${skill.display_name} — ${skill.instructions}`,
         'Yalnızca verilen araçları kullan. Onay gerektiren araçlar hemen yürütülmez, onay kuyruğuna düşer. Veri uydurma. Bitince 1-2 cümlelik Türkçe özet yaz.'].join('\n\n');
       const prompt = `Görev: ${task.title ?? skill.display_name}\nPlatform: ${baseInput.platform ?? 'genel'}\nGirdi: ${JSON.stringify(task.input_config ?? {})}\nBugün: ${new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}`;
-      let res;
+      let res: AgentRunResult | undefined;
       try {
         res = await getProvider(ctx.agent!.provider).runAgent(ctx.agent!, {
           system, prompt, maxTurns: 8,
@@ -159,11 +160,12 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
               continue;
             }
           }
-          if (!recovered) throw agentErr;
+          if (!recovered || !res) throw agentErr;
         } else {
           throw agentErr;
         }
       }
+      if (!res) throw new Error('AI yanıtı alınamadı');
       ctx.tokens.in += res.usage.tokensIn; ctx.tokens.out += res.usage.tokensOut;
       summary = res.finalText.slice(0, 500) || `${res.toolCalls} araç çağrısı`;
       await log('info', 'Agent tamamlandı', { turns: res.turns, tool_calls: res.toolCalls, stop: res.stopReason });

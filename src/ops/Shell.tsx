@@ -127,21 +127,12 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 my-4">
-              {[
-                { id: 'home' as Route, label: 'Genel Bakış', hint: 'Özet ve Anlık Durum', icon: Gauge, color: 'text-brand-green' },
-                { id: 'portfolio' as Route, label: 'CRM & Portföy (2)', hint: 'Şantiyeler, Usta ve Firmalar', icon: Briefcase, color: 'text-blue-500' },
-                { id: 'videos' as Route, label: 'Video Havuzu (3)', hint: 'Higgsfield AI ve Reklamlar', icon: Film, color: 'text-amber-500' },
-                { id: 'connections' as Route, label: 'Uygulamalar (9)', hint: 'Gezgin, Kasa ve Eklentiler', icon: PlugZap, color: 'text-emerald-500' },
-                { id: 'leads' as Route, label: 'Lead Radarı', hint: 'Canlı Şantiye Fırsatları', icon: Radar, color: 'text-rose-500' },
-                { id: 'planner' as Route, label: 'İçerik Takvimi', hint: '30 Günlük Otomasyon', icon: CalendarRange, color: 'text-purple-500' },
-                { id: 'studio' as Route, label: 'Post Studio', hint: 'Sosyal Medya Üretimi', icon: Sparkles, color: 'text-amber-400' },
-                { id: 'bots' as Route, label: 'Bot Kontrol', hint: 'SEO ve Otomatik Görevler', icon: Bot, color: 'text-teal-500' },
-                { id: 'queue' as Route, label: 'Yayın Kuyruğu', hint: 'Görsel & Video Paylaşımı', icon: CalendarClock, color: 'text-pink-500' },
-                { id: 'reports' as Route, label: 'Bot Raporları', hint: 'İstihbarat & Analizler', icon: FileText, color: 'text-indigo-500' },
-                { id: 'system' as Route, label: 'Sistem Sağlığı', hint: 'Multi-AI ve Hata Günlükleri', icon: ShieldCheck, color: 'text-emerald-400' },
-                { id: 'settings' as Route, label: 'Ayarlar', hint: 'Marka, AI & Ekip', icon: Settings, color: 'text-ink-400' },
-              ].map((item) => {
+            <div className="my-4 space-y-4">
+              {GROUPS.map((g) => (
+              <div key={g.title}>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-ink-500 mb-1.5">{g.title}</div>
+              <div className="grid grid-cols-2 gap-2.5">
+              {g.items.map((item) => {
                 const Icon = item.icon;
                 const active = state.route === item.id;
                 return (
@@ -155,7 +146,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
                         : 'bg-ink-850/80 border-ink-800 text-ink-200 hover:bg-ink-800'
                     )}
                   >
-                    <Icon className={cx('w-4 h-4 shrink-0 mt-0.5', item.color)} />
+                    <Icon className="w-4 h-4 shrink-0 mt-0.5 text-brand-green" />{item.id === 'approvals' && badges.data.approvals > 0 && <span className="sr-only">{badges.data.approvals} onay</span>}
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-semibold truncate leading-tight">{item.label}</div>
                       <div className="text-[10px] text-ink-400 truncate mt-0.5">{item.hint}</div>
@@ -163,6 +154,9 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
                   </button>
                 );
               })}
+              </div>
+              </div>
+              ))}
             </div>
 
             <div className="pt-3 border-t border-ink-800 flex items-center justify-between text-xs text-ink-400">

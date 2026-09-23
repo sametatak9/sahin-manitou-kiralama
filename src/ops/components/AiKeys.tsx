@@ -47,7 +47,7 @@ export function AiKeysPanel({ compact = false }: { compact?: boolean }) {
       <div className="mb-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 flex items-start gap-2">
         <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
         <p className="text-[11px] text-ink-300">
-          <b className="text-emerald-700">Otomatik Model Yedekleme (Failover) Aktif:</b> Claude (Anthropic) rate limitine veya bakiye sınırına ulaştığında, bot görevleri durdurulmaz; arama ve özet adımları anında <b>Google Gemini</b> veya <b>OpenAI</b> ile devam eder.
+          <b className="text-emerald-700">Otomatik yedekleme (failover):</b> Claude’un kredisi/limiti dolarsa görevler, anahtarı tanımlı olan yedek sağlayıcıyla (<b>Gemini</b>; içerik botlarında <b>OpenAI</b> de) devam eder. Yedek anahtar tanımlı değilse görev “kredi bitti” hatasıyla durur.
         </p>
       </div>
       <div className="space-y-3">

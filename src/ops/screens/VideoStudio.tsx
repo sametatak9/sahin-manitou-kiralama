@@ -1,73 +1,22 @@
 import { useState } from 'react';
 import {
-  Film, Sparkles, Play, CalendarClock, Download, Share2, Plus, ExternalLink,
-  CheckCircle2, Clock, Truck, Building2, Copy, Check
+  Film, Sparkles, CalendarClock, Download, ExternalLink, CheckCircle2, Copy, Check
 } from 'lucide-react';
-import { Button, Panel, Pill, Notice, cx } from '../ui';
+import { Button, Panel, Pill, Notice, StateView, cx } from '../ui';
+import { db, unwrap, useQuery } from '../lib/hooks';
+import { fmtDateTime } from '../lib/format';
 import { useRouter } from '../session';
 
-interface VideoItem {
-  id: string;
-  title: string;
-  category: 'rental' | 'construction';
-  format: 'reel' | 'post' | 'landscape';
-  duration: string;
-  thumbnail: string;
-  videoUrl?: string;
-  prompt: string;
-  aiEngine: string;
-  status: 'ready' | 'scheduled' | 'draft';
-  targetAudience: string;
-  cta: string;
-}
-
-const INITIAL_VIDEOS: VideoItem[] = [
-  {
-    id: 'vid-1',
-    title: 'Şahin Manitou — 18 Metre Yüksek İrtifa Güngören Şantiye Operasyonu',
-    category: 'rental',
-    format: 'reel',
-    duration: '0:28 sn',
-    thumbnail: 'https://images.unsplash.com/photo-1541888946425-d0fbb186156f?w=800&auto=format&fit=crop&q=80',
-    prompt: 'Cinematic drone shot orbiting an 18-meter Manitou telehandler lifting pallets into an urban regeneration construction site in Istanbul, realistic lighting, golden hour, 4k ultra-detailed.',
-    aiEngine: 'Higgsfield AI (Cinema 4K)',
-    status: 'ready',
-    targetAudience: 'Müteahhitler, Taşeronlar, Şantiye Şefleri',
-    cta: 'Hızlı kiralama & sevk için: 0531 436 29 04',
-  },
-  {
-    id: 'vid-2',
-    title: 'Embay Yapı — Tozkoparan Güvenli Kentsel Dönüşüm Temel Atma & Dönüşüm',
-    category: 'construction',
-    format: 'reel',
-    duration: '0:35 sn',
-    thumbnail: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800&auto=format&fit=crop&q=80',
-    prompt: 'Hyper-realistic architectural visual transition, old risky building transforming into a modern earthquake-resilient luxury residential apartment building in Gungoren Istanbul, smooth slider shot.',
-    aiEngine: 'Higgsfield AI + Runway Gen-3',
-    status: 'ready',
-    targetAudience: 'Hak Sahipleri, Arsa Sahipleri, Daire Sakinleri',
-    cta: 'Ücretsiz yerinde dönüşüm danışmanlığı: 0531 436 29 04',
-  },
-  {
-    id: 'vid-3',
-    title: 'Operatörlü Manitou Kiralama — Acil Sevk & Sertifikalı Uzman Kadro',
-    category: 'rental',
-    format: 'reel',
-    duration: '0:22 sn',
-    thumbnail: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=800&auto=format&fit=crop&q=80',
-    prompt: 'Macro and wide cuts of a heavy machinery transport truck arriving at a busy construction site, unloading a Manitou machine, professional certified operator waving, high-energy commercial.',
-    aiEngine: 'Higgsfield AI commercial cut',
-    status: 'scheduled',
-    targetAudience: 'Fabrikalar, Lojistik Depolar, Çelik Konstrüksiyon',
-    cta: 'Saatlik / Günlük / Aylık kiralama: 0531 436 29 04',
-  },
-];
+// Video havuzu yalnızca gerçekten yüklenmiş videoları gösterir (Yayın Kuyruğu'ndan yüklenen, social_drafts.video_url).
+interface VideoRow { id: string; title: string; caption: string | null; video_url: string; primary_platform: string | null; format: string | null; workflow_status: string; scheduled_at: string | null; created_at: string }
+const WF_LABEL: Record<string, string> = { scheduled: 'ZAMANLANDI', pending_approval: 'ONAY BEKLİYOR', published: 'PAYLAŞILDI', failed: 'BAŞARISIZ', cancelled: 'İPTAL', processing: 'PAYLAŞILIYOR', approved: 'ONAYLI', draft: 'TASLAK' };
 
 export function VideoStudioScreen() {
   const { go } = useRouter();
   const [activeTab, setActiveTab] = useState<'pool' | 'generator'>('pool');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
+  const videos = useQuery(async () => unwrap(await db().from('social_drafts').select('id,title,caption,video_url,primary_platform,format,workflow_status,scheduled_at,created_at')
+    .not('video_url', 'is', null).order('created_at', { ascending: false }).limit(60)) as VideoRow[], [] as VideoRow[], [], ['social_drafts']);
 
   // Higgsfield prompt generator state
   const [brand, setBrand] = useState<'rental' | 'construction'>('rental');
@@ -97,12 +46,12 @@ export function VideoStudioScreen() {
       <section className="ops-panel p-5 relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-brand-green">Medya Stüdyosu · Higgsfield AI</div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-brand-green">Medya Stüdyosu</div>
             <h2 className="font-display text-2xl font-bold text-ink-100 mt-1 flex items-center gap-2">
               <Film className="w-6 h-6 text-brand-green" /> Video Havuzu & AI Üretim
             </h2>
             <p className="text-xs text-ink-300 mt-1">
-              Instagram Reels, TikTok ve YouTube Shorts için hazır reklam videoları ve Higgsfield AI video istemleri.
+              Yüklediğiniz videolar ve AI video araçları (Higgsfield, Runway, Luma) için hazır komut (istem) hazırlayıcı. Video üretimi o araçlarda yapılır; üretilen videoyu Yayın Kuyruğu’na yükleyin.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -111,7 +60,7 @@ export function VideoStudioScreen() {
               onClick={() => setActiveTab('pool')}
               icon={<Film className="w-4 h-4" />}
             >
-              Hazır Videolar ({INITIAL_VIDEOS.length})
+              Videolarım ({videos.data.length})
             </Button>
             <Button
               variant={activeTab === 'generator' ? 'primary' : 'ghost'}
@@ -124,71 +73,37 @@ export function VideoStudioScreen() {
         </div>
       </section>
 
-      {activeTab === 'pool' && (
+      {activeTab === 'pool' && (videos.loading ? <StateView kind="loading" compact /> : videos.data.length === 0 ? (
+        <StateView kind="empty" title="Henüz video yok" message="Videoları Yayın Kuyruğu’ndan telefonunuzdan yükleyin; burada listelenir ve paylaşım durumları görünür. Aşağıdaki istem hazırlayıcıyla AI video araçları için komut da oluşturabilirsiniz."
+          action={<Button variant="primary" onClick={() => go('queue')} icon={<CalendarClock className="w-4 h-4" />}>Yayın Kuyruğu’na git</Button>} />
+      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {INITIAL_VIDEOS.map((v) => (
-            <Panel key={v.id} className="flex flex-col justify-between overflow-hidden group">
+          {videos.data.map((v) => (
+            <Panel key={v.id} className="flex flex-col justify-between overflow-hidden">
               <div>
-                <div className="relative aspect-video rounded-xl overflow-hidden mb-3 bg-ink-900 border border-ink-800">
-                  <img src={v.thumbnail} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-ink-950/80 via-transparent to-black/20" />
-                  <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                    <Pill tone={v.category === 'rental' ? 'go' : 'info'} dot={false}>
-                      {v.category === 'rental' ? 'ŞAHİN MANİTOU' : 'EMBAY YAPI'}
-                    </Pill>
-                    <span className="text-[10px] font-mono bg-black/60 text-white px-2 py-0.5 rounded-full border border-white/10">
-                      {v.duration}
-                    </span>
-                  </div>
-                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] text-white/90">
-                    <span className="flex items-center gap-1 font-mono text-[10px]">
-                      <Sparkles className="w-3 h-3 text-amber-400" /> {v.aiEngine}
-                    </span>
-                  </div>
+                <video src={v.video_url} controls playsInline preload="metadata" className="w-full aspect-video rounded-xl bg-ink-900 border border-ink-800 mb-3" />
+                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                  <Pill tone={v.workflow_status === 'published' ? 'go' : v.workflow_status === 'failed' ? 'stop' : 'info'}>{WF_LABEL[v.workflow_status] ?? v.workflow_status}</Pill>
+                  <span className="text-[10px] font-mono text-ink-500">{(v.primary_platform ?? '').toUpperCase()} · {v.format ?? 'video'}</span>
                 </div>
-
                 <h3 className="font-semibold text-sm text-ink-100 line-clamp-2 leading-snug">{v.title}</h3>
-                <p className="text-xs text-ink-400 mt-1.5 line-clamp-2 bg-ink-850 p-2 rounded-lg font-mono text-[11px]">
-                  "{v.prompt}"
-                </p>
-
-                <div className="mt-3 space-y-1 text-[11px] text-ink-300">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-ink-500">Hedef:</span> <span>{v.targetAudience}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-ink-500">CTA:</span> <span className="text-brand-green font-medium">{v.cta}</span>
-                  </div>
-                </div>
+                {v.caption && <p className="text-xs text-ink-400 mt-1 line-clamp-2">{v.caption}</p>}
+                <div className="text-[10px] font-mono text-ink-500 mt-1.5">{v.scheduled_at ? `Paylaşım: ${fmtDateTime(v.scheduled_at)}` : `Yüklendi: ${fmtDateTime(v.created_at)}`}</div>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-ink-800/80 flex items-center gap-2">
-                <Button
-                  variant="primary"
-                  className="flex-1 text-xs py-1.5"
-                  icon={<CalendarClock className="w-3.5 h-3.5" />}
-                  onClick={() => go('queue')}
-                >
-                  Kuyruğa Ekle
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="px-2.5 py-1.5"
-                  title="İstemi Kopyala"
-                  onClick={() => copyPrompt(v.prompt, v.id)}
-                  icon={copiedId === v.id ? <Check className="w-3.5 h-3.5 text-brand-green" /> : <Copy className="w-3.5 h-3.5" />}
-                />
+              <div className="mt-3 pt-3 border-t border-ink-800/80 flex items-center gap-2">
+                <Button variant="ghost" className="flex-1 text-xs py-1.5" icon={<CalendarClock className="w-3.5 h-3.5" />} onClick={() => go('queue')}>Yayın Kuyruğu</Button>
+                <a href={v.video_url} target="_blank" rel="noreferrer" className="ops-chip"><Download className="w-3.5 h-3.5" />İndir</a>
               </div>
             </Panel>
           ))}
         </div>
-      )}
+      ))}
 
       {activeTab === 'generator' && (
         <Panel kicker="Higgsfield AI & Runway Entegrasyonu" title="Yeni Reklam Videosu İstemcisi">
           <div className="space-y-4 max-w-2xl">
             <Notice tone="info">
-              Bu istem oluşturucu; Higgsfield AI, Runway Gen-3 ve Luma Dream Machine için 4K dikey Reels reklam komutları hazırlar. Oluşturduğunuz istemi tek tıkla kopyalayabilir veya doğrudan <b>Yayın Kuyruğu</b> planına ekleyebilirsiniz.
+              Bu istem oluşturucu; Higgsfield AI, Runway Gen-3 ve Luma Dream Machine için 4K dikey Reels reklam komutları hazırlar. İstemi kopyalayıp ilgili araçta videoyu üretin, sonra videoyu <b>Yayın Kuyruğu</b>’na yükleyip zamanlayın.
             </Notice>
 
             <div className="grid grid-cols-2 gap-3">
@@ -262,7 +177,7 @@ export function VideoStudioScreen() {
                     onClick={() => go('queue')}
                     icon={<CalendarClock className="w-3.5 h-3.5" />}
                   >
-                    Yayın Kuyruğuna Ekle
+                    Videoyu yükle (Yayın Kuyruğu)
                   </Button>
                   <a
                     href="https://higgsfield.ai"
