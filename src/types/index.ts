@@ -107,6 +107,13 @@ export interface PlatformConnection {
     engagementRate?: string;
   };
   authRequiredAction?: string;
+  credentials?: {
+    username?: string;
+    embeddedPassword?: string;
+    isAutoStarted?: boolean;
+    directAppUrl?: string;
+    apiKey?: string;
+  };
 }
 
 export interface ContentItem {

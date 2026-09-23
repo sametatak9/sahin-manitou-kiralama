@@ -207,7 +207,7 @@ export const INITIAL_PLATFORMS: PlatformConnection[] = [
     platform: 'INSTAGRAM',
     accountName: '@sahinmanitou_kiralama',
     status: 'CONNECTED',
-    lastSyncAt: 'Bugün 08:30',
+    lastSyncAt: 'Canlı (Otomatik Başladı)',
     capabilities: {
       connect: true,
       publish: true,
@@ -219,13 +219,19 @@ export const INITIAL_PLATFORMS: PlatformConnection[] = [
       followers: 2450,
       reach: 18200,
       engagementRate: '%4.8'
+    },
+    credentials: {
+      username: 'sahinmanitou_kiralama',
+      embeddedPassword: '•••••••••••• (Gömülü Otomatik)',
+      isAutoStarted: true,
+      directAppUrl: 'https://instagram.com/sahinmanitou_kiralama'
     }
   },
   {
     platform: 'FACEBOOK',
     accountName: 'Şahin Manitou & Embay Yapı',
     status: 'CONNECTED',
-    lastSyncAt: 'Bugün 08:30',
+    lastSyncAt: 'Canlı (Otomatik Başladı)',
     capabilities: {
       connect: true,
       publish: true,
@@ -237,6 +243,12 @@ export const INITIAL_PLATFORMS: PlatformConnection[] = [
       followers: 3100,
       reach: 22400,
       engagementRate: '%3.9'
+    },
+    credentials: {
+      username: 'sahinmanitou.official',
+      embeddedPassword: '•••••••••••• (Gömülü Otomatik)',
+      isAutoStarted: true,
+      directAppUrl: 'https://facebook.com'
     }
   },
   {
@@ -254,19 +266,31 @@ export const INITIAL_PLATFORMS: PlatformConnection[] = [
     metrics: {
       reach: 5400,
       engagementRate: '%8.2'
+    },
+    credentials: {
+      username: 'info@sahinmanitou.com',
+      embeddedPassword: '•••••••••••• (Gömülü Otomatik)',
+      isAutoStarted: true,
+      directAppUrl: 'https://business.google.com'
     }
   },
   {
     platform: 'WHATSAPP_BUSINESS',
-    accountName: '0531 436 29 04 (Samet Bey - Operasyon)',
+    accountName: '0531 436 29 04 (Samet Bey - Canlı Profil)',
     status: 'CONNECTED',
-    lastSyncAt: 'Canlı',
+    lastSyncAt: 'Uygulamada Her Zaman Açık',
     capabilities: {
       connect: true,
       publish: true,
       readMetrics: false,
       readComments: true,
       readMessages: true
+    },
+    credentials: {
+      username: '05314362904',
+      embeddedPassword: 'WhatsApp Web Session (Aktif)',
+      isAutoStarted: true,
+      directAppUrl: 'https://wa.me/905314362904'
     }
   }
 ];

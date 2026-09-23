@@ -578,26 +578,22 @@ export const BotControlView: React.FC<BotControlViewProps> = ({
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-2">
-                <h4 className="text-xs font-bold text-emerald-900 uppercase">
-                  Google’da Öne Çıkarılan Anahtar Kelime Fırsatları:
-                </h4>
-                <ul className="text-xs text-emerald-800 space-y-1 list-disc list-inside">
-                  {seoReport.opportunities.map((op, idx) => (
-                    <li key={idx}>{op}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200 space-y-2">
-                <h4 className="text-xs font-bold text-amber-900 uppercase">Önerilen İyileştirmeler:</h4>
-                <ul className="text-xs text-amber-900 space-y-1 list-disc list-inside">
-                  {seoReport.recommendations.map((rec, idx) => (
-                    <li key={idx}>{rec}</li>
-                  ))}
-                </ul>
-              </div>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-mono">
+                Hedef: {seoReport.url} • SSL ve Robots.txt doğrulanmış
+              </span>
+              <button
+                onClick={() => {
+                  const seoBot = botTasks.find(b => b.category === 'SEO') || botTasks[0];
+                  if (seoBot) {
+                    handleStartLiveTestRun(seoBot, 'FINDINGS');
+                  }
+                }}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" />
+                <span>SEO Botunu Şimdi Canlı Çalıştır & Test Et</span>
+              </button>
             </div>
           </div>
         </div>
