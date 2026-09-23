@@ -455,6 +455,13 @@ export function App() {
     showNotification('Bot çalışma durumu güncellendi.');
   };
 
+  // Update Bot Skills, Permissions & Training
+  const handleUpdateBot = (updatedBot: BotTask) => {
+    setBotTasks(prev => prev.map(b => (b.id === updatedBot.id ? updatedBot : b)));
+    dbService.upsertBotTask(updatedBot);
+    showNotification(`"${updatedBot.name}" yetenekleri ve sistem eğitimi güncellendi.`);
+  };
+
   // Delete Bot
   const handleDeleteBot = (id: string) => {
     setBotTasks(prev => prev.filter(b => b.id !== id));
@@ -829,6 +836,7 @@ export function App() {
                 trends={trends}
                 onTriggerBot={handleTriggerBot}
                 onAddNewBot={handleAddNewBot}
+                onUpdateBot={handleUpdateBot}
                 onToggleBotStatus={handleToggleBotStatus}
                 onDeleteBot={handleDeleteBot}
                 onClearFakeBots={handleClearFakeBots}

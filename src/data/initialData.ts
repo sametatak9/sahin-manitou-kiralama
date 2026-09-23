@@ -310,6 +310,15 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     targetUrl: 'https://sahin-manitou-kiralama.vercel.app',
     targetJobDescription: 'Canlı web sitesindeki H1, meta etiketleri, robots.txt, sitemap ve schema verilerini tarayıp Google sıralama fırsatlarını çıkartır.',
     maxRunDurationMinutes: 5,
+    finishThreshold: 'Tüm sayfa meta etiketleri ve robots.txt taraması tamamlanınca dur',
+    skills: ['SEO_AUDIT', 'WEB_SCRAPING', 'SCHEMA_VALIDATOR', 'KEYWORD_DISCOVERY'],
+    permissions: {
+      canBrowseWeb: true,
+      canWriteSupabase: true,
+      canSendWhatsApp: false,
+      canDraftOffer: false
+    },
+    systemTrainingPrompt: 'Şahin Manitou & Embay Yapı için SEO analiz motoru. Hadımköy, Tozkoparan, Kıraç ve Trakya genelinde 14m/18m Manitou kiralama aramalarını denetle. Sitede H1, meta title/description, SSL ve schema JSON-LD eksiklerini raporla.',
     lastRunOutcome: 'EMPTY_BUT_COMPLETED',
     executionHistory: []
   },
@@ -327,6 +336,15 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     targetUrl: 'https://sahin-manitou-kiralama.vercel.app/#teklif',
     targetJobDescription: 'Web sitesi teklif formu ve 0531 436 29 04 WhatsApp kanalından düşen kiralama/keşif taleplerini anında yakalayıp CRM fırsatına dönüştürür.',
     maxRunDurationMinutes: 1,
+    finishThreshold: 'Gelen her yeni keşif/teklif mesajında tetiklenir',
+    skills: ['PHONE_EXTRACTOR', 'WHATSAPP_DISPATCH', 'SUPABASE_SYNC', 'PRICE_ANALYSIS'],
+    permissions: {
+      canBrowseWeb: true,
+      canWriteSupabase: true,
+      canSendWhatsApp: true,
+      canDraftOffer: true
+    },
+    systemTrainingPrompt: 'Müşterinin belirttiği makine tipi (14m, 18m Manitou, forklift veya kentsel dönüşüm taahhüt), şantiye ilçesi ve telefonunu ayrıştır. 0531 436 29 04 operasyon hattına bildirim hazırla fakat Samet Bey insan onayı vermeden doğrudan müşteriye mesaj atma.',
     lastRunOutcome: 'EMPTY_BUT_COMPLETED',
     executionHistory: []
   },
@@ -344,6 +362,15 @@ export const INITIAL_BOT_TASKS: BotTask[] = [
     targetUrl: 'https://facebook.com/groups/insaat.makineleri.istanbul',
     targetJobDescription: 'İstanbul Hadımköy, Kıraç ve Çorlu sanayi gruplarında kiralık teleskopik forklift arayan taşeron ve müteahhit paylaşımlarını tarar.',
     maxRunDurationMinutes: 15,
+    finishThreshold: 'İlk 3 doğrulanmış şantiye talebi bulunca veya 15 dakika dolunca dur',
+    skills: ['WEB_SCRAPING', 'LEAD_SCORING', 'LOCATION_FILTER', 'CONTENT_PARSER'],
+    permissions: {
+      canBrowseWeb: true,
+      canWriteSupabase: true,
+      canSendWhatsApp: false,
+      canDraftOffer: true
+    },
+    systemTrainingPrompt: 'Hadımköy Sanayi Bölgesi, Deliklikaya, Çatalca ve Kıraç lokasyonlarındaki çatı cephe montajı, sandviç panel, çelik konstrüksiyon işlerini filtrele. Sadece 14m/18m Manitou veya teleskopik yükleyici taleplerini CRM adayı yap.',
     lastRunOutcome: 'EMPTY_BUT_COMPLETED',
     executionHistory: []
   }

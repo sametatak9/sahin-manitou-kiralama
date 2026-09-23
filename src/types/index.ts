@@ -155,6 +155,15 @@ export interface BotTask {
   targetUrl?: string;
   targetJobDescription?: string;
   maxRunDurationMinutes?: number;
+  finishThreshold?: string; // örn: "İlk 3 müşteri talebini bulunca dur" veya "Tüm sayfaları tara"
+  skills?: string[]; // örn: ['WEB_SCRAPING', 'SEO_AUDIT', 'WHATSAPP_DISPATCH', 'PHONE_EXTRACTOR', 'PRICE_ANALYSIS']
+  permissions?: {
+    canBrowseWeb: boolean;
+    canWriteSupabase: boolean;
+    canSendWhatsApp: boolean;
+    canDraftOffer: boolean;
+  };
+  systemTrainingPrompt?: string; // Botun çalışma kuralları ve şirket bilgisi eğitimi
   lastRunOutcome?: 'SUCCESS_WITH_LEAD' | 'EMPTY_BUT_COMPLETED' | 'ERROR';
   executionHistory?: {
     runAt: string;
@@ -162,6 +171,7 @@ export interface BotTask {
     outcome: 'BULGU_VAR' | 'TEMIZ_BOS_DONDU' | 'HATA';
     summary: string;
     targetScanned: string;
+    details?: string;
   }[];
 }
 

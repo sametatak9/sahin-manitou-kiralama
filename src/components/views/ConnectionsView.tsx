@@ -44,7 +44,16 @@ export const ConnectionsView: React.FC<ConnectionsViewProps> = ({
   onTogglePlatformStatus,
   onDeletePlatform
 }) => {
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'CREDENTIALS' | 'WHATSAPP_LIVE'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'CREDENTIALS' | 'WHATSAPP_LIVE' | 'PLATFORM_PREVIEW'>('OVERVIEW');
+  const [selectedPreviewPlatform, setSelectedPreviewPlatform] = useState<PlatformConnection>(
+    platforms[0] || {
+      platform: 'INSTAGRAM',
+      accountName: '@sahinmanitou_kiralama',
+      status: 'CONNECTED',
+      lastSyncAt: 'Canlı',
+      capabilities: { connect: true, publish: true, readMetrics: true, readComments: true, readMessages: true }
+    }
+  );
   const [copiedKey, setCopiedKey] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -254,6 +263,16 @@ WHATSAPP_WEBHOOK_SECRET="embay_wh_secret_2026"`;
               }`}
             >
               💬 WhatsApp Canlı Profil (Uygulamada Açık)
+            </button>
+            <button
+              onClick={() => setActiveTab('PLATFORM_PREVIEW')}
+              className={`px-3.5 py-2 rounded-xl transition-all shrink-0 ${
+                activeTab === 'PLATFORM_PREVIEW'
+                  ? 'bg-emerald-700 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              📱 Seçili Platform Önizlemesi
             </button>
           </div>
         </div>
@@ -565,6 +584,105 @@ WHATSAPP_WEBHOOK_SECRET="embay_wh_secret_2026"`;
                 <span>Gönder</span>
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: PLATFORM PREVIEW (SEÇİLİ PLATFORM VE WP ÖNİZLEMESİ) */}
+      {/* ========================================================================= */}
+      {activeTab === 'PLATFORM_PREVIEW' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-emerald-700" />
+                <span>Seçili Platform & Canlı İletişim Önizlemesi</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Botların paylaşım yapacağı veya mesaj okuyacağı platformun canlı görünümü.
+              </p>
+            </div>
+
+            {/* Platform Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">Önizlenecek Kanal:</span>
+              <select
+                value={selectedPreviewPlatform.platform}
+                onChange={(e) => {
+                  const found = platforms.find(p => p.platform === e.target.value);
+                  if (found) setSelectedPreviewPlatform(found);
+                }}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:border-emerald-600 bg-slate-50"
+              >
+                {platforms.map(p => (
+                  <option key={`${p.platform}-${p.accountName}`} value={p.platform}>
+                    {p.platform} - {p.accountName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Interactive Mock Preview Screen */}
+          <div className="max-w-md mx-auto bg-slate-900 rounded-[32px] p-4 border-4 border-slate-800 shadow-2xl space-y-3">
+            {/* Phone Top Notch */}
+            <div className="flex items-center justify-between px-2 text-[10px] text-slate-400 font-mono">
+              <span>09:41</span>
+              <div className="w-16 h-4 bg-slate-800 rounded-full mx-auto"></div>
+              <span>%100 5G</span>
+            </div>
+
+            {/* Inner Phone Screen */}
+            <div className="bg-white rounded-[24px] overflow-hidden min-h-[460px] flex flex-col text-slate-900">
+              {/* Header */}
+              <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                    {selectedPreviewPlatform.platform.charAt(0)}
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">{selectedPreviewPlatform.accountName}</span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">● Canlı Senkronize</span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono bg-slate-200 px-2 py-0.5 rounded text-slate-700">
+                  {selectedPreviewPlatform.platform}
+                </span>
+              </div>
+
+              {/* Feed Simulation */}
+              <div className="p-3 space-y-3 flex-1 overflow-y-auto text-xs">
+                {/* Post Item */}
+                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-xs space-y-2">
+                  <div className="bg-slate-800 text-white h-40 flex flex-col items-center justify-center p-4 text-center space-y-1">
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">
+                      Şahin Manitou & Embay Yapı
+                    </span>
+                    <h4 className="font-extrabold text-sm text-white">
+                      Hadımköy ve Trakya 18 Metre Manitou Kiralama
+                    </h4>
+                    <span className="text-[11px] text-slate-300">
+                      MT-X 1840 Teleskopik Forklift • 4.000 kg Taşıma
+                    </span>
+                  </div>
+                  <div className="p-2.5 space-y-1">
+                    <p className="text-[11px] text-slate-700 leading-snug">
+                      Şantiyenizde çatı ve cephe panel montajı, ağır yük kaldırma işleriniz için operatörlü makinelerimiz hazır!
+                    </p>
+                    <p className="text-[10px] font-mono text-emerald-700 font-bold">
+                      📞 Hızlı Keşif: 0531 436 29 04
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Info Box */}
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-900 space-y-1">
+                  <span className="font-bold block">✓ Bot Durumu:</span>
+                  <p>Bu platformda çalışan botlar paylaşımları otomatik zamanlar ve gelen DM mesajlarını 0531 436 29 04 hattına düşürür.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
