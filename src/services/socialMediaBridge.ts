@@ -1,59 +1,17 @@
 /**
- * Sunucu API Köprüsü ve Sosyal Medya İskeleti
- * Kural: API token'ları ve sırlar ASLA tarayıcı kodunda tutulmaz.
- * Canlı API anahtarı veya sunucu yapılandırılmamışsa sessizce mock modda çalışır.
- * Akış: Taslak -> Yönetici Onayı -> Zamanlama -> Metricool / Meta
+ * Sosyal medya yayın köprüsü.
+ * Yayın yalnızca ops edge function üzerinden, onaylı içerik ve bağlı hesapla yapılır.
+ * Sonuç her zaman platform API yanıtıdır; bağlantı yoksa hata döner (sahte başarı yok).
  */
-
-export interface SocialPublishPayload {
-  platform: 'instagram' | 'google_business' | 'facebook';
-  caption: string;
-  mediaUrls?: string[];
-  scheduledTime?: string;
-}
+import { callOps } from '../ops/lib/api';
 
 export interface PublishResult {
-  success: boolean;
-  mode: 'live_api' | 'mock_scheduled' | 'metricool_ready';
-  trackingId: string;
-  message: string;
+  published: boolean;
+  publication_id: string;
+  external_post_id: string;
+  external_url: string | null;
 }
 
-export async function submitSocialPostToBridge(payload: SocialPublishPayload): Promise<PublishResult> {
-  const isServerAvailable = Boolean(import.meta.env.VITE_API_BASE_URL);
-
-  if (isServerAvailable) {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/social/publish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('embay_auth_token') || ''}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return {
-        success: true,
-        mode: 'live_api',
-        trackingId: data.trackingId || 'srv-' + Date.now(),
-        message: 'Gönderi sunucu üzerinden başarıyla zamanlandı.'
-      };
-    } catch (err) {
-      console.warn('Canlı sunucuya erişilemedi, Metricool/Mock moduna geçiliyor:', err);
-    }
-  }
-
-  // Güvenli Mock / Metricool Hazırlık Modu (Tarayıcıda patlamaz)
-  return {
-    success: true,
-    mode: 'metricool_ready',
-    trackingId: 'draft-' + Math.random().toString(36).substring(7),
-    message: 'Gönderi onaylandı ve Metricool entegrasyon kuyruğuna hazırlandı (Mock Mod).'
-  };
+export function publishApprovedContent(contentId: string, platform?: string): Promise<PublishResult> {
+  return callOps<PublishResult>('publish_content', { content_id: contentId, platform });
 }

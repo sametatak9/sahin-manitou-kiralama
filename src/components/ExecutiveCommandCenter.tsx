@@ -237,7 +237,7 @@ Geçtiğimiz 7 günde ekibimiz ve iş makinelerimizle:
           {/* Hızlı İstatistikler */}
           <div className="flex items-center gap-3">
             <div className="px-3.5 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Aktif Botlar</span>
+              <span className="text-[10px] text-slate-400 uppercase font-bold block">Örnek Bot Planı (statik)</span>
               <span className="text-lg font-black text-emerald-400">
                 {botSchedules.filter(b => b.status === 'active').length} / {botSchedules.length}
               </span>
