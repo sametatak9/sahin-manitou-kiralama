@@ -16,7 +16,7 @@ import { QuickQuoteCalculator } from './components/QuickQuoteCalculator';
 import { TwoPageSiteKit } from './components/TwoPageSiteKit';
 import { DistrictPagesSection } from './components/DistrictPagesSection';
 import { SocialSection } from './components/SocialSection';
-import { SocialPortfolioPlanner } from './components/SocialPortfolioPlanner';
+import { SocialOperationsHub } from './components/SocialOperationsHub';
 import { WeeklyPlanSection } from './components/WeeklyPlanSection';
 import { SiteSeoSection } from './components/SiteSeoSection';
 import { QuickFieldGenerator } from './components/QuickFieldGenerator';
@@ -119,7 +119,7 @@ export default function App() {
         {activeTab === 'twopage' && <TwoPageSiteKit />}
         {activeTab === 'districts' && <DistrictPagesSection />}
         {activeTab === 'instagram' && <SocialSection />}
-        {activeTab === 'social-planner' && <SocialPortfolioPlanner />}
+        {activeTab === 'social-planner' && <SocialOperationsHub />}
         {activeTab === 'calendar' && <WeeklyPlanSection />}
         {activeTab === 'website' && <SiteSeoSection />}
         {activeTab === 'generator' && <QuickFieldGenerator />}

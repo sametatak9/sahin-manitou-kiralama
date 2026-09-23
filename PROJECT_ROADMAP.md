@@ -22,6 +22,14 @@ Sosyal medya yönetim sekmesinde her marka ve platform için ayrı portföy tutu
 
 Aylık takvim; eğitici içerik, saha/proje, sempatik mizah, ticari teklif, çevre, sosyal fayda, müşteri güveni ve özel gün başlıklarını içerecektir. Bayramlar, resmi günler, sektör günleri, yerel etkinlikler ve şirketin sosyal sorumluluk faaliyetleri için önceden hazırlanmış rapor formatı bulunacaktır. Her özel gün kaydı; amaç, mesaj, hedef kitle, platformlar, tasarım bağlantısı, metin varyantları, yayın durumu, erişim, etkileşim, lead ve sonraki önerileri içerecektir.
 
+## Connector, iş fırsatı ve bot planı
+
+Sosyal yönetim sekmesi; Instagram, Facebook, X, YouTube, WhatsApp Business ve Google Business bağlantılarını resmi API/connector izinleri üzerinden, her uygulama için ayrı önizleme, taslak, onay, yayın ve istatistik kayıtlarıyla yönetecektir. Canva ve Figma bağlantıları portföy, şablon, tasarım dosyası ve dışa aktarılan medya referanslarıyla arşivlenecektir. Connector erişimi bulunmayan platformlarda otomatik yayın yapılmayacak; bağlantı durumu, manuel dışa aktarma ve kullanıcı onayı açıkça gösterilecektir.
+
+Şantiye ve iş fırsatı botları; Sahibinden, Armut, İşin Olsun ve benzeri platformlarda yalnızca resmi API, izinli feed, e-posta bildirimi veya kullanıcı tarafından sağlanan veri akışı varsa çalışacaktır. Robotik tarama, CAPTCHA aşma, platform şartlarını ihlal eden otomatik hesap açma, izinsiz mesaj gönderme ve spam yapılmayacaktır. Botlar fırsatı kaynak, tarih, bölge, hizmet, bütçe, iletişim izni ve güven skoruyla müşteri portföyüne aday kayıt olarak alacak; duplicate kontrolü, KVKK sınıflandırması, insan onayı ve CRM’e aktarım tamamlanmadan dış iletişim başlatmayacaktır.
+
+Grok veya başka bir model yalnızca izinli connector verisini sınıflandırma, özetleme, içerik varyantı, lead önceliklendirme ve reklam önerisi için kullanacaktır. Model doğrudan yayınlama, fiyat taahhüdü, hukuki beyan, müşteri adına mesaj gönderme veya hassas kişisel veri kararı veremeyecek; her çıktı audit kaydı ve approval kuyruğundan geçecektir.
+
 ## Marka ve içerik sınırı
 
 Public tarafta müşteri ve arama motorlarının görmesi gereken marka/hizmet içeriği bulunacak; yapay zeka talimatları, iç operasyon notları, promptlar, test PIN'leri, yönetici açıklamaları ve panel verileri public sayfaya taşınmayacaktır. İçerik etik, gerçek ve doğrulanabilir olacak; sahte yorum, spam, otomatik arama sorgusu ve manipülatif SEO kullanılmayacaktır.
