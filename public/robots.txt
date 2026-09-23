@@ -1,2 +1,6 @@
+# Herkese açık site aranabilir; yönetim paneli aranmaz (panel alan adı ayrıca X-Robots-Tag: noindex gönderir).
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /panel
+
+Sitemap: https://sahin-manitou-kiralama.vercel.app/sitemap.xml

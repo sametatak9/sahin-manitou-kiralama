@@ -8,6 +8,11 @@ const isPanelHost = window.location.hostname === 'embay-panel.vercel.app'
   || window.location.hostname.startsWith('embay-panel-')
   || window.location.pathname.startsWith('/panel');
 
+// Yönetim paneli arama motorlarında görünmesin (herkese açık site görünür)
+if (isPanelHost) {
+  const m = document.createElement('meta'); m.name = 'robots'; m.content = 'noindex, nofollow'; document.head.appendChild(m);
+}
+
 const PanelApp = lazy(() => import('./App.tsx'));
 
 function Root() {
