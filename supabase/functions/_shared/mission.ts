@@ -62,6 +62,25 @@ const STEP_INTERVAL_MS = 55_000;
 export const stepIntervalMs = (m: Pick<MissionRow, 'duration_minutes' | 'max_steps'>) =>
   Math.max(STEP_INTERVAL_MS, Math.floor((m.duration_minutes * 60_000) / Math.max(1, m.max_steps)) - 5_000);
 
+// ── Haber/duyuru araması (herkese açık Google Haberler RSS) ───────────────────
+// Ücretsiz AI modellerinde internet araması yok: her adımda bir arama terimi için son 7 günün haber/duyuru
+// başlıkları (gerçek link + yayın tarihi + kaynak) çekilir ve AI'a yalnızca bunlardan seçmesi söylenir.
+export interface NewsItem { title: string; url: string; posted: string | null; source: string | null }
+export async function newsSearch(q: string, limit = 15): Promise<NewsItem[]> {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:7d`)}&hl=tr&gl=TR&ceid=TR:tr`;
+  const res = await fetch(url, { headers: { 'user-agent': 'EmbayOpsBot/1.0 (+https://embay-panel.vercel.app)' }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!res?.ok) return [];
+  const xml = await res.text();
+  const tag = (block: string, t: string) => decode((block.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`))?.[1] ?? '').replace(/<!\[CDATA\[|\]\]>/g, '').trim());
+  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, limit).map((mm) => {
+    const b = mm[1];
+    const pub = tag(b, 'pubDate');
+    const d = pub ? new Date(pub) : null;
+    return { title: tag(b, 'title'), url: tag(b, 'link'), source: tag(b, 'source') || null,
+      posted: d && !isNaN(d.getTime()) ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium' }).format(d) : null };
+  }).filter((n) => n.title && /^https?:\/\//.test(n.url));
+}
+
 // ── Sayfa çekme (gerçek HTTP) ───────────────────────────────────────────────
 export interface PageFacts {
   ok: boolean; status: number; url: string; title: string | null; description: string | null; og: Record<string, string>;
@@ -416,6 +435,15 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (ai) try {
       const ctx = await botContext(db, m.bot_id);
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
+      // Arama yetkisi olmayan/ücretsiz modeller için: bu adımın terimiyle gerçek haber/duyuru sonuçları
+      let newsNote = '';
+      if (!m.target_url && terms.length && ai.provider !== 'anthropic') {
+        const q = terms[(step - 1) % terms.length];
+        const news = await newsSearch(/stanbul/i.test(q) ? q : `${q} İstanbul`);
+        for (const n of news) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
+        await logStep(db, m, step, 'news_search', `Haber/duyuru araması: “${q}” → ${news.length} sonuç (son 7 gün)`, null, { query: q, count: news.length });
+        if (news.length) newsNote = news.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}\n   ${n.url}`).join('\n');
+      }
       const prompt = [
         `GÖREV: ${m.title}`, `AMAÇ / AÇIKLAMA: ${m.goal}`,
         m.target_url ? `HEDEF LİNK: ${m.target_url}` : '', m.search_for ? `ARANACAK: ${m.search_for}` : '',
@@ -423,6 +451,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         ctx.text ? `BOT PROFİLİ VE YETENEKLERİ:\n${ctx.text}` : '',
         `Adım ${step} / en fazla ${m.max_steps}. Kalan süre ≈ ${remainingMin} dk.`,
         pageNote ? `HEDEF SAYFANIN GERÇEK İÇERİĞİ (sunucu tarafında çekildi):\n${pageNote}` : '',
+        newsNote ? `GÜNCEL ARAMA SONUÇLARI (sunucu tarafında Google Haberler'den çekildi; başlık + kaynak + tarih + link). Bunlar geçerli kaynaktır — göreve uyan her sonucu, AYNI linkiyle ayrı bulgu olarak yaz; uymayanları atla:\n${newsNote}` : '',
         seenBefore.size ? `DAHA ÖNCEKİ GÜNLERDE RAPORLANMIŞ KAYITLAR (bunları tekrar verme, yalnızca YENİ olanları bul):\n${[...seenBefore].slice(0, 60).join('\n')}` : '',
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
