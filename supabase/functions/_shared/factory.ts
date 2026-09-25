@@ -62,7 +62,33 @@ function wrap(text: string, maxChars: number, maxLines: number) {
   return lines;
 }
 
-export async function renderBanner(o: { w: number; h: number; brand: Record<string, string> | null; brandName: string; badge: string; headline: string; subtitle: string; cta: string; photo?: Uint8Array | null; photoMime?: string }) {
+
+// ── İnşaat amblemleri (100×100 çizgi ikon; renk/kalınlık dışarıdan) ─────────
+const ICONS: Record<string, string> = {
+  vinc: '<path d="M32 94V14M18 94h30M32 14h58M32 14l14-10 14 10M32 26l10-12M32 40l10-12M32 54l10-12M32 68l10-12M32 82l10-12M42 14v80M80 14v30"/><path d="M74 44h12v9H74z"/><path d="M14 14h18v9H14z"/>',
+  baret: '<path d="M12 72h76"/><path d="M20 72c0-34 60-34 60 0"/><path d="M50 36v22M38 40v26M62 40v26"/><path d="M26 80h48"/>',
+  bina: '<path d="M18 94V22h36v72M54 44h28v50M10 94h80"/><path d="M26 32h8v8h-8zM40 32h8v8h-8zM26 48h8v8h-8zM40 48h8v8h-8zM26 64h8v8h-8zM40 64h8v8h-8zM62 54h8v8h-8zM62 70h8v8h-8z"/><path d="M32 94V82h10v12"/>',
+  ev: '<path d="M10 52L50 18l40 34"/><path d="M22 44v48h56V44"/><path d="M42 92V68h16v24"/><path d="M28 54h10v10H28zM62 54h10v10H62z"/><path d="M68 30V16h8v20"/>',
+  manitou: '<path d="M12 74h44V54H40l-6-12H20v12h-8z"/><path d="M48 60l34-30"/><path d="M52 66l34-30"/><path d="M84 26v16h12"/><circle cx="24" cy="80" r="9"/><circle cx="50" cy="80" r="9"/>',
+  alet: '<path d="M22 84l36-36"/><path d="M58 48a14 14 0 1 0 12-22l-8 8-6-2-2-6 8-8a14 14 0 0 0-4 30"/><path d="M34 22l22 22M28 28l12-12 10 10-12 12z"/><path d="M50 44l30 30-6 6-30-30"/>',
+};
+const PILLAR_ICON: Record<string, string> = { manitou: 'manitou', kampanya: 'manitou', villa: 'ev', donusum: 'bina', tadilat: 'alet', santiye: 'vinc', ipucu: 'baret' };
+export function iconFor(badge: string) {
+  const t = badge.toLocaleLowerCase('tr-TR');
+  if (/manitou|kiralık|kiralama|kampanya/.test(t)) return 'manitou';
+  if (/villa|müstakil|ev\b/.test(t)) return 'ev';
+  if (/dönüşüm|kat|bina/.test(t)) return 'bina';
+  if (/tadilat|tamir|cephe|çatı/.test(t)) return 'alet';
+  if (/şantiye|temel|kaba/.test(t)) return 'vinc';
+  return 'baret';
+}
+function icon(name: string, x0: number, y0: number, size: number, color: string, width = 6, opacity = 1) {
+  const k = size / 100;
+  return `<g transform="translate(${x0} ${y0}) scale(${k})" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}">${ICONS[name] ?? ICONS.baret}</g>`;
+}
+void PILLAR_ICON;
+
+export async function renderBanner(o: { w: number; h: number; brand: Record<string, string> | null; brandName: string; badge: string; headline: string; subtitle: string; cta: string; photo?: Uint8Array | null; photoMime?: string; icon?: string }) {
   await ensureRenderer();
   const p = o.brandName === 'Şahin Manitou' ? { bg1: '#1F2933', bg2: '#111827', acc: '#F5B301', txt: '#FFFFFF' } : { bg1: '#115A31', bg2: '#0B3D22', acc: '#F5B301', txt: '#FFFFFF' };
   const { w, h } = o; const wide = w / h > 1.3; const u = Math.min(w, h);
@@ -72,35 +98,40 @@ export async function renderBanner(o: { w: number; h: number; brand: Record<stri
   const sLines = wrap(o.subtitle, Math.floor((w - pad * 2) / (sSize * 0.56)), wide ? 2 : 3);
   const barH = Math.round(u * 0.13);
   const photoH = o.photo ? (wide ? h : Math.round(h * 0.42)) : 0;
-  const photo = o.photo ? `<image href="data:${o.photoMime || 'image/jpeg'};base64,${b64(o.photo)}" x="0" y="0" width="${w}" height="${photoH}" preserveAspectRatio="xMidYMid slice"/><rect x="0" y="0" width="${w}" height="${photoH}" fill="url(#fade)"/>` : '';
+  const photo = o.photo ? `<image href="data:${o.photoMime || 'image/jpeg'};base64,${b64(o.photo)}" x="0" y="0" width="${w}" height="${photoH}" preserveAspectRatio="xMidYMid slice"/><rect x="0" y="0" width="${w}" height="${photoH}" fill="url(#fade)"/><rect x="0" y="0" width="${w}" height="${Math.round(pad * 2 + logo)}" fill="url(#top)"/>` : '';
   const tall = h / w > 1.5;
   const badgeY = o.photo && !wide ? photoH - Math.round(sSize * 2.2) : pad + logo + Math.round(u * 0.07) + (tall ? Math.round(h * 0.16) : 0);
   const textTop = badgeY + Math.round(sSize * 1.7) + Math.round(hSize * 1.05);
   const phone = o.brand?.phone || '0531 436 29 04'; const site = o.brand?.website || 'sahin-manitou-kiralama.vercel.app';
+  const ctaText = o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').replace(/^WhatsApp$/i, 'WhatsApp’tan yazın').trim() || 'Hemen arayın';
   const ctaSize = Math.round(sSize * 1.05); const phoneW = (phone.length + 2) * ctaSize * 0.64;
-  const ctaMax = Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaSize * 0.54));
+  const ctaMax = Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaSize * 0.56));
   // CTA sığmıyorsa önce yazıyı küçült (en fazla %25), yine sığmazsa kelime sınırından kısalt
-  const ctaFont = o.cta.length > ctaMax ? Math.max(Math.round(ctaSize * 0.75), Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (o.cta.length * 0.54))) : ctaSize;
-  const ctaMax2 = Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaFont * 0.54));
-  const cta = o.cta.length > ctaMax2 ? o.cta.slice(0, Math.max(0, ctaMax2 - 1)).replace(/\s+\S*$/, '') + '…' : o.cta;
+  const ctaFont = ctaText.length > ctaMax ? Math.max(Math.round(ctaSize * 0.75), Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaText.length * 0.56))) : ctaSize;
+  const ctaMax2 = Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaFont * 0.56));
+  const cta = ctaText.length > ctaMax2 ? ctaText.slice(0, Math.max(0, ctaMax2 - 1)).replace(/\s+\S*$/, '') + '…' : ctaText;
   const longBrand = o.brandName === 'İkisi';
-  const chips = ['Ücretsiz keşif', 'Hızlı teklif', 'Güvenilir ekip'];
+  const chips: Array<[string, string]> = [['baret', 'Ücretsiz keşif'], ['vinc', 'Hızlı teklif'], ['bina', 'Güvenli iş']];
+  const ic = o.icon ?? iconFor(o.badge);
   const chipsY = h - barH - Math.round(u * 0.1);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
 <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${p.bg1}"/><stop offset="1" stop-color="${p.bg2}"/></linearGradient>
+<linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.bg2}" stop-opacity="0.85"/><stop offset="1" stop-color="${p.bg2}" stop-opacity="0"/></linearGradient>
 <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0.35" stop-color="${p.bg2}" stop-opacity="${wide ? 0.55 : 0}"/><stop offset="1" stop-color="${p.bg2}" stop-opacity="0.95"/></linearGradient></defs>
 <rect width="${w}" height="${h}" fill="url(#bg)"/>
 <circle cx="${w * 0.95}" cy="${h * 0.05}" r="${u * 0.35}" fill="${p.acc}" opacity="0.09"/><circle cx="${w * 0.03}" cy="${h * 0.97}" r="${u * 0.28}" fill="#3DAA5C" opacity="0.10"/>
 ${photo}
 <rect x="${pad}" y="${pad}" width="${logo}" height="${logo}" rx="${Math.round(logo * 0.22)}" fill="${p.acc}"/>
-<text x="${pad + logo / 2}" y="${pad + logo * 0.72}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(logo * 0.62)}" fill="${p.bg2}">${o.brandName === 'Şahin Manitou' ? 'Ş' : 'E'}</text>
+${icon(o.brandName === 'Şahin Manitou' ? 'manitou' : 'baret', pad + logo * 0.12, pad + logo * 0.1, logo * 0.76, p.bg2, 9)}
 <text x="${pad + logo + u * 0.025}" y="${pad + logo * (longBrand && !wide ? 0.48 : 0.66)}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(u * 0.036)}" fill="${p.txt}">${x(longBrand ? 'Embay Yapı · Şahin Manitou' : o.brandName)}</text>
 ${longBrand && !wide ? `<text x="${pad + logo + u * 0.025}" y="${pad + logo * 0.9}" font-family="DejaVu Sans" font-size="${Math.round(u * 0.024)}" fill="#CFE8D8">${x(site)}</text>` : `<text x="${w - pad}" y="${pad + logo * 0.66}" text-anchor="end" font-family="DejaVu Sans" font-size="${Math.round(u * 0.024)}" fill="#CFE8D8">${x(site)}</text>`}
-<rect x="${pad}" y="${badgeY}" width="${Math.round(o.badge.length * sSize * 0.74 + sSize * 1.6)}" height="${Math.round(sSize * 1.7)}" rx="${Math.round(sSize * 0.85)}" fill="${p.acc}"/>
-<text x="${pad + sSize * 0.8}" y="${badgeY + sSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${p.bg2}">${x(o.badge)}</text>
+${wide ? icon(ic, w - pad - u * 0.4, h - barH - u * 0.46, u * 0.4, p.acc, 4, 0.22) : o.photo ? '' : icon(ic, w - pad - u * 0.3, chipsY - u * 0.34, u * 0.3, p.acc, 4, 0.25)}
+<rect x="${pad}" y="${badgeY}" width="${Math.round(o.badge.length * sSize * 0.78 + sSize * 2.8)}" height="${Math.round(sSize * 1.7)}" rx="${Math.round(sSize * 0.85)}" fill="${p.acc}"/>
+${icon(ic, pad + sSize * 0.55, badgeY + sSize * 0.25, sSize * 1.2, p.bg2, 9)}
+<text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${p.bg2}">${x(o.badge)}</text>
 ${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.1}" font-family="DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${p.txt}">${x(l)}</text>`).join('')}
 ${sLines.map((l, i) => `<text x="${pad}" y="${textTop + (hLines.length - 1) * hSize * 1.1 + sSize * 2.1 + i * sSize * 1.35}" font-family="DejaVu Sans" font-size="${sSize}" fill="#E5F3EA">${x(l)}</text>`).join('')}
-${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); return `<rect x="${pad + i * (cw + u * 0.02)}" y="${chipsY}" width="${cw}" height="${Math.round(sSize * 1.9)}" rx="${Math.round(sSize * 0.95)}" fill="#FFFFFF" opacity="0.12"/><text x="${pad + i * (cw + u * 0.02) + cw / 2}" y="${chipsY + sSize * 1.28}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.85)}" fill="#FFFFFF">✓ ${x(c)}</text>`; }).join('')}
+${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); return `<rect x="${pad + i * (cw + u * 0.02)}" y="${chipsY}" width="${cw}" height="${Math.round(sSize * 1.9)}" rx="${Math.round(sSize * 0.95)}" fill="#FFFFFF" opacity="0.12"/>${icon(c[0], pad + i * (cw + u * 0.02) + sSize * 0.5, chipsY + sSize * 0.42, sSize * 1.05, p.acc, 9)}<text x="${pad + i * (cw + u * 0.02) + sSize * 1.85}" y="${chipsY + sSize * 1.24}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.76)}" fill="#FFFFFF">${x(c[1])}</text>`; }).join('')}
 <rect x="0" y="${h - barH}" width="${w}" height="${barH}" fill="${p.acc}"/>
 <text x="${pad}" y="${h - barH / 2 + ctaSize * 0.36}" font-family="DejaVu Sans" font-weight="700" font-size="${ctaFont}" fill="${p.bg2}">${x(cta)}</text>
 <text x="${w - pad}" y="${h - barH / 2 + ctaSize * 0.36}" text-anchor="end" font-family="DejaVu Sans" font-weight="700" font-size="${ctaSize}" fill="${p.bg2}">☎ ${x(phone)}</text>
