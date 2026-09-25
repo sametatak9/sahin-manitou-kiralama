@@ -59,7 +59,7 @@ function wrap(text: string, maxChars: number, maxLines: number) {
     if (lines.length >= maxLines) break;
   }
   if (cur && lines.length < maxLines) lines.push(cur);
-  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '…';
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) { const cut = lines[maxLines - 1].replace(/\s*\S*$/, ''); lines[maxLines - 1] = (cut || lines[maxLines - 1]) + '…'; }
   return lines;
 }
 
@@ -107,27 +107,35 @@ function renderEmbay(o: BannerOpts) {
   const { w, h } = o; const wide = w / h > 1.3; const tall = h / w > 1.5; const u = Math.min(w, h);
   const pad = Math.round(u * 0.07);
   const barH = Math.round(u * (wide ? 0.15 : 0.14));
-  const phone = o.brand?.phone || '0531 436 29 04'; const phone2 = o.brand?.phone2 || '0536 784 62 22'; const site = o.brand?.website || 'www.embayyapi.com.tr';
+  const phone = o.brand?.phone || '0531 436 29 04'; const site = o.brand?.website || 'www.embayyapi.com.tr';
   const ic = o.icon ?? iconFor(o.badge);
   const photoUri = o.photo ? `data:${o.photoMime || 'image/jpeg'};base64,${b64(o.photo)}` : null;
-  const hSize = Math.round(u * (wide ? 0.075 : 0.07)); const sSize = Math.round(u * (wide ? 0.034 : 0.033));
   const panelW = wide ? Math.round(w * 0.5) : w;
   const textW = panelW - pad * 2;
-  const hLines = wrap(o.headline.toLocaleUpperCase('tr-TR'), Math.floor(textW / (hSize * 0.68)), 3);
-  const sLines = wrap(o.subtitle, Math.floor(textW / (sSize * 0.56)), 2);
+  const clean = (l: string) => l.replace(/^[\s·|,-]+|[\s·|,-]+$/g, '');
   const cta = o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').trim();
-  const badgeH = Math.round(sSize * 1.7); const badgeW = Math.round(o.badge.length * sSize * 0.78 + sSize * 2.8);
   const chips: Array<[string, string]> = [['bina', 'Betonarme'], ['vinc', 'Çelik yapı'], ['ev', 'Anahtar teslim']];
-  const chipH = Math.round(sSize * 1.8); const showChips = tall;
-  // Panel yüksekliği içerikten hesaplanır; fotoğraf kalan alanı kaplar
-  const contentH = Math.round(pad * 0.8) + badgeH + Math.round(hSize * 1.15) + (hLines.length - 1) * hSize * 1.08 + sSize * 1.9 + sLines.length * sSize * 1.35 + (cta ? sSize * 1.4 : 0) + (showChips ? chipH + pad * 0.6 : 0) + pad * 0.7;
+  const showChips = tall;
+  // Yazı sığmazsa (fotoğraf en az %38 kalacak şekilde) başlık ve alt yazı %8'lik adımlarla küçültülür → taşma/üst üste binme olmaz
+  let scale = 1; let hSize = 0, sSize = 0, badgeH = 0, chipH = 0, hLines: string[] = [], sLines: string[] = [], contentH = 0;
+  for (let i = 0; i < 6; i++) {
+    hSize = Math.round(u * (wide ? 0.06 : 0.07) * scale); sSize = Math.round(u * (wide ? 0.032 : 0.033) * Math.max(0.85, scale));
+    hLines = wrap(o.headline.toLocaleUpperCase('tr-TR'), Math.floor(textW / (hSize * 0.68)), 3).map(clean);
+    sLines = wrap(o.subtitle, Math.floor(textW / (sSize * 0.56)), 2);
+    badgeH = Math.round(sSize * 1.7); chipH = Math.round(sSize * 1.8);
+    contentH = Math.round(pad * 0.8 + u * 0.06) + badgeH + Math.round(hSize * 1.25) + (hLines.length - 1) * hSize * 1.2 + sSize * 2.1 + sLines.length * sSize * 1.45 + (cta ? sSize * 1.6 : 0) + (showChips ? chipH + pad * 0.6 : 0) + pad * 0.8;
+    if (wide || h - barH - contentH >= h * 0.38) break;
+    scale *= 0.92;
+  }
+  const badgeW = Math.round(o.badge.length * sSize * 0.78 + sSize * 2.8);
   const phH = wide ? h - barH : Math.round(Math.min(h * 0.62, Math.max(h * 0.38, h - barH - contentH)));
-  const ph = wide ? { x: panelW, y: 0, w: w - panelW, h: phH } : { x: 0, y: 0, w, h: phH };
+  // Fotoğraf çapraz kesimin altına kadar uzar; lacivert panel çaprazdan başlar
+  const ph = wide ? { x: panelW - Math.round(u * 0.16), y: 0, w: w - panelW + Math.round(u * 0.16), h: phH } : { x: 0, y: 0, w, h: phH + Math.round(u * 0.07) };
   const panel = wide ? { x: 0, y: 0, w: panelW, h: h - barH } : { x: 0, y: phH, w, h: h - barH - phH };
-  const badgeY = wide ? Math.round(pad + u * 0.2) : panel.y + Math.round(pad * 0.8);
-  const textTop = badgeY + badgeH + Math.round(hSize * 1.15);
-  const subTop = textTop + (hLines.length - 1) * hSize * 1.08 + sSize * 1.9;
-  const ctaY = subTop + sLines.length * sSize * 1.35 + sSize * 0.35;
+  const badgeY = wide ? Math.round(pad + u * 0.2) : panel.y + Math.round(pad * 0.8 + u * 0.06);
+  const textTop = badgeY + badgeH + Math.round(hSize * 1.25);
+  const subTop = textTop + (hLines.length - 1) * hSize * 1.2 + sSize * 2.1;
+  const ctaY = subTop + sLines.length * sSize * 1.45 + sSize * 0.35;
   const chipY = ctaY + sSize * 1.2;
   const cloud = (cx: number, cy: number, r: number, op: number) => `<g fill="#FFFFFF" opacity="${op}"><circle cx="${cx}" cy="${cy}" r="${r}"/><circle cx="${cx + r * 0.9}" cy="${cy + r * 0.2}" r="${r * 0.8}"/><circle cx="${cx - r * 0.9}" cy="${cy + r * 0.25}" r="${r * 0.7}"/><rect x="${cx - r * 1.6}" y="${cy + r * 0.2}" width="${r * 3.3}" height="${r * 0.8}" rx="${r * 0.4}"/></g>`;
   const sky = `<rect x="${ph.x}" y="${ph.y}" width="${ph.w}" height="${ph.h}" fill="url(#sky)"/>${cloud(ph.x + ph.w * 0.62, ph.y + ph.h * 0.2, u * 0.06, 0.85)}${cloud(ph.x + ph.w * 0.85, ph.y + ph.h * 0.45, u * 0.04, 0.7)}${icon(ic, ph.x + ph.w / 2 - u * 0.16, ph.y + ph.h - u * 0.36, u * 0.32, EMBAY.navy, 3.5, 0.5)}`;
@@ -139,20 +147,23 @@ function renderEmbay(o: BannerOpts) {
 <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${EMBAY.navy2}" stop-opacity="0.45"/><stop offset="0.28" stop-color="${EMBAY.navy2}" stop-opacity="0"/></linearGradient></defs>
 <rect width="${w}" height="${h}" fill="url(#pan)"/>
 ${photo}
-${wide ? `<rect x="${ph.x - 4}" y="0" width="5" height="${ph.h}" fill="${EMBAY.sky}"/>` : `<rect x="0" y="${ph.h - 5}" width="${w}" height="5" fill="${EMBAY.sky}"/>`}
+${wide
+  ? `<polygon points="0,0 ${panelW + u * 0.02},0 ${panelW - u * 0.08},${h} 0,${h}" fill="url(#pan)"/><line x1="${panelW + u * 0.02}" y1="0" x2="${panelW - u * 0.08}" y2="${h - barH}" stroke="${EMBAY.sky}" stroke-width="5"/>`
+  : `<polygon points="0,${phH + u * 0.06} ${w},${phH - u * 0.05} ${w},${h} 0,${h}" fill="url(#pan)"/><line x1="0" y1="${phH + u * 0.06}" x2="${w}" y2="${phH - u * 0.05}" stroke="${EMBAY.sky}" stroke-width="5"/>`}
+<g stroke="#FFFFFF" stroke-width="1" opacity="0.06">${Array.from({ length: Math.ceil(w / (u * 0.05)) }, (_, i) => `<line x1="${i * u * 0.05}" y1="${wide ? 0 : phH + u * 0.06}" x2="${i * u * 0.05}" y2="${h - barH}"/>`).join('')}${Array.from({ length: Math.ceil(h / (u * 0.05)) }, (_, i) => (wide || i * u * 0.05 > phH + u * 0.06) && i * u * 0.05 < h - barH ? `<line x1="0" y1="${i * u * 0.05}" x2="${wide ? panelW - u * 0.08 : w}" y2="${i * u * 0.05}"/>` : '').join('')}</g>
 ${icon(ic, panel.x + panel.w - pad - u * 0.22, panel.y + (wide ? panel.h - u * 0.3 : pad * 0.6), u * 0.22, EMBAY.sky, 4, 0.14)}
 ${embayLogo(pad + logoR, pad + logoR, logoR, EMBAY.white)}
 <rect x="${pad}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${EMBAY.sky}"/>
 ${icon(ic, pad + sSize * 0.55, badgeY + sSize * 0.25, sSize * 1.2, EMBAY.navy, 9)}
 <text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${EMBAY.navy}">${x(o.badge)}</text>
-${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.08}" font-family="DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${EMBAY.white}">${x(l)}</text>`).join('')}
-${sLines.map((l, i) => `<text x="${pad}" y="${subTop + i * sSize * 1.35}" font-family="DejaVu Sans" font-size="${sSize}" fill="#DCE9FB">${x(l)}</text>`).join('')}
+${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${EMBAY.white}">${x(l)}</text>`).join('')}
+${sLines.map((l, i) => `<text x="${pad}" y="${subTop + i * sSize * 1.45}" font-family="DejaVu Sans" font-size="${sSize}" fill="#DCE9FB">${x(l)}</text>`).join('')}
 ${cta ? `<text x="${pad}" y="${ctaY + sSize * 0.9}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.95)}" fill="${EMBAY.sky}">→ ${x(cta)}</text>` : ''}
 ${showChips ? chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); const cx0 = pad + i * (cw + u * 0.02); return `<rect x="${cx0}" y="${chipY + pad * 0.3}" width="${cw}" height="${chipH}" rx="${chipH / 2}" fill="none" stroke="${EMBAY.sky}" stroke-width="2" opacity="0.8"/>${icon(c[0], cx0 + sSize * 0.5, chipY + pad * 0.3 + sSize * 0.35, sSize * 1.1, EMBAY.sky, 8)}<text x="${cx0 + sSize * 1.85}" y="${chipY + pad * 0.3 + chipH * 0.66}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.7)}" fill="${EMBAY.white}">${x(c[1])}</text>`; }).join('') : ''}
 <rect x="0" y="${h - barH}" width="${w}" height="${barH}" fill="${EMBAY.navy2}"/>
 <rect x="0" y="${h - barH}" width="${w}" height="3" fill="${EMBAY.sky}" opacity="0.7"/>
-<text x="${w / 2}" y="${h - barH * 0.5}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 1.0)}" fill="${EMBAY.white}">☎ ${x(phone2)}     ☎ ${x(phone)}</text>
-<text x="${w / 2}" y="${h - barH * 0.2}" text-anchor="middle" font-family="DejaVu Sans" font-size="${Math.round(sSize * 0.72)}" fill="#C9DBF5" letter-spacing="2">${x(site)}</text>
+<text x="${pad}" y="${h - barH / 2 + sSize * 0.42}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 1.15)}" fill="${EMBAY.white}">☎ ${x(phone)}</text>
+<text x="${w - pad}" y="${h - barH / 2 + sSize * 0.3}" text-anchor="end" font-family="DejaVu Sans" font-size="${Math.round(sSize * 0.72)}" fill="#C9DBF5" letter-spacing="1.5">${x(site)}</text>
 </svg>`;
 }
 
