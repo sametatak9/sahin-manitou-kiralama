@@ -91,13 +91,13 @@ export async function syncDriveFolder(db: Db, src: { id: string; folder_id: stri
     const label = `${f.path ? f.path + '/' : ''}${f.title}`;
     try {
       const pillar = guessPillar(label);
-      const base = { title: cleanTitle(f.title), original_url: `https://drive.google.com/file/d/${f.id}/view`, status: 'pool', source: 'drive', pillar,
-        notes: `Drive: ${title || 'klasör'}${f.path ? ' / ' + f.path : ''}`, created_by: src.created_by, edit: { drive_file_id: f.id, drive_source_id: src.id } };
+      const base = { title: cleanTitle(f.title), status: 'pool', source: 'drive', pillar,
+        notes: `Drive: ${title || 'klasör'}${f.path ? ' / ' + f.path : ''}`, created_by: src.created_by, edit: { drive_file_id: f.id, drive_source_id: src.id, drive_url: `https://drive.google.com/file/d/${f.id}/view` } };
       if (kind === 'image') {
         const th = await thumbnail(f.id, 2000);
         if (!th) throw new Error('önizleme alınamadı');
         const url = await upload(db, `drive/${f.id}.jpg`, th.bytes, th.mime === 'image/png' ? 'image/png' : 'image/jpeg');
-        const { error } = await db.from('media_library').insert({ ...base, kind: 'image', url, storage_path: `drive/${f.id}.jpg`, mime: th.mime, size_bytes: th.bytes.length, cover_url: url });
+        const { error } = await db.from('media_library').insert({ ...base, kind: 'image', url, original_url: url, storage_path: `drive/${f.id}.jpg`, mime: th.mime, size_bytes: th.bytes.length, cover_url: url });
         if (error) throw new Error(error.message);
       } else {
         const ext = f.title.split('.').pop()!.toLowerCase();
@@ -113,7 +113,7 @@ export async function syncDriveFolder(db: Db, src: { id: string; folder_id: stri
         const url = await upload(db, store, bytes, mime);
         const th = await thumbnail(f.id, 1080).catch(() => null);
         const cover = th ? await upload(db, `drive/${f.id}-cover.jpg`, th.bytes, 'image/jpeg').catch(() => null) : null;
-        const { error } = await db.from('media_library').insert({ ...base, kind: 'video', url, storage_path: store, mime, size_bytes: bytes.length, cover_url: cover, targets: ['instagram', 'tiktok', 'youtube', 'facebook'] });
+        const { error } = await db.from('media_library').insert({ ...base, kind: 'video', url, original_url: url, storage_path: store, mime, size_bytes: bytes.length, cover_url: cover, targets: ['instagram', 'tiktok', 'youtube', 'facebook'] });
         if (error) throw new Error(error.message);
       }
       res.imported++;
