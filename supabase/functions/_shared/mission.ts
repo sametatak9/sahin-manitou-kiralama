@@ -79,6 +79,13 @@ const STEP_INTERVAL_MS = 55_000;
 export const stepIntervalMs = (m: Pick<MissionRow, 'duration_minutes' | 'max_steps'>) =>
   Math.max(STEP_INTERVAL_MS, Math.floor((m.duration_minutes * 60_000) / Math.max(1, m.max_steps)) - 5_000);
 
+/** Yanıt yarıda kesildiyse (uzun JSON) tamamlanmış bulgu nesnelerini tek tek kurtarır. */
+export function salvageFindings(text: string): { new_findings: Record<string, unknown>[] } | null {
+  const out: Record<string, unknown>[] = [];
+  for (const mm of text.matchAll(/\{[^{}]*"url"\s*:\s*"[^"]+"[^{}]*\}/g)) { try { out.push(JSON.parse(mm[0])); } catch { /* yarım nesne */ } }
+  return out.length ? { new_findings: out } : null;
+}
+
 // ── Haber/duyuru araması (herkese açık Google Haberler RSS) ───────────────────
 // Ücretsiz AI modellerinde internet araması yok: her adımda bir arama terimi için son 7 günün haber/duyuru
 // başlıkları (gerçek link + yayın tarihi + kaynak) çekilir ve AI'a yalnızca bunlardan seçmesi söylenir.
@@ -245,7 +252,7 @@ async function geminiOnce(key: string, model: string, system: string, prompt: st
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: withSearch ? system : `${system}\n\nNOT: Bu adımda internet araması kullanılamıyor. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen bulgu yazma.` }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }], ...(withSearch ? { tools: [{ google_search: {} }] } : {}), generationConfig: { maxOutputTokens: 4000 } }),
+      contents: [{ role: 'user', parts: [{ text: prompt }] }], ...(withSearch ? { tools: [{ google_search: {} }] } : {}), generationConfig: { maxOutputTokens: 8000 } }),
   });
   const data = await res.json().catch(() => ({}));
   return { res, data, detail: JSON.stringify(data).slice(0, 300) };
@@ -485,7 +492,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         newsNote ? 'BU ADIMIN İŞİ: İnternette arama yapmana GEREK YOK — arama sunucu tarafında yapıldı ve sonuçları aşağıda. Listedeki HER sonucu tek tek oku; başlığı görevin AMACINA uyan somut kayıtları (proje, ihale, ilan, talep, firma duyurusu), o sonucun linkini AYNEN kullanarak ayrı bulgu yap. Başlık + kaynak + tarih geçerli kanıttır (evidence = başlık). "veri yok" deme: listede uygun kayıt varsa mutlaka yaz; hiçbiri uymuyorsa boş liste döndür.' :
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
-        'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
+        'Adım başına EN FAZLA 8 bulgu ver; detail en fazla 2 kısa cümle, evidence en fazla 1 cümle olsun (yanıt kesilmesin). Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
         newsNote ? `GÜNCEL ARAMA SONUÇLARI (son 7 gün; başlık — kaynak (tarih) + link):\n${newsNote}` : '',
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)","relevance":8,"fit":"görevle neden ilgili (tek cümle)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
@@ -497,7 +504,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       await db.from('bot_missions').update({ cost_usd: m.cost_usd, web_searches: m.web_searches }).eq('id', m.id);
       for (const s of r.sources) if (!sources.some((x) => canonical(x.url) === canonical(s.url))) sources.push(s);
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
-      const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text)) as
+      const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text) ?? salvageFindings(r.text)) as
         { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string; relevance?: number | string; fit?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
       let added = 0, dropped = 0, offTopic = 0;
       const anchors = anchorWords(m);
