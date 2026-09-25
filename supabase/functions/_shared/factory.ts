@@ -130,8 +130,16 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
   const brand = await defaultBrand(db);
   const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
   const { data: admin } = await db.from('team_members').select('user_id').eq('role', 'admin').order('created_at').limit(1).maybeSingle();
-  const { data: videos } = await db.from('media_library').select('id,url,cover_url,title').eq('kind', 'video').is('archived_at', null).order('queued_at', { ascending: true, nullsFirst: true }).limit(20);
-  const { data: photos } = await db.from('media_library').select('id,url,mime').eq('kind', 'image').is('archived_at', null).limit(30);
+  // Gerçek medya: en az kullanılan video/fotoğraf önce (Drive'dan gelenler dahil) → her gün farklı kareler
+  const { data: videos } = await db.from('media_library').select('id,url,cover_url,title,use_count').eq('kind', 'video').is('archived_at', null)
+    .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(40);
+  const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').is('archived_at', null)
+    .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(60);
+  let pIdx = 0;
+  const markUsed = async (m: { id: string; use_count?: number | null }) => {
+    m.use_count = (m.use_count ?? 0) + 1;
+    await db.from('media_library').update({ use_count: m.use_count, last_used_at: new Date().toISOString() }).eq('id', m.id);
+  };
   const { data: existing } = await db.rpc('content_quota_today');
   const have = new Map(((existing || []) as Array<{ platform: string; videos: number; banners: number }>).map((r) => [r.platform, r]));
   const di = dayIndex(day); let created = 0; const errors: string[] = []; let vIdx = 0;
@@ -160,10 +168,11 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
     for (const [i, it] of plan.entries()) {
       try {
         const slot = q.slot_times[Math.min(i + (3 - plan.length), q.slot_times.length - 1)] ?? '12:00';
-        let media: string[] = []; let video_url: string | null = null; let note = '';
+        let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null;
         if (it.format === 'banner') {
-          const ph = photos?.length ? photos[(di + i + created) % photos.length] : null;
+          const ph = photos?.length ? photos[pIdx++ % photos.length] : null;
           const photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null;
+          if (ph) await markUsed(ph);
           const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: it.brand, badge: it.badge, headline: it.headline, subtitle: it.subtitle, cta: it.cta, photo: photo && photo.length < 4_000_000 ? photo : null, photoMime: ph?.mime });
           const path = `factory/${day}/${q.platform}-${Date.now()}-${i}.png`;
           const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/png', upsert: true });
@@ -174,14 +183,14 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
             template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null } });
         } else {
           const v = videos?.[vIdx++ % Math.max(1, videos?.length ?? 0)];
-          if (v) { video_url = v.url; media = [v.url]; }
+          if (v) { video_url = v.url; media = [v.url]; reelCover = v.cover_url ?? null; await markUsed(v); }
           else note = 'VİDEO GEREKLİ: Video Havuzu’na şantiye/manitou videosu yükleyin; aşağıdaki senaryoya göre çekin.';
         }
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
         const { error } = await db.from('social_drafts').insert({
           brand: it.brand, title: `${q.platform.toUpperCase()} · ${it.format === 'reel' ? 'Kısa video' : 'Banner'} · ${it.headline}`.slice(0, 200), body,
           caption: it.caption, headline: it.headline, hashtags: it.hashtags, cta: it.cta, format: it.format, networks: [q.platform], platform_targets: [q.platform], primary_platform: q.platform,
-          media_urls: media, video_url, design_url: it.format === 'banner' ? media[0] : null, design_brief: it.video_script ? `Çekim senaryosu: ${it.video_script}` : null,
+          media_urls: media, video_url, design_url: it.format === 'banner' ? media[0] : reelCover, design_brief: it.video_script ? `Çekim senaryosu: ${it.video_script}` : null,
           image_brief: note || null, scheduled_at: slotIso(day, slot), status: 'onay_bekliyor', workflow_status: 'pending_approval', archive_status: 'active',
           bot_id: bot?.id ?? null, content_pillar: it.badge, campaign_name: `Günlük içerik ${day}`, created_by: admin?.user_id ?? null,
           kvkk_basis: 'İçerik Fabrikası taslağı; yayın öncesi insan onayı zorunlu.',
