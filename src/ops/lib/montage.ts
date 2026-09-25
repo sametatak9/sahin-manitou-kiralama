@@ -4,15 +4,16 @@
 import { recorderFormat } from './media';
 
 export interface MontageClip { url: string; kind: 'video' | 'image'; label: string; start?: number; seconds: number }
-export interface MontageOptions { brand: 'Embay Yapı' | 'Şahin Manitou'; title: string; phone: string; website: string; cta: string; emblem: EmblemName }
+export interface MontageOptions { brand: 'Embay Yapı' | 'Şahin Manitou'; title: string; phone: string; website: string; cta: string; emblem: EmblemName; hook?: string }
 export type EmblemName = 'vinc' | 'baret' | 'bina' | 'ev' | 'manitou' | 'alet';
 
-export const MONTAGE_TEMPLATES: Array<{ key: string; name: string; brand: MontageOptions['brand']; emblem: EmblemName; title: string; cta: string; labels: string[] }> = [
-  { key: 'asamalar', name: 'İnşaat aşamaları', brand: 'Embay Yapı', emblem: 'bina', title: 'Temelden anahtar teslime', cta: 'Ücretsiz keşif için arayın', labels: ['Temel', 'Kaba inşaat', 'Çatı', 'Dış cephe', 'Anahtar teslim'] },
-  { key: 'villa', name: 'Villa / müstakil ev', brand: 'Embay Yapı', emblem: 'ev', title: 'Çatalca’da villa inşaatı', cta: 'Projenizi konuşalım', labels: ['Proje & ruhsat', 'Temel', 'Karkas', 'İnce işler', 'Teslim'] },
-  { key: 'manitou', name: 'Manitou iş başında', brand: 'Şahin Manitou', emblem: 'manitou', title: 'Operatörlü Manitou kiralama', cta: 'Günlük / aylık kiralama', labels: ['Şantiyeye kurulum', 'Yükü alma', 'Yüksekte taşıma', 'Yerine bırakma'] },
-  { key: 'tadilat', name: 'Tadilat · çatı · cephe', brand: 'Embay Yapı', emblem: 'alet', title: 'Tadilat ve dış cephe', cta: 'Ücretsiz keşif', labels: ['Önce', 'Söküm & hazırlık', 'Uygulama', 'Sonra'] },
-  { key: 'santiye', name: 'Şantiyeden kareler', brand: 'Embay Yapı', emblem: 'vinc', title: 'Şantiyeden gerçek iş', cta: 'Hemen arayın', labels: ['Şantiye', 'Ekibimiz', 'Makinelerimiz', 'İşimiz'] },
+// hook: ilk 1.8 sn ekranı kaplayan merak sorusu (Shorts/Reels'te izleyiciyi tutar). Uydurma rakam/iddia yok.
+export const MONTAGE_TEMPLATES: Array<{ key: string; name: string; brand: MontageOptions['brand']; emblem: EmblemName; title: string; cta: string; labels: string[]; hook: string }> = [
+  { key: 'asamalar', name: 'İnşaat aşamaları', brand: 'Embay Yapı', emblem: 'bina', title: 'Temelden anahtar teslime', cta: 'Ücretsiz keşif için arayın', labels: ['Temel', 'Kaba inşaat', 'Çatı', 'Dış cephe', 'Anahtar teslim'], hook: 'Bu ev nasıl yükseldi? Sonuna kadar izleyin' },
+  { key: 'villa', name: 'Villa / müstakil ev', brand: 'Embay Yapı', emblem: 'ev', title: 'Çatalca’da villa inşaatı', cta: 'Projenizi konuşalım', labels: ['Proje & ruhsat', 'Temel', 'Karkas', 'İnce işler', 'Teslim'], hook: 'Hayalinizdeki villa buradan başlıyor' },
+  { key: 'manitou', name: 'Manitou iş başında', brand: 'Embay Yapı', emblem: 'manitou', title: 'Operatörlü Manitou kiralama', cta: 'Günlük / aylık kiralama', labels: ['Şantiyeye kurulum', 'Yükü alma', 'Yüksekte taşıma', 'Yerine bırakma'], hook: 'Bu yük yukarı nasıl çıkıyor?' },
+  { key: 'tadilat', name: 'Tadilat · çatı · cephe', brand: 'Embay Yapı', emblem: 'alet', title: 'Tadilat ve dış cephe', cta: 'Ücretsiz keşif', labels: ['Önce', 'Söküm & hazırlık', 'Uygulama', 'Sonra'], hook: 'Önce ve sonra: farkı görün' },
+  { key: 'santiye', name: 'Şantiyeden kareler', brand: 'Embay Yapı', emblem: 'vinc', title: 'Şantiyeden gerçek iş', cta: 'Hemen arayın', labels: ['Şantiye', 'Ekibimiz', 'Makinelerimiz', 'İşimiz'], hook: 'Şantiyede bir günümüz' },
 ];
 
 // Banner'lardaki amblemlerin aynısı (100×100 çizgi ikon; SVG path)
@@ -99,6 +100,18 @@ export async function renderMontage(clips: MontageClip[], o: MontageOptions, onP
     g.fillStyle = pal.ink; g.font = 'bold 50px system-ui, sans-serif'; g.fillText(o.cta, 60, H - 150);
     g.font = 'bold 76px system-ui, sans-serif'; g.fillText(`☎ ${o.phone}`, 60, H - 62);
   };
+  // Açılış merak kartı: yarı saydam lacivert zemin, büyük beyaz soru, gökyüzü mavisi çizgi; 1.4 sn'den sonra söner
+  const hookCard = (text: string, t: number) => {
+    const a = t < 1.4 ? 1 : Math.max(0, 1 - (t - 1.4) / 0.4);
+    g.save(); g.globalAlpha = a;
+    g.fillStyle = 'rgba(27,31,82,0.78)'; g.fillRect(0, 0, W, H);
+    g.textAlign = 'center'; g.fillStyle = '#FFFFFF'; g.font = 'bold 92px system-ui, sans-serif';
+    const lines = wrapLines(g, text.toLocaleUpperCase('tr-TR'), W - 180).slice(0, 4);
+    const top = H / 2 - (lines.length * 110) / 2 + 60;
+    lines.forEach((l, k) => g.fillText(l, W / 2, top + k * 110));
+    g.fillStyle = pal.acc; roundRect(g, W / 2 - 90, top + lines.length * 110 - 40, 180, 12, 6); g.fill();
+    g.restore(); g.textAlign = 'left';
+  };
   const endCard = (t: number) => {
     g.fillStyle = pal.bg; g.fillRect(0, 0, W, H);
     g.globalAlpha = 0.12; drawEmblem(g, o.emblem, 140, 420, 800, pal.acc, 5); g.globalAlpha = 1;
@@ -131,6 +144,7 @@ export async function renderMontage(clips: MontageClip[], o: MontageOptions, onP
           // sahne geçişi: ilk 0.3 sn karartmadan açılış
           if (t < 0.3) { g.fillStyle = `rgba(0,0,0,${1 - t / 0.3})`; g.fillRect(0, 0, W, H); }
           overlay(c.label, i + 1, t, i);
+          if (i === 0 && o.hook && t < 1.8) hookCard(o.hook, t);
           if (!coverBlob && i === 0 && t > 0.8) canvas.toBlob((b) => { if (b && !coverBlob) coverBlob = b; }, 'image/jpeg', 0.88);
           onProgress?.(Math.min(0.99, (elapsed + t) / total), `Sahne ${i + 1}/${clips.length}: ${c.label}`);
           if (t >= c.seconds || (m.el instanceof HTMLVideoElement && m.el.ended)) resolve(); else requestAnimationFrame(frame);

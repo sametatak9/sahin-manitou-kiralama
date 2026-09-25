@@ -41,22 +41,45 @@ export function MontageStudio({ onClose, onDone }: { onClose: () => void; onDone
   const move = (i: number, d: number) => setScenes((cur) => { const n = [...cur]; const j = i + d; if (j < 0 || j >= n.length) return cur; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const patch = (i: number, p: Partial<Scene>) => setScenes((cur) => cur.map((s, k) => (k === i ? { ...s, ...p } : s)));
 
+  // Tek montaj üret + havuza kaydet (elle seçim ve otomatik Shorts ortak kullanır)
+  const produce = async (t: typeof tpl, ttl: string, ctaText: string, list: Scene[], note = '') => {
+    const clips: MontageClip[] = list.map((s) => ({ url: s.url, kind: s.kind, label: s.label.trim() || 'Sahne', seconds: s.seconds }));
+    const dur = list.reduce((x, c) => x + c.seconds, 0) + 3;
+    const out = await renderMontage(clips, { brand: t.brand, title: ttl.trim() || t.title, phone: kit?.phone ?? '0531 436 29 04', website: kit?.website ?? '', cta: ctaText.trim() || t.cta, emblem: t.emblem, hook: t.hook },
+      (p, n) => setBusy({ p, note: `${note}${n}` }));
+    setBusy({ p: 1, note: `${note}Havuza kaydediliyor…` });
+    const up = await uploadBlob(out.blob, out.ext, out.contentType);
+    const cov = await uploadBlob(out.cover, 'jpg', 'image/jpeg').catch(() => null);
+    const tags = t.key === 'manitou' ? ['#manitou', '#manitoukiralama', '#şantiye', '#istanbul', '#embayyapı', '#shorts'] : ['#inşaat', '#villa', '#çatalca', '#istanbul', '#embayyapı', '#shorts'];
+    unwrap(await db().from('media_library').insert({
+      kind: 'video', title: `${t.hook}`.slice(0, 120), url: up.url, original_url: up.url, storage_path: up.path, cover_url: cov?.url ?? null, mime: out.contentType,
+      size_bytes: out.blob.size, duration_sec: dur, width: 1080, height: 1920, targets: ['ig_reel', 'yt_short', 'fb_post'], source: 'montage', pillar: t.key, status: 'pool',
+      caption: `${t.hook} ${ttl}. ${ctaText}. ☎ ${kit?.phone ?? '0531 436 29 04'} · ${kit?.website ?? 'www.embayyapi.com.tr'}`, hashtags: tags,
+      edit: { codec: out.ext === 'mp4' ? 'h264' : 'vp9', montage: { template: t.key, hook: t.hook, scenes: list.map((s) => ({ id: s.id, label: s.label, seconds: s.seconds })) } },
+    }).select('id'));
+    return up.url;
+  };
   const make = async () => {
     setErr(null); setResult(null);
+    try { setResult(await produce(tpl, title, cta, scenes)); onDone(); }
+    catch (e) { setErr(errorText(e)); } finally { setBusy(null); }
+  };
+  // Otomatik Shorts: 3 şablon × havuzdan rastgele 4 video (3'er sn) → açılış merak sorusu + adım yazıları + kapanış kartı
+  const autoShorts = async () => {
+    setErr(null); setResult(null);
     try {
-      const clips: MontageClip[] = scenes.map((s) => ({ url: s.url, kind: s.kind, label: s.label.trim() || 'Sahne', seconds: s.seconds }));
-      const out = await renderMontage(clips, { brand: tpl.brand, title: title.trim() || tpl.title, phone: kit?.phone ?? '0531 436 29 04', website: kit?.website ?? '', cta: cta.trim() || tpl.cta, emblem: tpl.emblem },
-        (p, note) => setBusy({ p, note }));
-      setBusy({ p: 1, note: 'Havuza kaydediliyor…' });
-      const up = await uploadBlob(out.blob, out.ext, out.contentType);
-      const cov = await uploadBlob(out.cover, 'jpg', 'image/jpeg').catch(() => null);
-      unwrap(await db().from('media_library').insert({
-        kind: 'video', title: `${tpl.name}: ${title}`.slice(0, 120), url: up.url, original_url: up.url, storage_path: up.path, cover_url: cov?.url ?? null, mime: out.contentType,
-        size_bytes: out.blob.size, duration_sec: total, width: 1080, height: 1920, targets: ['ig_reel', 'yt_short', 'fb_post'], source: 'montage', pillar: tpl.key, status: 'pool',
-        caption: `${title}. ${cta}. ☎ ${kit?.phone ?? '0531 436 29 04'}`, hashtags: tpl.brand === 'Şahin Manitou' ? ['#manitou', '#şahinmanitou', '#vinç', '#şantiye', '#istanbul'] : ['#inşaat', '#embayyapı', '#çatalca', '#villa', '#istanbul'],
-        edit: { codec: out.ext === 'mp4' ? 'h264' : 'vp9', montage: { template: tpl.key, scenes: scenes.map((s) => ({ id: s.id, label: s.label, seconds: s.seconds })) } },
-      }).select('id'));
-      setResult(up.url); onDone();
+      const vids = unwrap(await db().from('media_library').select('id,url,cover_url,edit').eq('kind', 'video').is('archived_at', null).neq('source', 'montage').limit(200)) as Array<{ id: string; url: string; cover_url: string | null; edit: { codec?: string } | null }>;
+      const ok = vids.filter((v) => v.edit?.codec !== 'hevc');
+      if (ok.length < 4) throw new Error('Havuzda en az 4 video gerekli');
+      const keys = ['asamalar', 'villa', 'santiye'];
+      let last = '';
+      for (const [n, k] of keys.entries()) {
+        const t = MONTAGE_TEMPLATES.find((x) => x.key === k)!;
+        const pick = [...ok].sort(() => Math.random() - 0.5).slice(0, 4);
+        const list: Scene[] = pick.map((v, i) => ({ id: v.id, url: v.url, kind: 'video', thumb: v.cover_url ?? v.url, label: t.labels[i] ?? `Sahne ${i + 1}`, seconds: 3 }));
+        last = await produce(t, t.title, t.cta, list, `Shorts ${n + 1}/3 · `);
+      }
+      setResult(last); onDone();
     } catch (e) { setErr(errorText(e)); } finally { setBusy(null); }
   };
 
@@ -65,6 +88,7 @@ export function MontageStudio({ onClose, onDone }: { onClose: () => void; onDone
       footer={<>
         <span className="flex-1 text-xs text-ink-400">{scenes.length ? `${scenes.length} sahne · yaklaşık ${Math.round(total)} sn` : 'Havuzdan 2–6 sahne seçin'}</span>
         <Button variant="ghost" disabled={Boolean(busy)} onClick={onClose}>Kapat</Button>
+        <Button variant="subtle" loading={Boolean(busy)} disabled={!fmt} onClick={autoShorts} icon={<Clapperboard className="w-4 h-4" />}>Otomatik 3 Shorts</Button>
         <Button variant="primary" loading={Boolean(busy)} disabled={scenes.length < 2 || !fmt} onClick={make} icon={<Clapperboard className="w-4 h-4" />}>Videoyu oluştur</Button>
       </>}>
       <div className="space-y-3">
