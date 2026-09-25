@@ -109,11 +109,12 @@ export async function syncDriveFolder(db: Db, src: { id: string; folder_id: stri
         if (len > MAX_VIDEO) { await r.body?.cancel(); res.large.push(`${label} (${Math.round(len / 1048576)} MB)`); continue; }
         const bytes = new Uint8Array(await r.arrayBuffer());
         if (bytes.length > MAX_VIDEO) { res.large.push(`${label} (${Math.round(bytes.length / 1048576)} MB)`); continue; }
+        const codec = detectCodec(bytes);
         const store = `drive/${f.id}.${ext === 'm4v' ? 'mp4' : ext}`;
         const url = await upload(db, store, bytes, mime);
         const th = await thumbnail(f.id, 1080).catch(() => null);
         const cover = th ? await upload(db, `drive/${f.id}-cover.jpg`, th.bytes, 'image/jpeg').catch(() => null) : null;
-        const { error } = await db.from('media_library').insert({ ...base, kind: 'video', url, original_url: url, storage_path: store, mime, size_bytes: bytes.length, cover_url: cover, targets: ['instagram', 'tiktok', 'youtube', 'facebook'] });
+        const { error } = await db.from('media_library').insert({ ...base, edit: { ...base.edit, codec }, kind: 'video', url, original_url: url, storage_path: store, mime, size_bytes: bytes.length, cover_url: cover, targets: ['instagram', 'tiktok', 'youtube', 'facebook'] });
         if (error) throw new Error(error.message);
       }
       res.imported++;
@@ -123,17 +124,39 @@ export async function syncDriveFolder(db: Db, src: { id: string; folder_id: stri
   return res;
 }
 
+/** Video kodeği: H.264 (avc1) her tarayıcıda oynar; HEVC (hvc1/hev1, iPhone varsayılanı) Android/Windows Chrome'da çoğunlukla oynamaz. */
+export function detectCodec(bytes: Uint8Array): 'h264' | 'hevc' | 'unknown' {
+  const has = (tag: string) => { const t = [...tag].map((c) => c.charCodeAt(0)); outer: for (let i = 0; i + 4 <= bytes.length; i++) { for (let k = 0; k < 4; k++) if (bytes[i + k] !== t[k]) continue outer; return true; } return false; };
+  if (has('hvc1') || has('hev1')) return 'hevc';
+  if (has('avc1')) return 'h264';
+  return 'unknown';
+}
+
+/** Kodeği bilinmeyen havuz videolarını yoklar (dakikada en fazla 3). Sonuç media_library.edit.codec'e yazılır. */
+export async function probeVideos(db: Db) {
+  const { data } = await db.from('media_library').select('id,url,edit').eq('kind', 'video').is('archived_at', null).is('edit->>codec', null).limit(3);
+  let n = 0;
+  for (const v of (data || []) as Array<{ id: string; url: string; edit: Record<string, unknown> | null }>) {
+    let codec: string = 'unknown';
+    try { const r = await fetch(v.url); if (r.ok) codec = detectCodec(new Uint8Array(await r.arrayBuffer())); } catch { /* ağ hatası: bilinmiyor */ }
+    await db.from('media_library').update({ edit: { ...(v.edit ?? {}), codec } }).eq('id', v.id);
+    n++;
+  }
+  return n;
+}
+
 /** Worker: her gün 06:00'dan sonra (fabrika 06:30'dan önce) etkin klasörleri bir kez eşitler. */
 export async function driveTick(db: Db, background: (p: Promise<unknown>) => void) {
   const hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
-  if (hm < '06:00') return { skipped: true };
+  const probed = await probeVideos(db).catch(() => 0);
+  if (hm < '06:00') return { skipped: true, probed };
   const since = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
   const recent = new Date(Date.now() - 4 * 60 * 1000).toISOString();
   // Günde bir kez; yarım kalan (pending > 0) eşitleme 4 dakikada bir kaldığı yerden sürer
   const { data } = await db.from('drive_sources').select('id,folder_id,created_by').eq('enabled', true).is('archived_at', null)
     .or(`last_synced_at.is.null,last_synced_at.lt.${since},and(last_result->>pending.gt.0,last_synced_at.lt.${recent})`).limit(1);
   const src = data?.[0];
-  if (!src) return { idle: true };
+  if (!src) return { idle: true, probed };
   await db.from('drive_sources').update({ last_synced_at: new Date().toISOString() }).eq('id', src.id); // çift çalışmayı önle
   background(syncDriveFolder(db, src, 110_000).catch(async (e) => { await db.from('drive_sources').update({ last_result: { error: String(e).slice(0, 300) } }).eq('id', src.id); }));
   return { started: src.id };
