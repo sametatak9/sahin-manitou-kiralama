@@ -39,7 +39,7 @@ export function ConnectionsScreen() {
   const connect = async (c: ConnectorStatus, switchAccount = false, provider?: string) => {
     setBusy(c.key); setMsg(null);
     // return_to: giriş sonrası tam bu panel adresine dönülür (oturum burada)
-    try { const r = await callOps<{ url: string }>('oauth_start', { provider: provider ?? OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount }); window.location.href = r.url; }
+    try { const r = await callOps<{ url: string }>('oauth_start', { provider: provider ?? OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount, with_instagram: c.key === 'instagram' }); window.location.href = r.url; }
     catch (e) { setMsg({ tone: 'warn', text: errorText(e) }); setBusy(null); }
   };
   const disconnect = async (accountId: string) => {

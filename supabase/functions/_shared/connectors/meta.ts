@@ -8,10 +8,11 @@ const graph = (path: string, host = 'graph.facebook.com') => `https://${host}/${
 /** "Instagram ile giriş" ile bağlanan hesaplar graph.instagram.com'u, Facebook sayfası üzerinden bağlananlar graph.facebook.com'u kullanır. */
 const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram' ? 'graph.instagram.com' : 'graph.facebook.com');
 
-export const META_SCOPES = [
-  'pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'read_insights',
-  'instagram_basic', 'instagram_content_publish', 'instagram_manage_insights', 'business_management',
-];
+// Facebook sayfası için yalnızca sayfa izinleri istenir. Instagram izinleri, uygulamaya "Instagram (Facebook girişiyle)"
+// kullanım durumu eklenmeden istenirse Meta tüm girişi "Invalid Scopes" ile durdurur → yalnızca "Facebook sayfası üzerinden Instagram" bağlarken eklenir.
+export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'];
+export const META_IG_SCOPES = ['instagram_basic', 'instagram_content_publish', 'business_management'];
+export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 
 async function call(method: 'GET' | 'POST', path: string, params: Record<string, string>, host?: string) {
   const url = new URL(graph(path, host));
@@ -26,13 +27,13 @@ async function call(method: 'GET' | 'POST', path: string, params: Record<string,
   return data;
 }
 
-export function metaAuthorizeUrl(state: string, redirectUri: string, switchAccount = false) {
+export function metaAuthorizeUrl(state: string, redirectUri: string, switchAccount = false, withInstagram = false) {
   const u = new URL(`https://www.facebook.com/${graphVersion()}/dialog/oauth`);
   u.searchParams.set('client_id', appSecret('META_APP_ID') || '');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
   u.searchParams.set('response_type', 'code');
-  u.searchParams.set('scope', META_SCOPES.join(','));
+  u.searchParams.set('scope', (withInstagram ? META_SCOPES : META_PAGE_SCOPES).join(','));
   // Hesap değiştir: Facebook izin/sayfa seçim ekranını yeniden gösterir (başka sayfa/IG hesabı seçilebilir)
   if (switchAccount) u.searchParams.set('auth_type', 'rerequest');
   return u.toString();
@@ -50,7 +51,9 @@ export async function metaExchange(code: string, redirectUri: string): Promise<{
   const short = await call('GET', 'oauth/access_token', { client_id: appId, client_secret: secret, redirect_uri: redirectUri, code });
   const long = await call('GET', 'oauth/access_token', { grant_type: 'fb_exchange_token', client_id: appId, client_secret: secret, fb_exchange_token: short.access_token });
   const me = await call('GET', 'me', { fields: 'name', access_token: long.access_token });
-  const accounts = await call('GET', 'me/accounts', { fields: 'id,name,access_token,instagram_business_account{id,username}', access_token: long.access_token, limit: '50' });
+  // Instagram izni verilmediyse IG alanı hata verebilir → IG alanı olmadan tekrar dene
+  const accounts = await call('GET', 'me/accounts', { fields: 'id,name,access_token,instagram_business_account{id,username}', access_token: long.access_token, limit: '50' })
+    .catch(() => call('GET', 'me/accounts', { fields: 'id,name,access_token', access_token: long.access_token, limit: '50' }));
   // deno-lint-ignore no-explicit-any
   const pages: MetaPageAccount[] = (accounts.data || []).map((p: any) => ({
     pageId: p.id, pageName: p.name, pageToken: p.access_token,

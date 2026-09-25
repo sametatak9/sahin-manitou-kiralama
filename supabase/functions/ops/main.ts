@@ -323,7 +323,7 @@ function safeReturnTo(raw: unknown): string | null {
   } catch { return null; }
 }
 
-async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown, switchAccount = false) {
+async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown, switchAccount = false, withInstagram = false) {
   const def = connectorByKey(provider === 'meta' || provider === 'facebook' ? 'facebook' : provider === 'google' ? 'youtube' : provider);
   if (!def) throw new HttpError(400, 'Bilinmeyen sağlayıcı');
   const missing = def.requiredEnv.filter((k) => !secret(k));
@@ -336,7 +336,7 @@ async function oauthStart(db: Db, userId: string, provider: string, returnTo?: u
   }
   if (provider === 'meta' || provider === 'facebook') {
     await db.from('oauth_states').insert({ state, provider: 'meta', user_id: userId, return_to });
-    return { url: metaAuthorizeUrl(state, REDIRECT_URI(), switchAccount) };
+    return { url: metaAuthorizeUrl(state, REDIRECT_URI(), switchAccount, withInstagram) };
   }
   if (provider === 'canva') {
     const verifier = pkceVerifier();
@@ -509,7 +509,7 @@ async function api(db: Db, req: Request) {
 
     case 'sync_metrics': { await requireUser(db, req); return syncMetrics(db, 5, body.publication_id); }
 
-    case 'oauth_start': { const u = await requireUser(db, req, 'admin'); return oauthStart(db, u.userId, String(body.provider), body.return_to, body.switch_account === true); }
+    case 'oauth_start': { const u = await requireUser(db, req, 'admin'); return oauthStart(db, u.userId, String(body.provider), body.return_to, body.switch_account === true, body.with_instagram === true); }
 
     case 'disconnect': {
       const u = await requireUser(db, req, 'admin');
