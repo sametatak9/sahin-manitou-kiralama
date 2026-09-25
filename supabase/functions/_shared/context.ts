@@ -77,9 +77,23 @@ export async function aiComplete(ctx: Pick<EngineCtx, 'db' | 'runId' | 'actorId'
   try {
     const blocked = await budgetBlock(ctx.db);
     if (blocked) throw new Error(`${blocked}. Yapay zekâ çağrısı yapılmadı (Ayarlar → Harcama sınırı).`);
-    const res = await getProvider(agent.provider).complete(agent, { system, prompt, schema });
+    // Kredi/kota/erişim hatasında sıradaki anahtarı olan sağlayıcıya geç (Claude bakiyesi yokken Gemini → Groq → OpenRouter → GitHub)
+    let res: Awaited<ReturnType<ReturnType<typeof getProvider>['complete']>> | null = null; let lastErr: unknown = null; let used = agent;
+    const chain: AgentConfig[] = [agent];
+    const alt: Array<[AgentConfig['provider'], string]> = [['gemini', Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest'], ['groq', Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile'],
+      ['openrouter', COMPAT.openrouter.agentModel], ['github', COMPAT.github.agentModel], ['anthropic', 'claude-sonnet-5']];
+    for (const [p, m] of alt) if (p !== agent.provider && (await getAiKey(p))) chain.push({ ...agent, provider: p, model: m });
+    for (const a of chain) {
+      try { res = await getProvider(a.provider).complete(a, { system, prompt, schema }); used = a; break; }
+      catch (e) {
+        lastErr = e;
+        if (!/credit|balance|quota|rate|429|402|401|403|overloaded|503|billing|not.?found|404|unavailable/i.test(String((e as Error)?.message ?? e))) throw e;
+      }
+    }
+    if (!res) throw lastErr ?? new Error('Hiçbir yapay zekâ sağlayıcısı yanıt vermedi');
+    Object.assign(base, { provider: used.provider, model: used.model });
     ctx.tokens.in += res.usage.tokensIn; ctx.tokens.out += res.usage.tokensOut;
-    await recordUsage(ctx.db, { source: 'generate', ref_id: null, provider: agent.provider, model: agent.model, tokens_in: res.usage.tokensIn, tokens_out: res.usage.tokensOut });
+    await recordUsage(ctx.db, { source: 'generate', ref_id: null, provider: used.provider, model: used.model, tokens_in: res.usage.tokensIn, tokens_out: res.usage.tokensOut });
     const { data: gen } = await ctx.db.from('ai_generations').insert({ ...base, status: 'succeeded', output: res.json ?? { text: res.text }, tokens_in: res.usage.tokensIn, tokens_out: res.usage.tokensOut, duration_ms: Date.now() - started }).select('id').single();
     if (schema && !res.json) throw new Error('AI yanıtı beklenen JSON biçiminde değil');
     return { json: res.json as Record<string, unknown>, text: res.text, generationId: gen?.id as string | undefined };
