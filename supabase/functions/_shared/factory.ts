@@ -113,7 +113,7 @@ function renderEmbay(o: BannerOpts) {
   const panelW = wide ? Math.round(w * 0.5) : w;
   const textW = panelW - pad * 2;
   const clean = (l: string) => l.replace(/^[\s·|,-]+|[\s·|,-]+$/g, '');
-  const cta = o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').trim();
+  const cta = (o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').trim().replace(/^WhatsApp:?$/i, 'WhatsApp’tan yazın')) || 'Ücretsiz keşif için arayın';
   const chips: Array<[string, string]> = [['bina', 'Betonarme'], ['vinc', 'Çelik yapı'], ['ev', 'Anahtar teslim']];
   const showChips = tall;
   // Yazı sığmazsa (fotoğraf en az %38 kalacak şekilde) başlık ve alt yazı %8'lik adımlarla küçültülür → taşma/üst üste binme olmaz
@@ -167,9 +167,11 @@ ${showChips ? chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.0
 </svg>`;
 }
 
+const LEGACY_SAHIN_DESIGN = false as boolean;
 export async function renderBanner(o: BannerOpts) {
   await ensureRenderer();
-  if (o.brandName !== 'Şahin Manitou') {
+  // Tüm banner'lar Embay Yapı kimliğiyle (Manitou kiralama da Embay çatısı altında; eski sarı Şahin Manitou tasarımı yedekte duruyor)
+  if (!LEGACY_SAHIN_DESIGN) {
     const r = new Resvg(renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
     const img = r.render();
     const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;

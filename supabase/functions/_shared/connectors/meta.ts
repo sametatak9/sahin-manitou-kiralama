@@ -10,7 +10,7 @@ const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram'
 
 // Facebook sayfası için yalnızca sayfa izinleri istenir. Instagram izinleri, uygulamaya "Instagram (Facebook girişiyle)"
 // kullanım durumu eklenmeden istenirse Meta tüm girişi "Invalid Scopes" ile durdurur → yalnızca "Facebook sayfası üzerinden Instagram" bağlarken eklenir.
-export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'];
+export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata'];
 export const META_IG_SCOPES = ['instagram_basic', 'instagram_content_publish', 'business_management'];
 export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 
