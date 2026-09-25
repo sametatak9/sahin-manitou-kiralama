@@ -157,6 +157,7 @@ const APP_KEYS: Array<{ group: string; name: string; label: string }> = [
   { group: 'E-posta', name: 'RESEND_API_KEY', label: 'Resend anahtarı' }, { group: 'E-posta', name: 'EMAIL_FROM', label: 'Gönderen adres' },
   { group: 'WhatsApp', name: 'WHATSAPP_TOKEN', label: 'WhatsApp erişim anahtarı' }, { group: 'WhatsApp', name: 'WHATSAPP_PHONE_NUMBER_ID', label: 'WhatsApp numara kimliği' },
   { group: 'Canva', name: 'CANVA_CLIENT_ID', label: 'Canva istemci kimliği' }, { group: 'Canva', name: 'CANVA_CLIENT_SECRET', label: 'Canva gizli anahtarı' },
+  { group: 'Web araması (Tavily)', name: 'TAVILY_API_KEY', label: 'Tavily arama anahtarı' },
 ];
 
 async function credentialsReport(db: Db) {
@@ -190,6 +191,7 @@ async function credentialsReport(db: Db) {
     if (!fmt && k.group === 'Google (YouTube)' && live.google) { const c = credCheck(live.google); if (c) { state = c.state === 'ok' ? 'ok' : 'fail'; detail = c.state === 'ok' ? 'Google kabul etti' : c.detail; } }
     if (!fmt && k.name === 'TELEGRAM_BOT_TOKEN') { const r = await fetch(`https://api.telegram.org/bot${v}/getMe`).catch(() => null); state = r?.ok ? 'ok' : 'fail'; detail = r?.ok ? 'Telegram kabul etti' : 'Telegram reddetti'; }
     if (!fmt && k.name === 'RESEND_API_KEY') { const r = await fetch('https://api.resend.com/domains', { headers: { authorization: `Bearer ${v}` } }).catch(() => null); state = r?.ok ? 'ok' : 'fail'; detail = r?.ok ? 'Resend kabul etti' : 'Resend reddetti'; }
+    if (!fmt && k.name === 'TAVILY_API_KEY') { const r = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${v}` }, body: JSON.stringify({ query: 'kentsel dönüşüm İstanbul', max_results: 1 }) }).catch(() => null); state = r?.ok ? 'ok' : 'fail'; detail = r?.ok ? 'Tavily kabul etti (gerçek arama yapıldı)' : `Tavily reddetti${r ? ` (HTTP ${r.status})` : ''}`; }
     if (!fmt && k.group === 'Instagram') detail = 'Biçim doğru · asıl test “Instagram ile giriş yap” sırasında yapılır';
     const secretLike = /SECRET|TOKEN|API_KEY/.test(k.name);
     rows.push({ group: k.group, name: k.name, label: k.label, source: secretSource(k.name), masked: secretLike ? mask(v) : v, saved_at: savedAt.get(k.name) ?? null, state, detail, can_clear: secretSource(k.name) === 'panel' });

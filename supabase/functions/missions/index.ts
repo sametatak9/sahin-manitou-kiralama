@@ -70,6 +70,7 @@ async function api(c: Db, req: Request) {
         search_for: String(body.search_for || '').trim().slice(0, 1000) || null, report_spec: String(body.report_spec || '').trim().slice(0, 1000) || null,
         stop_condition: String(body.stop_condition || '').trim().slice(0, 1000) || null, duration_minutes: minutes,
         max_steps: minutes <= 15 ? Math.min(minutes, 5) : Math.min(12, Math.ceil(minutes / 5)), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
+        skill_ids: Array.isArray(body.skill_ids) ? body.skill_ids.filter((x: unknown) => typeof x === 'string').slice(0, 10) : [],
         locked_until: new Date(now + 150_000).toISOString(),
       }).select('*').single();
       if (error) throw error;
@@ -123,6 +124,30 @@ async function api(c: Db, req: Request) {
       }
       await audit(c, u.userId, 'skill_create', 'automation_skills', sk.id, `Yetenek tanımlandı: ${name}`);
       return { skill_id: sk.id, skill_key: sk.skill_key };
+    }
+
+    // Akademi: yeteneği kısa bir gerçek görevle test et (onaysız yetenek yalnızca testte kullanılabilir). Sonuç denetimden geçer, puan yeteneğe yazılır.
+    case 'skill_test': {
+      const u = await requireUser(c, req, 'admin');
+      const { data: sk } = await c.from('automation_skills').select('id,display_name,test_goal,instructions,search_terms,lifecycle').eq('id', body.skill_id).maybeSingle();
+      if (!sk) throw new HttpError(404, 'Yetenek bulunamadı');
+      if (sk.lifecycle === 'retired') throw new HttpError(409, 'Emekliye ayrılmış yetenek test edilemez');
+      const goal = String(sk.test_goal || sk.instructions || '').trim();
+      if (goal.length < 10) throw new HttpError(400, 'Yeteneğin test amacı (veya talimatı) boş — önce doldurun');
+      const blocked = await budgetBlock(c);
+      if (blocked) throw new HttpError(409, blocked, 'BUDGET_EXCEEDED');
+      const minutes = Math.max(5, Math.min(30, Number(body.minutes) || 10));
+      const { data: bots } = await c.from('automation_bot_skills').select('bot_id').eq('skill_id', sk.id).limit(1);
+      const now = Date.now();
+      const { data: m, error } = await c.from('bot_missions').insert({ purpose: 'skill_test', skill_ids: [sk.id], bot_id: bots?.[0]?.bot_id ?? null,
+        title: `Yetenek testi: ${sk.display_name}`.slice(0, 200), goal: goal.slice(0, 4000), search_for: (sk.search_terms || []).join(', ') || null,
+        duration_minutes: minutes, max_steps: Math.min(6, Math.max(3, Math.ceil(minutes / 3))), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
+        locked_until: new Date(now + 150_000).toISOString() }).select('*').single();
+      if (error) throw error;
+      await c.from('automation_skills').update({ last_test_mission_id: m.id, ...(sk.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', sk.id);
+      await audit(c, u.userId, 'skill_test', 'automation_skills', sk.id, `Yetenek testi başlatıldı: ${sk.display_name}`);
+      await background(stepMission(c, m as MissionRow).catch((e) => c.from('bot_missions').update({ locked_until: null, error: String(e).slice(0, 500) }).eq('id', m.id)));
+      return { mission_id: m.id, deadline_at: m.deadline_at };
     }
 
     case 'ai_status': {

@@ -66,7 +66,9 @@ export interface OpsStatus { ai: { anthropic: boolean; openai: boolean; gemini: 
 export interface MissionFinding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
+  relevance?: number; fit?: string; verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string;
 }
+export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
 export interface Mission {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: 'running' | 'finalizing' | 'completed' | 'stopped' | 'failed' | 'blocked';
@@ -75,5 +77,6 @@ export interface Mission {
   report_html: string | null; tokens_in: number; tokens_out: number; error: string | null; created_at: string;
   error_kind?: 'ai_credit' | 'ai_auth' | 'repeated_error' | 'timeout' | null; error_count?: number;
   review_status?: 'pending' | 'approved' | 'rejected'; reviewed_at?: string | null; review_note?: string | null;
+  purpose?: 'task' | 'skill_test'; skill_ids?: string[]; audit?: MissionAudit | null; coach_note?: string | null;
 }
 export interface MissionStep { id: string; mission_id: string; step_no: number; action: string; target: string | null; message: string; duration_ms: number | null; created_at: string }

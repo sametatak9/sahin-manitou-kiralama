@@ -240,6 +240,12 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
             {m.stop_condition && <div><b className="text-ink-200">Bitiş koşulu:</b> <span className="text-ink-300">{m.stop_condition}</span></div>}
             {m.provider && <div className="text-ink-500">AI: {m.provider} / {m.model} · token {(m.tokens_in + m.tokens_out).toLocaleString('tr-TR')}{costText(m) ? ` · maliyet ${costText(m)}` : ''}</div>}
           </div>
+          {m.audit && (
+            <div className="rounded-xl ring-1 ring-ink-700 p-3 text-xs space-y-1">
+              <div className="font-semibold text-ink-100">Denetim (doğruluk kontrolü): <span className={m.audit.accuracy >= 60 ? 'text-emerald-700' : m.audit.accuracy >= 30 ? 'text-amber-700' : 'text-rose-700'}>%{m.audit.accuracy}</span></div>
+              <div className="text-ink-300">✅ {m.audit.verified} doğrulandı · ⚠️ {m.audit.suspicious} şüpheli · ❌ {m.audit.rejected} elendi (rapora alınmadı)</div>
+              {m.coach_note && <div className="text-ink-300"><b className="text-ink-200">Koç notu:</b> {m.coach_note}</div>}
+            </div>)}
           {!live && <ResultBox m={m} onChanged={q.reload} />}
           {err && <Notice tone="error">{err}</Notice>}
           <div className="flex gap-1.5">{(['steps', 'findings', 'report'] as const).map((t) => (
@@ -259,7 +265,9 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
           {tab === 'findings' && (m.findings.length === 0 ? <StateView kind="empty" title={live ? 'Henüz bulgu yok' : 'Veri bulunamadı'} message="Kaynağı gösterilebilen bulgular burada listelenir." compact /> : (
             <div className="space-y-2">{m.findings.map((f, i) => (
               <div key={i} className="rounded-xl ring-1 ring-ink-700 p-3">
-                <div className="text-sm font-semibold text-ink-100">{f.title}</div>
+                <div className="text-sm font-semibold text-ink-100">{f.title}{f.verdict && <span className={cx('ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold', f.verdict === 'verified' ? 'bg-emerald-100 text-emerald-800' : f.verdict === 'suspicious' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')}>{f.verdict === 'verified' ? '✅ Doğrulandı' : f.verdict === 'suspicious' ? '⚠️ Şüpheli' : '❌ Elendi'}</span>}</div>
+                {f.fit && <div className="text-[11px] text-emerald-800 mt-0.5">🎯 {f.fit}</div>}
+                {f.verdict_reason && <div className="text-[11px] text-ink-400 mt-0.5">Denetim: {f.verdict_reason}</div>}
                 <div className="text-xs text-ink-300 mt-0.5 whitespace-pre-line">{f.detail}</div>
                 {f.evidence && <div className="text-[11px] italic text-ink-400 mt-1">“{f.evidence}”</div>}
                 <div className="flex flex-wrap items-center gap-2 mt-1">

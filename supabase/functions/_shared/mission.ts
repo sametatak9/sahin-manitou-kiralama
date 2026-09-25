@@ -8,6 +8,7 @@ import { COMPAT, getAiKey, GROQ_URL } from './ai/keys.ts';
 import { telegramSend } from './connectors/messaging.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { logActivity } from './activity.ts';
+import { tavilySearch, type WebResult } from './search.ts';
 
 type Db = SupabaseClient;
 
@@ -16,13 +17,16 @@ export interface MissionRow {
   stop_condition: string | null; duration_minutes: number; status: string; finish_reason: string | null; started_at: string; deadline_at: string;
   finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null; schedule_id?: string | null;
   findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null; cost_usd?: number; web_searches?: number;
+  skill_ids?: string[]; purpose?: string; audit?: MissionAudit | null; coach_note?: string | null;
 }
 export interface Finding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;
   // Liste/ilan görevlerinde yapılandırılmış alanlar (yalnızca kurumun kendi yayınladığı bilgiler)
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
   relevance?: number; fit?: string;
+  verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string;
 }
+export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
 interface Source { url: string; title?: string }
 
 const UA = 'Mozilla/5.0 (compatible; EmbayResearchBot/1.0; +https://embay-panel.vercel.app)';
@@ -386,24 +390,40 @@ function pageDigest(p: PageFacts) {
     p.text ? `Metin (ilk bölüm): ${p.text.slice(0, 3500)}` : '',
   ].filter(Boolean).join('\n');
 }
-async function botContext(db: Db, botId: string | null) {
-  if (!botId) return { name: 'Bot', text: '' };
-  const [{ data: bot }, { data: skills }] = await Promise.all([
-    db.from('automation_bots').select('name,instructions,description').eq('id', botId).maybeSingle(),
-    db.from('automation_bot_skills').select('automation_skills(display_name,instructions,enabled)').eq('bot_id', botId),
-  ]);
-  // deno-lint-ignore no-explicit-any
-  const sk = (skills || []).map((r: any) => (Array.isArray(r.automation_skills) ? r.automation_skills[0] : r.automation_skills)).filter((s: any) => s?.enabled && s.instructions);
+interface SkillRow { id: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number }
+const SKILL_COLS = 'id,display_name,instructions,enabled,lifecycle,search_terms,sources,good_examples,bad_examples,version';
+/** Bot profili + kullanılacak yetenekler. Kural: görevlerde YALNIZCA Akademi'de onaylanmış (approved) yetenekler kullanılır;
+ *  yetenek testi (purpose=skill_test) görevinde test edilen yetenek onaysız olabilir. */
+async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose'>) {
+  const isTest = m?.purpose === 'skill_test';
+  let skills: SkillRow[] = [];
+  let bot: { name?: string; instructions?: string; description?: string } | null = null;
+  if (m?.skill_ids?.length) {
+    const { data } = await db.from('automation_skills').select(SKILL_COLS).in('id', m.skill_ids);
+    skills = (data || []) as SkillRow[];
+  } else if (botId) {
+    const { data } = await db.from('automation_bot_skills').select(`automation_skills(${SKILL_COLS})`).eq('bot_id', botId);
+    // deno-lint-ignore no-explicit-any
+    skills = (data || []).map((r: any) => (Array.isArray(r.automation_skills) ? r.automation_skills[0] : r.automation_skills)).filter(Boolean);
+  }
+  if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description').eq('id', botId).maybeSingle());
+  skills = skills.filter((s) => s.enabled && (isTest || s.lifecycle === 'approved'));
+  const withText = skills.filter((s) => s.instructions);
   return {
     name: bot?.name ?? 'Bot',
-    // deno-lint-ignore no-explicit-any
-    text: [bot?.description, bot?.instructions ? `Bot talimatı: ${bot.instructions}` : '', ...sk.map((s: any) => `Yetenek «${s.display_name}»: ${s.instructions}`)].filter(Boolean).join('\n'),
+    skills: skills.map((s) => ({ id: s.id, name: s.display_name, version: s.version })),
+    terms: [...new Set(skills.flatMap((s) => s.search_terms || []))],
+    sources: [...new Set(skills.flatMap((s) => s.sources || []))],
+    text: [bot?.description, bot?.instructions ? `Bot talimatı: ${bot.instructions}` : '',
+      ...withText.map((s) => [`Yetenek «${s.display_name}» (sürüm ${s.version}): ${s.instructions}`,
+        s.good_examples ? `  ✔ İyi bulgu örnekleri: ${s.good_examples}` : '', s.bad_examples ? `  ✘ Elenecek örnekler: ${s.bad_examples}` : ''].filter(Boolean).join('\n'))].filter(Boolean).join('\n'),
   };
 }
 
 // ── Bir adım ────────────────────────────────────────────────────────────────
 export async function stepMission(db: Db, m: MissionRow) {
   const now = Date.now();
+  await loadAppSecrets(db); // panelden girilen anahtarlar (ör. TAVILY_API_KEY)
   if (m.status === 'finalizing') return await finalizeMission(db, m, m.finish_reason ?? 'deadline');
   if (now >= new Date(m.deadline_at).getTime()) return await finalizeMission(db, m, 'deadline');
   if (m.step_count >= m.max_steps) return await finalizeMission(db, m, 'max_steps');
@@ -414,7 +434,8 @@ export async function stepMission(db: Db, m: MissionRow) {
   const visited = new Set((m.visited || []).map(canonical));
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
-  const terms = searchTerms(m.search_for);
+  const ctx = await botContext(db, m.bot_id, m);
+  const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
   let stepFailed = false;
   // Otomatik (zamanlanmış) görev: önceki günlerde raporlanan kayıtları tekrar raporlama
   const seenBefore = new Set<string>();
@@ -457,25 +478,31 @@ export async function stepMission(db: Db, m: MissionRow) {
     const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model);
     let useScan = !ai;
     if (ai) try {
-      const ctx = await botContext(db, m.bot_id);
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
       // Her adımda (AI hangisi olursa olsun; Claude kredisi yoksa zincir aramasız modellere düşer) bu adımın terimiyle gerçek haber/duyuru sonuçları
       let newsNote = '';
       if (!m.target_url && terms.length) {
-        // Her adımda 2 konu; sonuç azsa bölge filtresiz ve 14 güne genişletilir
+        // Her adımda 2 konu. Önce gerçek web araması (Tavily, anahtar varsa), yoksa/boşsa Google Haberler yedeği.
         const qs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
-        const news: NewsItem[] = []; const counts: string[] = [];
+        const results: WebResult[] = []; const counts: string[] = []; let engine = 'haber';
         for (const q of qs) {
-          let got = await newsSearch(/stanbul/i.test(q) ? q : `${q} İstanbul`, 12);
-          if (got.length < 3) got = [...got, ...(await newsSearch(q, 12, 14))];
+          const qq = /stanbul|kocaeli|tekirda|türkiye/i.test(q) ? q : `${q} İstanbul`;
+          let got: WebResult[] = [];
+          const web = await tavilySearch(qq, { max: 8, domains: ctx.sources.length && step % 2 === 0 ? ctx.sources : undefined });
+          if (web) { engine = 'web'; got = web; m.web_searches = (m.web_searches ?? 0) + 1; }
+          if (!got.length) {
+            let news = await newsSearch(qq, 12);
+            if (news.length < 3) news = [...news, ...(await newsSearch(q, 12, 14))];
+            got = news.map((n) => ({ title: n.title, url: n.url, snippet: '', posted: n.posted, source: n.source }));
+          }
           let n = 0;
-          for (const g of got) if (!news.some((x) => x.url === g.url || x.title === g.title)) { news.push(g); n++; }
+          for (const g of got) if (!results.some((x) => x.url === g.url || x.title === g.title)) { results.push(g); n++; }
           counts.push(`“${q}” → ${n}`);
         }
-        news.splice(24);
-        for (const n of news) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
-        await logStep(db, m, step, 'news_search', `Haber/duyuru araması: ${counts.join(' · ')} sonuç`, null, { queries: qs, count: news.length, titles: news.map((n) => n.title).slice(0, 24) });
-        if (news.length) newsNote = news.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}\n   ${n.url}`).join('\n');
+        results.splice(24);
+        for (const n of results) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
+        await logStep(db, m, step, 'news_search', `${engine === 'web' ? 'Web araması' : 'Haber/duyuru araması'}: ${counts.join(' · ')} sonuç`, null, { engine, queries: qs, count: results.length, titles: results.map((n) => n.title).slice(0, 24) });
+        if (results.length) newsNote = results.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}${n.snippet ? `\n   Özet: ${n.snippet}` : ''}\n   ${n.url}`).join('\n');
       }
       const prompt = [
         `GÖREV: ${m.title}`, `AMAÇ / AÇIKLAMA: ${m.goal}`,
@@ -590,15 +617,18 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   const { data: fresh } = await db.from('bot_missions').select('*').eq('id', m.id).maybeSingle();
   const cur = (fresh ?? m) as MissionRow;
   if (['completed', 'stopped', 'failed'].includes(cur.status)) return { mission_id: m.id, already: cur.status };
-  const findings = cur.findings || []; const sources = cur.sources || [];
+  const allFindings = cur.findings || []; const sources = cur.sources || [];
   const [{ data: steps }, ctx] = await Promise.all([
     db.from('bot_mission_steps').select('step_no,action,target,message,created_at').eq('mission_id', m.id).order('step_no').order('created_at'),
-    botContext(db, cur.bot_id),
+    botContext(db, cur.bot_id, cur),
   ]);
 
   let summary = '';
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
   const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model);
+  // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
+  const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources) : null;
+  const findings = allFindings.filter((f) => f.verdict !== 'rejected');
   if (ai && findings.length) {
     try {
       const r = await aiCall(ai, [
@@ -621,6 +651,14 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
       : `Veri bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; görevin aradığı bilgiye dair doğrulanabilir bir bulgu çıkmadı.`;
   }
 
+  // KOÇ: raporu ve günlüğü inceleyip yeteneği iyileştirme önerisi çıkarır (Akademi'de onayınıza düşer)
+  const coachNote = ai && reason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>) : null;
+  if (cur.purpose === 'skill_test' && cur.skill_ids?.length) {
+    const { data: sk } = await db.from('automation_skills').select('lifecycle').eq('id', cur.skill_ids[0]).maybeSingle();
+    await db.from('automation_skills').update({ test_score: audit ? audit.accuracy : 0, test_findings: audit?.verified ?? 0, last_tested_at: new Date().toISOString(),
+      last_test_mission_id: cur.id, ...(sk?.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', cur.skill_ids[0]);
+  }
+
   const status = reason === 'admin_stop' ? 'stopped' : reason === 'error' ? 'failed' : 'completed';
   const finishedAt = new Date().toISOString();
   const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cur.title)} — Bot Raporu</title>
@@ -630,7 +668,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td{padding:4px 6px;bord
 .f{border:1px solid #e1f3e7;border-radius:12px;padding:10px 12px;margin:8px 0}.f b{display:block}.f q{display:block;color:#3e5549;font-size:12px;margin-top:4px;font-style:italic}
 a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;line-height:1.6}.log{font-family:ui-monospace,monospace;font-size:11px;color:#3e5549}.badge{display:inline-block;background:#e1f3e7;color:#115a31;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #16a34a}.brand svg{width:44px;height:44px}.brand b{font-size:15px;display:block}.brand small{color:#5a7266;font-size:11px}
-.facts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px}.facts span,.facts a{background:#f3f9f5;border-radius:8px;padding:2px 8px;text-decoration:none}
+.facts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px}.v{display:inline-block;border-radius:999px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px}.v-verified{background:#dcfce7;color:#166534}.v-suspicious{background:#fef3c7;color:#92400e}.v-rejected{background:#fee2e2;color:#991b1b}.audit{display:flex;gap:10px;flex-wrap:wrap;font-size:13px}.audit div{background:#f3f9f5;border-radius:10px;padding:6px 10px}.facts span,.facts a{background:#f3f9f5;border-radius:8px;padding:2px 8px;text-decoration:none}
 @media print{body{background:#fff;padding:0}main{border:0}}</style></head>
 <body><main><div class="brand">${LOGO_SVG}<div><b>Embay Yapı & Şahin Manitou</b><small>Bot görev raporu · 0531 436 29 04 · sahin-manitou-kiralama.vercel.app</small></div></div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}${reason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
 <h2>Görev</h2><table><tr><td>Bot</td><td>${esc(ctx.name)}</td></tr><tr><td>Amaç</td><td>${esc(cur.goal)}</td></tr>
@@ -639,34 +677,116 @@ ${cur.search_for ? `<tr><td>Aranan</td><td>${esc(cur.search_for)}</td></tr>` : '
 ${cur.stop_condition ? `<tr><td>Bitiş koşulu</td><td>${esc(cur.stop_condition)}</td></tr>` : ''}
 <tr><td>Başlangıç / bitiş</td><td>${esc(fmt(cur.started_at))} → ${esc(fmt(finishedAt))} (${cur.duration_minutes} dk süre tanımlı)</td></tr>
 <tr><td>Adım · kaynak · bulgu</td><td>${cur.step_count} · ${sources.length} · ${findings.length}</td></tr>${cur.provider ? `<tr><td>AI</td><td>${esc(cur.provider)} / ${esc(cur.model)}</td></tr>` : ''}</table>
+${audit ? `<h2>Denetim (doğruluk kontrolü)</h2><div class="audit"><div>Doğruluk: <b>%${audit.accuracy}</b></div><div>✅ Doğrulandı: <b>${audit.verified}</b></div><div>⚠️ Şüpheli: <b>${audit.suspicious}</b></div><div>❌ Elendi: <b>${audit.rejected}</b></div></div>${audit.rejected_items?.length ? `<ul class="k">${audit.rejected_items.map((r) => `<li>Elendi: ${esc(r.title)} — ${esc(r.reason)}</li>`).join('')}</ul>` : ''}` : ''}
+${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachNote)}</div>` : ''}
 <h2>Özet</h2><div class="sum">${esc(summary)}</div>
-<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}</b>${esc(f.detail)}${factsHtml(f)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
+<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}${f.verdict ? `<span class="v v-${f.verdict}">${VERDICT[f.verdict]}</span>` : ''}</b>${f.verdict_reason ? `<div class="k">Denetim: ${esc(f.verdict_reason)}</div>` : ''}${esc(f.detail)}${factsHtml(f)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
 <h2>İncelenen kaynaklar (${sources.length})</h2><ul>${sources.slice(0, 60).map((s) => `<li><a href="${safeHref(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join('')}</ul>
 <h2>Adım günlüğü</h2><div class="log">${(steps || []).map((s) => `<div>#${s.step_no} [${esc(s.action)}] ${esc(s.message)}</div>`).join('')}</div>
 <p class="k" style="margin-top:24px">Bu rapor gerçek HTTP istekleri ve AI araştırma çağrılarından üretilmiştir; kaynağı doğrulanamayan bilgiler rapora alınmaz. Veriler yalnızca herkese açık kurumsal kaynaklardan, KVKK ve site kullanım koşullarına uygun toplanır.</p></main></body></html>`;
 
-  await db.from('bot_missions').update({ status, finish_reason: reason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null }).eq('id', m.id);
-  await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu`);
-  await sendMissionTelegram(db, cur, reason, summary, findings);
+  await db.from('bot_missions').update({ status, finish_reason: reason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null,
+    ...(audit ? { audit, findings: allFindings } : {}), ...(coachNote ? { coach_note: coachNote } : {}) }).eq('id', m.id);
+  await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
+  await sendMissionTelegram(db, cur, reason, summary, findings, audit);
   return { mission_id: m.id, finalized: true, reason, findings: findings.length };
 }
 
 /** Görev bitince özet + bulgular Telegram'a (yönetici). Telegram tanımlı değilse sessizce atlanır; hata görevi bozmaz, günlüğe yazılır. */
-async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summary: string, findings: Finding[]) {
+async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summary: string, findings: Finding[], audit: MissionAudit | null = null) {
   try {
     await loadAppSecrets(db);
     if (!appSecret('TELEGRAM_BOT_TOKEN') || !appSecret('TELEGRAM_CHAT_ID')) return;
     const list = findings.slice(0, 10).map((f, i) => {
       const facts = [f.company && `🏢 ${f.company}`, f.location && `📍 ${f.location}`, f.posted && `🗓 ${f.posted}`, f.phone && `📞 ${f.phone}`].filter(Boolean).join(' · ');
-      return `${i + 1}. ${f.title}${f.fit ? `\n   🎯 ${f.fit}` : ''}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
+      return `${i + 1}. ${f.verdict === 'verified' ? '✅ ' : f.verdict === 'suspicious' ? '⚠️ ' : ''}${f.title}${f.fit ? `\n   🎯 ${f.fit}` : ''}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
     }).join('\n\n');
-    const text = [`📋 ${cur.title}`, `Durum: ${REASON[reason] ?? reason} · ${findings.length} bulgu`, '', summary.slice(0, 1400),
+    const text = [`📋 ${cur.title}`, `Durum: ${REASON[reason] ?? reason} · ${findings.length} bulgu`,
+      audit ? `Denetim: %${audit.accuracy} doğruluk · ✅${audit.verified} doğrulandı · ⚠️${audit.suspicious} şüpheli · ❌${audit.rejected} elendi` : '', '', summary.slice(0, 1400),
       findings.length ? `\n— Bulgular —\n${list}` : '', findings.length > 10 ? `\n(+${findings.length - 10} bulgu daha panelde)` : '',
       '\nTam rapor: https://embay-panel.vercel.app → Botlar → Görevler'].join('\n');
     const t = await telegramSend(text);
     await logActivity(db, { connector_key: 'telegram', action: 'message_send', status: 'ok', bot_id: cur.bot_id, ref_type: 'bot_mission', ref_id: cur.id, external_id: t.messageId, summary: `Görev raporu gönderildi: ${cur.title}` });
   } catch (e) {
     await logActivity(db, { connector_key: 'telegram', action: 'message_send', status: 'failed', bot_id: cur.bot_id, ref_type: 'bot_mission', ref_id: cur.id, error: String((e as Error).message), summary: `Görev raporu gönderilemedi: ${cur.title}` });
+  }
+}
+
+const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicious: '⚠️ Şüpheli', rejected: '❌ Elendi' };
+
+/** DENETİM: her bulgunun kaynağı açılır, içerik bulguyla karşılaştırılır; ardından ayrı bir AI "hakem" gerçeklik + güncellik + amaca uygunluk kararı verir.
+ *  verified = kaynak bulguyu doğruluyor, somut ve güncel · suspicious = gerçek ama belirsiz/eski/dolaylı · rejected = uydurma, kaynakla çelişen veya amaç dışı. */
+async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[]): Promise<MissionAudit> {
+  const srcTitle = new Map(sources.map((s) => [canonical(s.url), s.title || '']));
+  const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
+    const inSources = srcTitle.has(canonical(f.url));
+    let host = ''; try { host = new URL(f.url).hostname; } catch { /* */ }
+    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || f.title}`, match: inSources };
+    const p = await fetchPage(f.url).catch(() => null);
+    const text = p?.text || '';
+    const words = norm(f.title).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5).slice(0, 8);
+    const hits = words.filter((w) => norm(text).includes(w.slice(0, Math.max(5, w.length - 2)))).length;
+    const idx = words.length ? norm(text).indexOf(words[0].slice(0, 5)) : -1;
+    const excerpt = text ? text.slice(Math.max(0, idx - 200), Math.max(0, idx - 200) + 900) : (p?.error ?? `HTTP ${p?.status ?? '?'}`);
+    return { f, reachable: Boolean(p?.ok), excerpt, match: hits >= Math.min(2, words.length) };
+  }));
+  const verdicts = new Map<number, { v: Finding['verdict']; r: string }>();
+  if (ai && checks.length) {
+    try {
+      const r = await aiCall(ai, [
+        'Sen bir DENETÇİSİN. Bir botun topladığı bulguları kaynaklarıyla karşılaştırıp gerçek ve kullanılabilir olup olmadığına karar ver. Kendi bilginle bulgu uydurma veya düzeltme.',
+        `GÖREVİN AMACI: ${cur.goal}`,
+        'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, somut (belirli proje/talep/ihale/firma) ve güncel; "suspicious" = gerçek görünüyor ama kaynak zayıf, eski, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma, genel haber/reklam ya da görevin amacına uymuyor.',
+        checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
+        'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle"}]}',
+      ].join('\n\n'));
+      const j = extractJson(r.text) as { items?: Array<{ i: number; verdict: string; reason?: string }> } | null;
+      for (const it of j?.items ?? []) if (['verified', 'suspicious', 'rejected'].includes(it.verdict)) verdicts.set(Number(it.i), { v: it.verdict as Finding['verdict'], r: String(it.reason || '').slice(0, 240) });
+      await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: 0 });
+    } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
+  }
+  checks.forEach((c, i) => {
+    const v = verdicts.get(i) ?? (c.reachable && c.match ? { v: 'verified' as const, r: 'Kaynak açıldı ve başlık kaynakta geçiyor (kural tabanlı)' }
+      : c.reachable ? { v: 'suspicious' as const, r: 'Kaynak açıldı ama bulgu metinde net görülmedi (kural tabanlı)' } : { v: 'suspicious' as const, r: 'Kaynak sayfası okunamadı (kural tabanlı)' });
+    // Güvenlik: kaynağı açılamayan ve toplanan kaynaklarda da olmayan bulgu "doğrulandı" sayılmaz
+    c.f.verdict = !c.reachable && v.v === 'verified' ? 'suspicious' : v.v; c.f.verdict_reason = v.r;
+  });
+  for (const f of findings.slice(20)) { f.verdict = 'suspicious'; f.verdict_reason = 'Denetim sınırı (ilk 20 bulgu) dışında kaldı'; }
+  const count = (v: string) => findings.filter((f) => f.verdict === v).length;
+  const audit: MissionAudit = { total: findings.length, verified: count('verified'), suspicious: count('suspicious'), rejected: count('rejected'),
+    accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(),
+    rejected_items: findings.filter((f) => f.verdict === 'rejected').map((f) => ({ title: f.title, url: f.url, reason: f.verdict_reason ?? '' })).slice(0, 20) };
+  await logStep(db, cur, cur.step_count + 1, 'audit', `Denetim: ${audit.total} bulgu kontrol edildi · ✅${audit.verified} doğrulandı · ⚠️${audit.suspicious} şüpheli · ❌${audit.rejected} elendi · doğruluk %${audit.accuracy}`, null, audit);
+  return audit;
+}
+
+/** KOÇ: görevin günlüğü + denetim sonucuna bakıp yeteneğin eksiğini teşhis eder, somut iyileştirme önerir (Akademi'de onaya düşer). */
+async function coachMission(db: Db, cur: MissionRow, ai: AiChoice, ctx: { skills: Array<{ id: string; name: string }>; terms: string[]; text: string }, audit: MissionAudit | null, steps: Array<{ action: string; message: string }>) {
+  try {
+    const log = steps.filter((s) => ['news_search', 'ai_research', 'audit', 'error'].includes(s.action)).map((s) => `[${s.action}] ${s.message}`).join('\n').slice(0, 5000);
+    const r = await aiCall(ai, [
+      'Sen bir bot KOÇUSUN. Aşağıdaki araştırma görevinin günlüğünü ve denetim sonucunu incele; botun neden az/alakasız/doğrulanamayan bulgu getirdiğini teşhis et ve yeteneğini iyileştirecek SOMUT öneriler ver.',
+      `GÖREV: ${cur.title}\nAMAÇ: ${cur.goal}\nKULLANILAN YETENEKLER: ${ctx.skills.map((s) => s.name).join(', ') || '(yok)'}\nMEVCUT ARAMA TERİMLERİ: ${ctx.terms.join(', ') || cur.search_for || '-'}`,
+      audit ? `DENETİM: ${audit.total} bulgu · doğrulandı ${audit.verified} · şüpheli ${audit.suspicious} · elendi ${audit.rejected} · doğruluk %${audit.accuracy}\nELENENLER: ${(audit.rejected_items || []).map((x) => `${x.title} (${x.reason})`).join(' | ').slice(0, 1500)}` : 'DENETİM: hiç bulgu yok.',
+      `GÜNLÜK:\n${log}`,
+      'Kurallar: yalnızca yasal, herkese açık kaynaklar (KVKK); giriş gerektiren veya kazımayı yasaklayan platformları önerme. Arama terimleri Türkçe, kısa ve gerçek insanların/firmaların yazacağı ifadeler olsun (ör. "villa yaptırmak istiyorum", "kat karşılığı müteahhit aranıyor", "manitou operatörü aranıyor").',
+      'YALNIZCA JSON döndür: {"diagnosis":"2-4 cümle teşhis","instructions_add":"yeteneğin talimatına eklenecek 1-3 cümle kural (gerekmiyorsa boş)","search_terms_add":["..."],"search_terms_remove":["..."],"sources_add":["alanadi.com"]}',
+    ].join('\n\n'));
+    await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: 0 });
+    const j = extractJson(r.text) as { diagnosis?: string; instructions_add?: string; search_terms_add?: string[]; search_terms_remove?: string[]; sources_add?: string[] } | null;
+    if (!j?.diagnosis) return null;
+    const arr = (a: unknown, n: number) => (Array.isArray(a) ? a.map((x) => String(x).trim()).filter((x) => x.length > 1 && x.length < 80).slice(0, n) : []);
+    const skillId = ctx.skills[0]?.id;
+    if (skillId) {
+      await db.from('skill_improvements').insert({ skill_id: skillId, mission_id: cur.id, diagnosis: String(j.diagnosis).slice(0, 2000),
+        instructions_add: String(j.instructions_add || '').slice(0, 1500) || null, search_terms_add: arr(j.search_terms_add, 10),
+        search_terms_remove: arr(j.search_terms_remove, 10), sources_add: arr(j.sources_add, 8).map((x) => x.replace(/^https?:\/\//, '').replace(/\/.*$/, '')) });
+    }
+    await logStep(db, cur, cur.step_count + 1, 'coach', `Koç: ${String(j.diagnosis).slice(0, 400)}${skillId ? ' → iyileştirme önerisi Akademi\'ye gönderildi' : ''}`);
+    return String(j.diagnosis).slice(0, 2000);
+  } catch (e) {
+    await logStep(db, cur, cur.step_count + 1, 'error', `Koç değerlendirmesi yapılamadı: ${String((e as Error).message).slice(0, 200)}`);
+    return null;
   }
 }
 

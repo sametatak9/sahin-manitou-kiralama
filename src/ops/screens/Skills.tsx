@@ -4,29 +4,31 @@ import { errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import type { Skill, Tool } from '../lib/types';
 import { useSession } from '../session';
+import { Academy } from '../components/Academy';
+import type { Bot } from '../lib/types';
 import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Pill, StateView, Tabs } from '../ui';
 
 export function SkillsScreen() {
   const session = useSession();
   const isAdmin = session.role === 'admin';
-  const [tab, setTab] = useState<'skills' | 'tools'>('skills');
+  const [tab, setTab] = useState<'academy' | 'skills' | 'tools'>('academy');
   const [editing, setEditing] = useState<Skill | 'new' | null>(null);
   const [cat, setCat] = useState('all');
   const q = useQuery(async () => {
-    const [s, t] = await Promise.all([db().from('automation_skills').select('*, automation_skill_tools(tool_id)').order('display_name'), db().from('automation_tools').select('*').order('category')]);
-    return { skills: unwrap(s) as Skill[], tools: unwrap(t) as Tool[] };
-  }, { skills: [] as Skill[], tools: [] as Tool[] }, []);
+    const [s, t, b] = await Promise.all([db().from('automation_skills').select('*, automation_skill_tools(tool_id)').order('display_name'), db().from('automation_tools').select('*').order('category'), db().from('automation_bots').select('*').is('archived_at', null)]);
+    return { skills: unwrap(s) as Skill[], tools: unwrap(t) as Tool[], bots: unwrap(b) as Bot[] };
+  }, { skills: [] as Skill[], tools: [] as Tool[], bots: [] as Bot[] }, []);
   const cats = ['all', ...new Set(q.data.skills.map((s) => s.category))];
   const toggleTool = async (t: Tool, patch: Partial<Tool>) => { await db().from('automation_tools').update(patch).eq('id', t.id); q.reload(); };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div><h2 className="font-display text-xl font-semibold text-ink-100">Skill Market & Tool Registry</h2><p className="text-xs text-ink-400">Botlar yalnızca skill’lerine bağlı, registry’de aktif tool’ları çalıştırabilir. Sınırsız kod çalıştırma yok.</p></div>
-        <div className="flex gap-2"><Tabs value={tab} onChange={setTab} items={[{ id: 'skills', label: 'Skill’ler', count: q.data.skills.length }, { id: 'tools', label: 'Tool’lar', count: q.data.tools.length }]} />
+        <div><h2 className="font-display text-xl font-semibold text-ink-100">Akademi & Yetenek Kütüphanesi</h2><p className="text-xs text-ink-400">Yetenekler Akademi’de eğitilir ve test edilir; botlar görevlerde yalnızca onaylı yetenekleri kullanır.</p></div>
+        <div className="flex gap-2"><Tabs value={tab} onChange={setTab} items={[{ id: 'academy', label: 'Akademi' }, { id: 'skills', label: 'Skill’ler', count: q.data.skills.length }, { id: 'tools', label: 'Tool’lar', count: q.data.tools.length }]} />
           {tab === 'skills' && isAdmin && <Button variant="primary" onClick={() => setEditing('new')} icon={<Plus className="w-4 h-4" />}>Skill</Button>}</div>
       </div>
-      {q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : tab === 'skills' ? (
+      {tab === 'academy' ? <Academy bots={q.data.bots} /> : q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : tab === 'skills' ? (
         <>
           <div className="flex flex-wrap gap-1.5">{cats.map((c) => <button key={c} onClick={() => setCat(c)} className={cx('rounded-full px-3 py-1 text-[11px] font-semibold ring-1', cat === c ? 'ring-brand-green bg-ink-750 text-ink-100' : 'ring-ink-700 text-ink-400')}>{c === 'all' ? 'Tümü' : c}</button>)}</div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
