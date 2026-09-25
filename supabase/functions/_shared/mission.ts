@@ -452,9 +452,9 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (ai) try {
       const ctx = await botContext(db, m.bot_id);
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
-      // Arama yetkisi olmayan/ücretsiz modeller için: bu adımın terimiyle gerçek haber/duyuru sonuçları
+      // Her adımda (AI hangisi olursa olsun; Claude kredisi yoksa zincir aramasız modellere düşer) bu adımın terimiyle gerçek haber/duyuru sonuçları
       let newsNote = '';
-      if (!m.target_url && terms.length && ai.provider !== 'anthropic') {
+      if (!m.target_url && terms.length) {
         const q = terms[(step - 1) % terms.length];
         const news = await newsSearch(/stanbul/i.test(q) ? q : `${q} İstanbul`);
         for (const n of news) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
