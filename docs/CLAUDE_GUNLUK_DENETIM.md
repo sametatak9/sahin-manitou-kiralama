@@ -14,3 +14,9 @@ Her gün (Pzt–Cmt ~10:00, İstanbul) Claude şu adımları uygular (Supabase p
 5. Telegram'a kısa "Claude denetim özeti" gönderir (panelde kayıtlı TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID ile, `net.http_post`).
 
 Kurallar: DROP/DELETE yok; yalnızca yasal, herkese açık kaynaklar; anahtar/secret asla yazdırılmaz.
+
+## Arama turu (Claude = arama motoru)
+Botların web arama anahtarı (Tavily) yokken — ve varken botların kaçırdıklarını tamamlamak için — Claude her gün
+`manitou_is_bulma` ve `ozel_insaat_is_bulma` yeteneklerinin arama terimleriyle kendisi web araması yapar; gerçek ve somut
+fırsatları (kurumsal iletişimle) `bot_missions`'a `status='finalizing'` kaydı olarak ekler. Worker kaydı normal görev gibi
+**denetler** (kaynak kontrol + AI hakem), raporlar ve Telegram'a gönderir. İlk tur: 25.09.2026 — Manitou %100 (3/3 doğrulandı), İnşaat %50.
