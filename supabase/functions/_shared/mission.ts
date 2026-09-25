@@ -5,6 +5,9 @@ import { budgetBlock, recordUsage } from './ai/budget.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, extractJson } from './ai/types.ts';
 import { COMPAT, getAiKey, GROQ_URL } from './ai/keys.ts';
+import { telegramSend } from './connectors/messaging.ts';
+import { loadAppSecrets, secret as appSecret } from './secrets.ts';
+import { logActivity } from './activity.ts';
 
 type Db = SupabaseClient;
 
@@ -574,7 +577,27 @@ ${cur.stop_condition ? `<tr><td>Bitiş koşulu</td><td>${esc(cur.stop_condition)
 
   await db.from('bot_missions').update({ status, finish_reason: reason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null }).eq('id', m.id);
   await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu`);
+  await sendMissionTelegram(db, cur, reason, summary, findings);
   return { mission_id: m.id, finalized: true, reason, findings: findings.length };
+}
+
+/** Görev bitince özet + bulgular Telegram'a (yönetici). Telegram tanımlı değilse sessizce atlanır; hata görevi bozmaz, günlüğe yazılır. */
+async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summary: string, findings: Finding[]) {
+  try {
+    await loadAppSecrets(db);
+    if (!appSecret('TELEGRAM_BOT_TOKEN') || !appSecret('TELEGRAM_CHAT_ID')) return;
+    const list = findings.slice(0, 10).map((f, i) => {
+      const facts = [f.company && `🏢 ${f.company}`, f.location && `📍 ${f.location}`, f.posted && `🗓 ${f.posted}`, f.phone && `📞 ${f.phone}`].filter(Boolean).join(' · ');
+      return `${i + 1}. ${f.title}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
+    }).join('\n\n');
+    const text = [`📋 ${cur.title}`, `Durum: ${REASON[reason] ?? reason} · ${findings.length} bulgu`, '', summary.slice(0, 1400),
+      findings.length ? `\n— Bulgular —\n${list}` : '', findings.length > 10 ? `\n(+${findings.length - 10} bulgu daha panelde)` : '',
+      '\nTam rapor: https://embay-panel.vercel.app → Botlar → Görevler'].join('\n');
+    const t = await telegramSend(text);
+    await logActivity(db, { connector_key: 'telegram', action: 'message_send', status: 'ok', bot_id: cur.bot_id, ref_type: 'bot_mission', ref_id: cur.id, external_id: t.messageId, summary: `Görev raporu gönderildi: ${cur.title}` });
+  } catch (e) {
+    await logActivity(db, { connector_key: 'telegram', action: 'message_send', status: 'failed', bot_id: cur.bot_id, ref_type: 'bot_mission', ref_id: cur.id, error: String((e as Error).message), summary: `Görev raporu gönderilemedi: ${cur.title}` });
+  }
 }
 
 // ── Worker girişi ───────────────────────────────────────────────────────────

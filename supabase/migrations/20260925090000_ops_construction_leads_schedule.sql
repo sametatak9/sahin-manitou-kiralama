@@ -1,0 +1,11 @@
+-- EMBAY AI OPS — Otomatik görev: "İnşaat iş fırsatları" (Pzt–Cmt 09:00, İstanbul). Sonuç raporu Telegram'a da gider.
+-- Yalnızca herkese açık kurumsal kaynaklar; kişisel veri toplanmaz (KVKK). Additive; DROP yok.
+insert into public.mission_schedules (bot_id, title, goal, search_for, report_spec, model, duration_minutes, run_hour, weekdays, only_new, created_by, last_run_at)
+select (select id from public.automation_bots where slug = 'lead-discovery-bot'),
+  'İnşaat iş fırsatları — günlük yönlendirme',
+  'İstanbul ve çevresinde (Kocaeli, Tekirdağ dahil) Embay Yapı (inşaat, kentsel dönüşüm, müteahhitlik) ve Şahin Manitou (teleskopik yükleyici / manitou kiralama) için YENİ iş fırsatlarını bul. Aranacaklar: yeni başlayan veya ruhsat alan konut/ticari projeler, kentsel dönüşüm kararları ve yıkım/yeniden yapım duyuruları, belediye ve kamu ihaleleri (yapım, hafriyat, iş makinesi kiralama), müteahhit arayan kooperatif ve site yönetimi duyuruları, iş makinesi/manitou kiralama talebi içeren kurumsal ilanlar. Kaynaklar: ilan.gov.tr, EKAP duyuruları, TOKİ, İBB ve ilçe belediyeleri, Çevre Şehircilik Bakanlığı kentsel dönüşüm duyuruları, sektör haber siteleri (yapi.com.tr, emlakkulisi, insaathaber vb.), firmaların kendi kurumsal sayfaları. Her fırsat ayrı bulgu: title = fırsatın kısa adı, company = işi veren kurum/firma, location = ilçe, posted = yayın tarihi, detail = işin ne olduğu + neden bizim için uygun (inşaat mı, makine kiralama mı) + önerilen ilk adım (ara / teklif ver / ziyaret et), phone/email = yalnızca kurumun ilanda yayımladığı resmi iletişim, url = kaynağın kendi linki. Şahıslara ait kişisel veri toplama; yalnızca kaynağı gösterilebilen gerçek kayıtlar.',
+  'kentsel dönüşüm, yeni inşaat projesi, müteahhit aranıyor, yapım ihalesi, hafriyat, iş makinesi kiralama, manitou, teleskopik yükleyici, İstanbul',
+  'Yönlendirici rapor: her fırsat için ne, kim, nerede, ne zaman, neden uygun (Embay Yapı / Şahin Manitou), önerilen ilk adım ve kaynak link. En umut verici 3 fırsatı başta öner.',
+  null, 10, 9, '{1,2,3,4,5,6}', true,
+  (select user_id from public.team_members where role = 'admin' order by created_at limit 1), now()
+where not exists (select 1 from public.mission_schedules where title = 'İnşaat iş fırsatları — günlük yönlendirme');
