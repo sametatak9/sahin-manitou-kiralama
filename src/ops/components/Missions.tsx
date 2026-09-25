@@ -266,6 +266,7 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
             <div className="space-y-2">{m.findings.map((f, i) => (
               <div key={i} className="rounded-xl ring-1 ring-ink-700 p-3">
                 <div className="text-sm font-semibold text-ink-100">{f.title}{f.verdict && <span className={cx('ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold', f.verdict === 'verified' ? 'bg-emerald-100 text-emerald-800' : f.verdict === 'suspicious' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')}>{f.verdict === 'verified' ? '✅ Doğrulandı' : f.verdict === 'suspicious' ? '⚠️ Şüpheli' : '❌ Elendi'}</span>}</div>
+                {f.summary && <div className="text-xs text-ink-200 mt-1 rounded-lg bg-ink-850 border-l-2 border-brand-green px-2 py-1">📝 {f.summary}</div>}
                 {f.fit && <div className="text-[11px] text-emerald-800 mt-0.5">🎯 {f.fit}</div>}
                 {f.verdict_reason && <div className="text-[11px] text-ink-400 mt-0.5">Denetim: {f.verdict_reason}</div>}
                 <div className="text-xs text-ink-300 mt-0.5 whitespace-pre-line">{f.detail}</div>

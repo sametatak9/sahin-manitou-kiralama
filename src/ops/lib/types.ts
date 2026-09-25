@@ -66,7 +66,7 @@ export interface OpsStatus { ai: { anthropic: boolean; openai: boolean; gemini: 
 export interface MissionFinding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
-  relevance?: number; fit?: string; verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string;
+  relevance?: number; fit?: string; verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
 }
 export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
 export interface Mission {

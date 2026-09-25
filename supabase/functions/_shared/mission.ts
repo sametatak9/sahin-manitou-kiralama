@@ -24,7 +24,7 @@ export interface Finding {
   // Liste/ilan görevlerinde yapılandırılmış alanlar (yalnızca kurumun kendi yayınladığı bilgiler)
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
   relevance?: number; fit?: string;
-  verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string;
+  verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
 }
 export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
 interface Source { url: string; title?: string }
@@ -720,7 +720,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td{padding:4px 6px;bord
 .f{border:1px solid #e1f3e7;border-radius:12px;padding:10px 12px;margin:8px 0}.f b{display:block}.f q{display:block;color:#3e5549;font-size:12px;margin-top:4px;font-style:italic}
 a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;line-height:1.6}.log{font-family:ui-monospace,monospace;font-size:11px;color:#3e5549}.badge{display:inline-block;background:#e1f3e7;color:#115a31;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #16a34a}.brand svg{width:44px;height:44px}.brand b{font-size:15px;display:block}.brand small{color:#5a7266;font-size:11px}
-.facts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px}.v{display:inline-block;border-radius:999px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px}.v-verified{background:#dcfce7;color:#166534}.v-suspicious{background:#fef3c7;color:#92400e}.v-rejected{background:#fee2e2;color:#991b1b}.audit{display:flex;gap:10px;flex-wrap:wrap;font-size:13px}.audit div{background:#f3f9f5;border-radius:10px;padding:6px 10px}.facts span,.facts a{background:#f3f9f5;border-radius:8px;padding:2px 8px;text-decoration:none}
+.facts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px}.v{display:inline-block;border-radius:999px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px}.v-verified{background:#dcfce7;color:#166534}.v-suspicious{background:#fef3c7;color:#92400e}.v-rejected{background:#fee2e2;color:#991b1b}.sum2{background:#f3f9f5;border-left:3px solid #16a34a;border-radius:8px;padding:6px 10px;margin:6px 0;font-size:13px;line-height:1.5}.audit{display:flex;gap:10px;flex-wrap:wrap;font-size:13px}.audit div{background:#f3f9f5;border-radius:10px;padding:6px 10px}.facts span,.facts a{background:#f3f9f5;border-radius:8px;padding:2px 8px;text-decoration:none}
 @media print{body{background:#fff;padding:0}main{border:0}}</style></head>
 <body><main><div class="brand">${LOGO_SVG}<div><b>Embay Yapı & Şahin Manitou</b><small>Bot görev raporu · 0531 436 29 04 · sahin-manitou-kiralama.vercel.app</small></div></div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}${reason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
 <h2>Görev</h2><table><tr><td>Bot</td><td>${esc(ctx.name)}</td></tr><tr><td>Amaç</td><td>${esc(cur.goal)}</td></tr>
@@ -732,7 +732,7 @@ ${cur.stop_condition ? `<tr><td>Bitiş koşulu</td><td>${esc(cur.stop_condition)
 ${audit ? `<h2>Denetim (doğruluk kontrolü)</h2><div class="audit"><div>Doğruluk: <b>%${audit.accuracy}</b></div><div>✅ Doğrulandı: <b>${audit.verified}</b></div><div>⚠️ Şüpheli: <b>${audit.suspicious}</b></div><div>❌ Elendi: <b>${audit.rejected}</b></div></div>${audit.rejected_items?.length ? `<ul class="k">${audit.rejected_items.map((r) => `<li>Elendi: ${esc(r.title)} — ${esc(r.reason)}</li>`).join('')}</ul>` : ''}` : ''}
 ${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachNote)}</div>` : ''}
 <h2>Özet</h2><div class="sum">${esc(summary)}</div>
-<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}${f.verdict ? `<span class="v v-${f.verdict}">${VERDICT[f.verdict]}</span>` : ''}</b>${f.verdict_reason ? `<div class="k">Denetim: ${esc(f.verdict_reason)}</div>` : ''}${esc(f.detail)}${factsHtml(f)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
+<h2>Bulgular (${findings.length})</h2>${findings.length ? findings.map((f, i) => `<div class="f"><b>${i + 1}. ${esc(f.title)}${f.verdict ? `<span class="v v-${f.verdict}">${VERDICT[f.verdict]}</span>` : ''}</b>${f.summary ? `<div class="sum2">📝 ${esc(f.summary)}</div>` : ''}${f.verdict_reason ? `<div class="k">Denetim: ${esc(f.verdict_reason)}</div>` : ''}${esc(f.detail)}${factsHtml(f)}${f.evidence ? `<q>“${esc(f.evidence)}”</q>` : ''}<div class="k">Kaynak: <a href="${safeHref(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a> · adım ${f.step}</div></div>`).join('') : '<p>Veri bulunamadı.</p>'}
 <h2>İncelenen kaynaklar (${sources.length})</h2><ul>${sources.slice(0, 60).map((s) => `<li><a href="${safeHref(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join('')}</ul>
 <h2>Adım günlüğü</h2><div class="log">${(steps || []).map((s) => `<div>#${s.step_no} [${esc(s.action)}] ${esc(s.message)}</div>`).join('')}</div>
 <p class="k" style="margin-top:24px">Bu rapor gerçek HTTP istekleri ve AI araştırma çağrılarından üretilmiştir; kaynağı doğrulanamayan bilgiler rapora alınmaz. Veriler yalnızca herkese açık kurumsal kaynaklardan, KVKK ve site kullanım koşullarına uygun toplanır.</p></main></body></html>`;
@@ -752,7 +752,7 @@ async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summ
     if (!appSecret('TELEGRAM_BOT_TOKEN') || !appSecret('TELEGRAM_CHAT_ID')) return;
     const list = findings.slice(0, 10).map((f, i) => {
       const facts = [f.company && `🏢 ${f.company}`, f.location && `📍 ${f.location}`, f.posted && `🗓 ${f.posted}`, f.phone && `📞 ${f.phone}`].filter(Boolean).join(' · ');
-      return `${i + 1}. ${f.verdict === 'verified' ? '✅ ' : f.verdict === 'suspicious' ? '⚠️ ' : ''}${f.title}${f.fit ? `\n   🎯 ${f.fit}` : ''}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
+      return `${i + 1}. ${f.verdict === 'verified' ? '✅ ' : f.verdict === 'suspicious' ? '⚠️ ' : ''}${f.title}${f.summary ? `\n   📝 ${f.summary.slice(0, 260)}` : ''}${f.fit ? `\n   🎯 ${f.fit}` : ''}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
     }).join('\n\n');
     const text = [`📋 ${cur.title}`, `Durum: ${REASON[reason] ?? reason} · ${findings.length} bulgu`,
       audit ? `Denetim: %${audit.accuracy} doğruluk · ✅${audit.verified} doğrulandı · ⚠️${audit.suspicious} şüpheli · ❌${audit.rejected} elendi` : '', '', summary.slice(0, 1400),
@@ -789,14 +789,14 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
   const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
     const inSources = srcTitle.has(canonical(f.url));
     let host = ''; try { host = new URL(f.url).hostname; } catch { /* */ }
-    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || f.title}`, match: inSources };
+    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || f.title}`, match: inSources, desc: '' };
     const p = await fetchPage(f.url).catch(() => null);
     const text = p?.text || '';
     const words = norm(f.title).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5).slice(0, 8);
     const hits = words.filter((w) => norm(text).includes(w.slice(0, Math.max(5, w.length - 2)))).length;
     const idx = words.length ? norm(text).indexOf(words[0].slice(0, 5)) : -1;
     const excerpt = text ? text.slice(Math.max(0, idx - 200), Math.max(0, idx - 200) + 900) : (p?.error ?? `HTTP ${p?.status ?? '?'}`);
-    return { f, reachable: Boolean(p?.ok), excerpt, match: hits >= Math.min(2, words.length) };
+    return { f, reachable: Boolean(p?.ok), excerpt, match: hits >= Math.min(2, words.length), desc: String(p?.description || p?.og?.['og:description'] || '').trim() };
   }));
   const verdicts = new Map<number, { v: Finding['verdict']; r: string }>();
   if (ai && checks.length) {
@@ -806,10 +806,14 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
         `GÖREVİN AMACI: ${cur.goal}`,
         'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, somut (belirli proje/talep/ihale/firma) ve güncel; "suspicious" = gerçek görünüyor ama kaynak zayıf, eski, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma, genel haber/reklam ya da görevin amacına uymuyor.',
         checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
-        'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle"}]}',
+        'Her bulgu için ayrıca kaynağa dayanan 2-3 cümlelik TÜRKÇE ÖZET yaz: ne, kim, nerede, ne zaman, büyüklük; ve bizim için ne anlama geldiği. Kaynakta olmayan bilgi ekleme.',
+        'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle","summary":"2-3 cümle özet"}]}',
       ].join('\n\n'));
-      const j = extractJson(r.text) as { items?: Array<{ i: number; verdict: string; reason?: string }> } | null;
-      for (const it of j?.items ?? []) if (['verified', 'suspicious', 'rejected'].includes(it.verdict)) verdicts.set(Number(it.i), { v: it.verdict as Finding['verdict'], r: String(it.reason || '').slice(0, 240) });
+      const j = extractJson(r.text) as { items?: Array<{ i: number; verdict: string; reason?: string; summary?: string }> } | null;
+      for (const it of j?.items ?? []) {
+        if (['verified', 'suspicious', 'rejected'].includes(it.verdict)) verdicts.set(Number(it.i), { v: it.verdict as Finding['verdict'], r: String(it.reason || '').slice(0, 240) });
+        const c = checks[Number(it.i)]; if (c && it.summary && String(it.summary).trim().length > 20) c.f.summary = String(it.summary).trim().slice(0, 700);
+      }
       await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: 0 });
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
@@ -819,6 +823,11 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
       : c.reachable ? { v: 'suspicious' as const, r: 'Kaynak açıldı ama bulgu metinde net görülmedi (kural tabanlı)' } : { v: 'suspicious' as const, r: 'Kaynak sayfası okunamadı (kural tabanlı)' });
     // Güvenlik: kaynağı açılamayan ve toplanan kaynaklarda da olmayan bulgu "doğrulandı" sayılmaz
     c.f.verdict = !c.reachable && v.v === 'verified' ? 'suspicious' : v.v; c.f.verdict_reason = v.r;
+    // AI özeti yoksa: sayfanın kendi açıklaması veya kaynaktan ilgili kesit (uydurma yok)
+    if (!c.f.summary) {
+      const src = (c.desc && c.desc.length > 40 ? c.desc : c.reachable ? c.excerpt.replace(/\s+/g, ' ').trim() : '') || '';
+      if (src.length > 40) c.f.summary = `Kaynaktan: ${src.slice(0, 420)}${src.length > 420 ? '…' : ''}`;
+    }
   });
   for (const f of findings.slice(20)) { f.verdict = 'suspicious'; f.verdict_reason = 'Denetim sınırı (ilk 20 bulgu) dışında kaldı'; }
   const count = (v: string) => findings.filter((f) => f.verdict === v).length;
