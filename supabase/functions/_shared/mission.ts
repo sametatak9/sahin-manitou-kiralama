@@ -741,6 +741,7 @@ ${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachN
     ...(audit ? { audit, findings: allFindings } : {}), ...(coachNote ? { coach_note: coachNote } : {}) }).eq('id', m.id);
   await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
   await saveSocialProspects(db, cur, findings);
+  await savePortfolio(db, cur, findings);
   await sendMissionTelegram(db, cur, reason, summary, findings, audit);
   return { mission_id: m.id, finalized: true, reason, findings: findings.length };
 }
@@ -784,6 +785,77 @@ async function saveSocialProspects(db: Db, cur: MissionRow, findings: Finding[])
     if (!error) n++; else console.error('prospect', error.message);
   }
   if (n) await logStep(db, cur, cur.step_count + 1, 'prospects', `${n} işletme hesabı takip listesine eklendi (Raporlar → Takip listesi)`);
+}
+
+// İstanbul ilçeleri (portföyde bölge filtresi için)
+const ILCELER = ['Çatalca', 'Silivri', 'Büyükçekmece', 'Küçükçekmece', 'Arnavutköy', 'Başakşehir', 'Esenyurt', 'Beylikdüzü', 'Avcılar', 'Bahçelievler', 'Bağcılar', 'Güngören', 'Esenler',
+  'Bayrampaşa', 'Zeytinburnu', 'Bakırköy', 'Eyüpsultan', 'Sultangazi', 'Gaziosmanpaşa', 'Fatih', 'Beyoğlu', 'Şişli', 'Kağıthane', 'Sarıyer', 'Beşiktaş', 'Üsküdar', 'Kadıköy', 'Ataşehir',
+  'Ümraniye', 'Maltepe', 'Kartal', 'Pendik', 'Tuzla', 'Sultanbeyli', 'Sancaktepe', 'Çekmeköy', 'Beykoz', 'Şile', 'Adalar'];
+const ILLER = ['İstanbul', 'Kocaeli', 'Tekirdağ', 'Kırklareli', 'Edirne', 'Sakarya', 'Bursa', 'Yalova', 'Ankara', 'İzmir'];
+function placeOf(text: string) {
+  const t = norm(text);
+  const ilce = ILCELER.find((i) => t.includes(norm(i))) ?? null;
+  const il = ilce ? 'İstanbul' : ILLER.find((i) => t.includes(norm(i))) ?? null;
+  return { il, ilce };
+}
+function projectType(text: string) {
+  const t = norm(text);
+  if (/kentsel donusum|kat karsiligi|riskli yapi/.test(t)) return 'kentsel_donusum';
+  if (/villa|mustakil|konut|daire|apartman|prefabrik|betonarme ev|site/.test(t)) return 'konut';
+  if (/lojistik|depo|antrepo/.test(t)) return 'depo_lojistik';
+  if (/fabrika|sanayi|tesis|uretim/.test(t)) return 'fabrika';
+  if (/avm|otel|ofis|plaza|ticari|magaza/.test(t)) return 'ticari';
+  if (/yol|kopru|tunel|altyapi|metro|dsi/.test(t)) return 'altyapi';
+  if (/belediye|okul|hastane|toki|kamu/.test(t)) return 'kamu';
+  return 'diger';
+}
+function projectStage(text: string) {
+  const t = norm(text);
+  if (/temel atma|temeli atil|kazi|hafriyat/.test(t)) return 'kazi';
+  if (/kaba insaat|karkas|beton dokum/.test(t)) return 'kaba_insaat';
+  if (/ince insaat|tadilat|dis cephe|mantolama/.test(t)) return 'ince_insaat';
+  if (/ihale/.test(t)) return 'ihale';
+  if (/ruhsat|proje onay/.test(t)) return 'ruhsat';
+  if (/yikim/.test(t)) return 'yikim';
+  if (/planlan|yapilacak|baslayacak|talep|ariyor/.test(t)) return 'planlama';
+  if (/tamamlandi|teslim edildi/.test(t)) return 'tamamlandi';
+  return 'bilinmiyor';
+}
+
+/** PORTFÖY: denetimden geçen (doğrulandı, ya da alaka puanı ≥7 olan şüpheli) bulgular Firma Portföyü'ne proje + firma olarak işlenir.
+ *  Aynı proje/firma tekrar gelirse birleştirilir (RPC içinde tekilleştirme). Elenen, sosyal profil ve eğitim-testi bulguları alınmaz. Yalnızca kurumsal, herkese açık bilgi. */
+async function savePortfolio(db: Db, cur: MissionRow, findings: Finding[]) {
+  if (cur.purpose === 'skill_test') return;
+  let projects = 0, companies = 0;
+  for (const f of findings) {
+    if (f.verdict === 'rejected' || !/^https?:\/\//i.test(f.url || '') || socialProfile(f.url)) continue;
+    if (f.verdict !== 'verified' && (f.relevance ?? 0) < 7) continue;
+    const text = `${f.title} ${f.detail} ${f.location ?? ''} ${f.fit ?? ''}`;
+    const { il, ilce } = placeOf(`${f.location ?? ''} ${f.title} ${f.detail}`);
+    const note = [f.verdict === 'verified' ? '✅ Denetimde doğrulandı.' : '⚠️ Şüpheli — aramadan önce kaynağı kontrol edin.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
+      .filter(Boolean).join('\n').slice(0, 1500);
+    const score = f.verdict === 'verified' ? Math.max(70, (f.relevance ?? 7) * 10) : Math.min(60, (f.relevance ?? 6) * 8);
+    let projectId: string | null = null;
+    try {
+      const { data, error } = await db.rpc('portfolio_upsert_project', { p: { name: f.title.slice(0, 200), project_type: projectType(text), stage: projectStage(text), il, ilce, address: f.location ?? null,
+        estimated_need: /manitou|telehandler|teleskop|forklift|vinc/.test(norm(`${cur.title} ${cur.search_for ?? ''}`)) ? 'Manitou / malzeme kaldırma ihtiyacı olabilir' : null,
+        source_url: f.url, source_title: f.title.slice(0, 200), ai_notes: note, priority_score: score, priority_reasons: [f.verdict ?? 'unverified', ...(f.fit ? [f.fit.slice(0, 120)] : [])], source: 'bot_mission' }, p_bot_id: cur.bot_id, p_run_id: null, p_finding_id: null });
+      if (error) throw error;
+      projectId = (data as { id?: string; project_id?: string } | null)?.id ?? (data as { project_id?: string } | null)?.project_id ?? null;
+      projects++;
+    } catch (e) { console.error('portfolio project', String((e as Error).message)); }
+    if (f.company && f.company.trim().length >= 2) {
+      try {
+        const { data, error } = await db.rpc('portfolio_upsert_company', { p: { firm_name: f.company.slice(0, 160), website: f.website ?? null, public_phone: f.phone ?? null, public_email: f.email ?? null,
+          il, ilce, address: f.location ?? null, need: cur.search_for ?? null, project: f.title.slice(0, 200), ai_notes: note, priority_score: score, source_url: f.url, source: 'bot_mission' }, p_bot_id: cur.bot_id, p_run_id: null, p_finding_id: null });
+        if (error) throw error;
+        companies++;
+        const companyId = (data as { id?: string; company_id?: string } | null)?.id ?? (data as { company_id?: string } | null)?.company_id ?? null;
+        if (projectId && companyId) await db.rpc('portfolio_link', { p_project_id: projectId, p_company_id: companyId, p_role: 'diger', p_source_url: f.url });
+      } catch (e) { console.error('portfolio company', String((e as Error).message)); }
+    }
+  }
+  if (projects || companies) await logStep(db, cur, cur.step_count + 1, 'portfolio', `Firma Portföyü: ${projects} proje, ${companies} firma işlendi (yeni veya mevcut kayıtla birleştirildi)`);
 }
 
 const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicious: '⚠️ Şüpheli', rejected: '❌ Elendi' };
