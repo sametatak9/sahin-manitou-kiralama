@@ -29,7 +29,7 @@ export function ConnectionsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(() => {
     const p = state.params;
-    if (p.get('connected') === 'meta' && p.get('ig') === '0') return { tone: 'warn', text: `Facebook sayfanız bağlandı (${p.get('pages')} sayfa), ancak sayfaya bağlı bir Instagram profesyonel hesabı bulunamadı. Instagram → Ayarlar → Hesap türü → Profesyonel hesap; ardından Facebook sayfası ayarlarından Instagram hesabını bağlayıp “Yeniden bağla”ya dokunun.` };
+    if (p.get('connected') === 'meta' && p.get('ig') === '0') return { tone: 'warn', text: `Facebook sayfanız bağlandı (${p.get('pages')} sayfa). Instagram’ı da bağlamak için aşağıda Instagram kartındaki “Facebook sayfası üzerinden” düğmesine dokunun (Facebook kartındaki “Yeniden bağla” yalnızca Facebook’u bağlar). Önce: Instagram profesyonel hesap olmalı ve Facebook sayfası → Ayarlar → Bağlantılı hesaplar’dan sayfaya bağlanmış olmalı.` };
     if (p.get('connected') === 'instagram') return { tone: 'ok', text: `Instagram @${p.get('ig_user')} bağlandı. Instagram botları aktif oldu; Yayın Kuyruğu’ndaki paylaşımlar saatinde gönderilecek.` };
     if (p.get('connected')) return { tone: 'ok', text: `${p.get('connected') === 'meta' ? `Facebook (${p.get('pages')} sayfa) ve Instagram (${p.get('ig')} hesap) bağlandı` : p.get('connected') === 'youtube' ? 'YouTube kanalı bağlandı' : 'Canva bağlandı'}. İlgili botlar aktif oldu; Yayın Kuyruğu’ndaki paylaşımlar saatinde gönderilecek.` };
     if (p.get('oauth_error')) return { tone: 'error', text: `Bağlantı tamamlanamadı: ${p.get('oauth_error')}. Tekrar “Hesabımla bağla”ya dokunabilirsiniz.` };
