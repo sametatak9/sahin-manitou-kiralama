@@ -125,7 +125,9 @@ export async function syncDriveFolder(db: Db, src: { id: string; folder_id: stri
 }
 
 /** Video kodeği: H.264 (avc1) her tarayıcıda oynar; HEVC (hvc1/hev1, iPhone varsayılanı) Android/Windows Chrome'da çoğunlukla oynamaz. */
-export function detectCodec(bytes: Uint8Array): 'h264' | 'hevc' | 'unknown' {
+export function detectCodec(all: Uint8Array): 'h264' | 'hevc' | 'unknown' {
+  const W = 1_500_000; // moov kutusu dosyanın başında ya da sonundadır → yalnızca baş/son taranır (CPU sınırı)
+  const bytes = all.length <= 2 * W ? all : new Uint8Array([...all.subarray(0, W), ...all.subarray(all.length - W)]);
   const has = (tag: string) => { const t = [...tag].map((c) => c.charCodeAt(0)); outer: for (let i = 0; i + 4 <= bytes.length; i++) { for (let k = 0; k < 4; k++) if (bytes[i + k] !== t[k]) continue outer; return true; } return false; };
   if (has('hvc1') || has('hev1')) return 'hevc';
   if (has('avc1')) return 'h264';
@@ -134,11 +136,19 @@ export function detectCodec(bytes: Uint8Array): 'h264' | 'hevc' | 'unknown' {
 
 /** Kodeği bilinmeyen havuz videolarını yoklar (dakikada en fazla 3). Sonuç media_library.edit.codec'e yazılır. */
 export async function probeVideos(db: Db) {
-  const { data } = await db.from('media_library').select('id,url,edit').eq('kind', 'video').is('archived_at', null).is('edit->>codec', null).limit(3);
+  const { data } = await db.from('media_library').select('id,url,edit').eq('kind', 'video').is('archived_at', null).is('edit->>codec', null).limit(2);
   let n = 0;
   for (const v of (data || []) as Array<{ id: string; url: string; edit: Record<string, unknown> | null }>) {
     let codec: string = 'unknown';
-    try { const r = await fetch(v.url); if (r.ok) codec = detectCodec(new Uint8Array(await r.arrayBuffer())); } catch { /* ağ hatası: bilinmiyor */ }
+    try {
+      const head = await fetch(v.url, { headers: { range: 'bytes=0-1499999' } });
+      const tail = await fetch(v.url, { headers: { range: 'bytes=-1500000' } });
+      if (head.ok && tail.ok) {
+        const a = new Uint8Array(await head.arrayBuffer()); const b = new Uint8Array(await tail.arrayBuffer());
+        const both = new Uint8Array(a.length + b.length); both.set(a); both.set(b, a.length);
+        codec = detectCodec(both);
+      }
+    } catch { /* ağ hatası: bilinmiyor */ }
     await db.from('media_library').update({ edit: { ...(v.edit ?? {}), codec } }).eq('id', v.id);
     n++;
   }

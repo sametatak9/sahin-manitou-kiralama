@@ -117,14 +117,16 @@ function fallbackItems(p: Platform, pillars: typeof PILLARS[number][]): Item[] {
   // AI yoksa: marka bilgisiyle hazır, uydurma içermeyen kısa metinler (yine onaya düşer)
   return pillars.map((pl, i) => ({
     format: i === 0 ? 'reel' : 'banner', brand: pl.brand as Item['brand'], title: `${pl.badge} · ${p}`, badge: pl.badge,
-    headline: pl.key === 'manitou' ? 'Operatörlü Manitou Kiralama' : pl.key === 'villa' ? 'Çatalca’da Villa & Müstakil Ev' : pl.key === 'donusum' ? 'Kentsel Dönüşümde Güvenilir Çözüm' : pl.key === 'tadilat' ? 'Tadilat · Çatı · Dış Cephe' : pl.key === 'kampanya' ? 'Ücretsiz Keşif · Hızlı Teklif' : 'Şantiyeden Gerçek İş',
+    headline: pl.key === 'manitou' ? 'Operatörlü Manitou Kiralama' : pl.key === 'villa' ? 'Çatalca’da Villa & Müstakil Ev' : pl.key === 'donusum' ? 'Kentsel Dönüşümde Güvenilir Çözüm' : pl.key === 'tadilat' ? 'Tadilat · Çatı · Dış Cephe' : pl.key === 'kampanya' ? 'Ücretsiz Keşif · Hızlı Teklif' : pl.key === 'ipucu' ? 'Ev Yaptıracaklara 5 İpucu' : 'Şantiyeden Gerçek İş',
     subtitle: pl.topic, caption: `${pl.topic}. Keşif ve teklif için bize yazın: 0531 436 29 04`,
     hashtags: p === 'x' ? ['#inşaat', '#istanbul'] : ['#inşaat', '#istanbul', '#çatalca', '#manitou', '#şantiye'].slice(0, p === 'tiktok' ? 4 : 5),
     cta: 'WhatsApp: 0531 436 29 04', video_script: i === 0 ? '0-2 sn: şantiyeden güçlü görüntü (manitou kaldırırken) · 3-10 sn: işin yapılışı · 11-20 sn: bitmiş iş/önce-sonra · son 3 sn: logo + telefon' : undefined,
   }));
 }
 
-export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) {
+// Sunucu CPU sınırı (istek başına ~2 sn): fotoğraflı banner çizimi ağır → her çağrıda en fazla 1 banner çizilir; worker dakikada bir kaldığı yerden sürdürür.
+export async function runContentFactory(db: Db, opts: { force?: boolean; maxBanners?: number } = {}) {
+  const maxBanners = opts.maxBanners ?? 1; let rendered = 0; let partial = false;
   const { label: day } = istanbulDayRange();
   const { data: quotas } = await db.from('content_quota').select('*').eq('enabled', true);
   const brand = await defaultBrand(db);
@@ -146,6 +148,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
   const actx = { db, runId: null, actorId: admin?.user_id ?? null, tokens: { in: 0, out: 0 }, agent: null } as unknown as Parameters<typeof aiComplete>[0];
 
   for (const q of (quotas || []) as Quota[]) {
+    if (partial) break;
     const h = have.get(q.platform); const needV = Math.max(0, q.video_per_day - (h?.videos ?? 0)); const needB = Math.max(0, q.image_per_day - (h?.banners ?? 0));
     if (!needV && !needB && !opts.force) continue;
     const pillars = [0, 1, 2].map((i) => PILLARS[(di * 3 + i + ['instagram', 'tiktok', 'youtube', 'facebook', 'x'].indexOf(q.platform)) % PILLARS.length]);
@@ -164,9 +167,11 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
     } catch (e) { errors.push(`${q.platform}: AI — ${String((e as Error).message).slice(0, 120)} (hazır metin kullanıldı)`); }
     if (items.length < 3) items = fallbackItems(q.platform, pillars);
 
-    const plan = [...(needV ? [items[0]] : []), ...items.slice(1).slice(0, needB)];
+    const plan = [...(needV ? [items[0]] : []), ...items.slice(1 + Math.max(0, q.image_per_day - needB)).slice(0, needB)]; // yarım kalan günde kalan konudan devam
     for (const [i, it] of plan.entries()) {
+      if (it.format === 'banner' && rendered >= maxBanners) { partial = true; break; }
       try {
+        if (it.format === 'banner') rendered++;
         const slot = q.slot_times[Math.min(i + (3 - plan.length), q.slot_times.length - 1)] ?? '12:00';
         let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null;
         if (it.format === 'banner') {
@@ -202,8 +207,10 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
       } catch (e) { errors.push(`${q.platform}/${it.format}: ${String((e as Error).message).slice(0, 160)}`); }
     }
   }
-  await db.from('content_factory_days').update({ finished_at: new Date().toISOString(), created, errors }).eq('day', day);
-  return { day, created, errors };
+  const { data: prev } = await db.from('content_factory_days').select('created,errors').eq('day', day).maybeSingle();
+  await db.from('content_factory_days').update({ created: (prev?.created ?? 0) + created, errors: [...((prev?.errors as string[]) ?? []), ...errors].slice(-30),
+    ...(partial ? {} : { finished_at: new Date().toISOString() }) }).eq('day', day);
+  return { day, created, errors, partial };
 }
 
 /** Worker her dakika çağırır: 06:30'da günlük üretim, 08:00 sabah özeti, 18:30 eksik/paylaşılmamış hatırlatması (Telegram). */
@@ -216,6 +223,13 @@ export async function factoryTick(db: Db, background: (p: Promise<unknown>) => v
   }
   const { data: row } = await db.from('content_factory_days').select('*').eq('day', day).maybeSingle();
   if (!row) return null;
+  if (!row.finished_at) {
+    // Yarım kalan üretimi sürdür (tek çalışan: started_at ile kilit)
+    const { data: claimed } = await db.from('content_factory_days').update({ started_at: new Date().toISOString() }).eq('day', day).is('finished_at', null)
+      .lt('started_at', new Date(Date.now() - 50_000).toISOString()).select('day');
+    if (claimed?.length) background(runContentFactory(db).catch((e) => console.error('factory', String(e))));
+    return { factory: claimed?.length ? 'continued' : 'running' };
+  }
   await loadAppSecrets(db);
   if (!appSecret('TELEGRAM_BOT_TOKEN') || !appSecret('TELEGRAM_CHAT_ID')) return null;
   const quota = async () => ((await db.rpc('content_quota_today')).data || []) as Array<{ platform: string; target: number; drafted: number; approved: number; published: number }>;
