@@ -149,6 +149,37 @@ ${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.0
 function slotIso(day: string, hhmm: string) { return new Date(`${day}T${hhmm}:00+03:00`).toISOString(); }
 function dayIndex(day: string) { return Math.floor(new Date(`${day}T00:00:00Z`).getTime() / 86400000); }
 
+// ── Etiket stratejisi: her gönderide yerel + konu + marka karışımı (keşfet için geniş, müşteri için yerel) ──
+// Yerel etiketler nitelikli (bölgede ev/iş yaptıracak) kitleyi getirir; geniş etiketler görünürlük sağlar; marka etiketi arşiv oluşturur.
+const TAGS = {
+  yerel: ['#çatalca', '#silivri', '#büyükçekmece', '#istanbul', '#arnavutköy', '#beylikdüzü'],
+  konu: {
+    manitou: ['#manitou', '#telehandler', '#manitoukiralama', '#vinçkiralama', '#iskele', '#şantiye'],
+    kampanya: ['#manitoukiralama', '#manitou', '#şantiye', '#işmakinesi'],
+    villa: ['#villa', '#villainşaatı', '#müstakilev', '#evyapımı', '#anahtarteslim', '#mimari'],
+    donusum: ['#kentseldönüşüm', '#katkarşılığı', '#depremedayanıklı', '#müteahhit', '#yenibina'],
+    tadilat: ['#tadilat', '#dışcephe', '#mantolama', '#çatıtamiri', '#renovasyon'],
+    santiye: ['#şantiye', '#inşaat', '#betonarme', '#kabainşaat', '#yapı'],
+    ipucu: ['#evyaptırmak', '#inşaatipuçları', '#müstakilev', '#zeminetüdü'],
+  } as Record<string, string[]>,
+  genis: ['#inşaat', '#construction', '#insaat'],
+  marka: { manitou: '#şahinmanitou', diger: '#embayyapı' },
+};
+function tagMix(p: Platform, pillar: string, ai: string[]) {
+  const max = p === 'x' ? 2 : p === 'tiktok' ? 5 : p === 'youtube' ? 3 : p === 'facebook' ? 4 : 12;
+  const brand = pillar === 'manitou' || pillar === 'kampanya' ? TAGS.marka.manitou : TAGS.marka.diger;
+  const topic = (TAGS.konu[pillar] ?? TAGS.konu.santiye).filter((t) => !/[^\p{L}#]/u.test(t));
+  const plan = p === 'instagram'
+    ? [brand, ...TAGS.yerel.slice(0, 4), ...topic.slice(0, 5), ...TAGS.genis.slice(0, 2)]
+    : p === 'facebook' ? [TAGS.yerel[0], TAGS.yerel[3], topic[0], brand]
+    : p === 'x' ? [topic[0], TAGS.yerel[3]]
+    : p === 'youtube' ? [topic[0], TAGS.yerel[3], '#shorts']
+    : [topic[0], topic[1], TAGS.yerel[0], TAGS.yerel[3], '#fyp'];
+  const out: string[] = [];
+  for (const t of [...plan, ...ai]) { const k = t.toLocaleLowerCase('tr-TR'); if (t.startsWith('#') && !out.some((o) => o.toLocaleLowerCase('tr-TR') === k)) out.push(t); }
+  return out.slice(0, max);
+}
+
 function fallbackItems(p: Platform, pillars: typeof PILLARS[number][]): Item[] {
   // AI yoksa: marka bilgisiyle hazır, uydurma içermeyen kısa metinler (yine onaya düşer)
   return pillars.map((pl, i) => ({
@@ -205,6 +236,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
         hashtags: (Array.isArray(it.hashtags) ? it.hashtags : []).map((t: string) => (String(t).startsWith('#') ? String(t) : `#${t}`)).slice(0, q.platform === 'x' ? 2 : q.platform === 'tiktok' ? 5 : 12) }));
     } catch (e) { errors.push(`${q.platform}: AI — ${String((e as Error).message).slice(0, 120)} (hazır metin kullanıldı)`); }
     if (items.length < 3) items = fallbackItems(q.platform, pillars);
+    items = items.map((it, i) => ({ ...it, hashtags: tagMix(q.platform, pillars[i].key, it.hashtags) }));
 
     const plan = [...(needV ? [items[0]] : []), ...items.slice(1 + Math.max(0, q.image_per_day - needB)).slice(0, needB)]; // yarım kalan günde kalan konudan devam
     for (const [i, it] of plan.entries()) {
