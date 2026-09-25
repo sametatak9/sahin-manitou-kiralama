@@ -17,7 +17,7 @@ interface AcademySkill {
   good_examples: string | null; bad_examples: string | null; test_goal: string | null; test_score: number | null; test_findings: number | null;
   last_tested_at: string | null; last_test_mission_id: string | null; approved_at: string | null;
 }
-interface Improvement { id: string; skill_id: string; mission_id: string | null; diagnosis: string; instructions_add: string | null; search_terms_add: string[]; search_terms_remove: string[]; sources_add: string[]; status: string; created_at: string }
+interface Improvement { id: string; skill_id: string; mission_id: string | null; diagnosis: string; instructions_add: string | null; search_terms_add: string[]; search_terms_remove: string[]; sources_add: string[]; status: string; created_at: string; reviewer?: string }
 
 const LIFE: Record<AcademySkill['lifecycle'], { label: string; tone: 'idle' | 'wait' | 'go' | 'stop' }> = {
   draft: { label: 'TASLAK', tone: 'idle' }, testing: { label: 'TESTTE', tone: 'wait' }, approved: { label: 'ONAYLI · GÖREVDE', tone: 'go' }, retired: { label: 'EMEKLİ', tone: 'stop' },
@@ -62,7 +62,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
           <div className="text-xs text-ink-300 space-y-1">
             <div className="font-display text-base font-semibold text-ink-100">Akademi — yetenek eğitimi, testi ve onayı</div>
             <p><b>1. Eğit:</b> Yeteneğin talimatını, arama terimlerini, kaynaklarını ve iyi/kötü örneklerini yazın. <b>2. Test et:</b> Yetenek 10 dakikalık gerçek bir göreve çıkar; getirdiği her bilgi <b>denetçi</b> tarafından kaynağında kontrol edilir ve doğruluk puanı çıkar. <b>3. Onayla:</b> Yalnızca <b>onaylı</b> yetenekler botların gerçek görevlerinde kullanılır.</p>
-            <p><b>Koç önerileri:</b> Her görevden sonra koç, botun eksiklerini teşhis eder (ör. yanlış arama terimi, zayıf kaynak) ve somut düzeltme önerir. “Uygula” deyince yetenek bir üst sürüme geçer.</p>
+            <p><b>Claude denetimi:</b> Her sabah görevler bittikten sonra (≈10:00) Claude raporları açar, bulguların kaynağına bakarak gerçek/sahte/alakasız ayırır ve yeteneği kendisi geliştirir (yeni sürüm); özeti Telegram’a gönderir. <b>Koç önerileri:</b> Her görevden sonra koç, botun eksiklerini teşhis eder (ör. yanlış arama terimi, zayıf kaynak) ve somut düzeltme önerir. “Uygula” deyince yetenek bir üst sürüme geçer.</p>
           </div>
         </div>
       </div>
@@ -99,7 +99,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
                     <div className="text-xs font-semibold text-amber-800 inline-flex items-center gap-1"><Lightbulb className="w-4 h-4" />Koç önerisi ({imps.length})</div>
                     {imps.slice(0, 3).map((i) => (
                       <div key={i.id} className="text-[11px] text-ink-200 space-y-1 border-t border-amber-200 pt-2 first:border-0 first:pt-0">
-                        <p><b>Teşhis:</b> {i.diagnosis}</p>
+                        <p><span className={i.reviewer === 'claude' ? 'mr-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-800' : 'mr-1 rounded bg-ink-800 px-1.5 py-0.5 text-[10px] font-bold text-ink-300'}>{i.reviewer === 'claude' ? 'CLAUDE DENETİMİ' : 'OTOMATİK KOÇ'}</span><b>Teşhis:</b> {i.diagnosis}</p>
                         {i.instructions_add && <p><b>Talimata eklenecek:</b> {i.instructions_add}</p>}
                         {i.search_terms_add.length > 0 && <p><b>Yeni arama terimleri:</b> {i.search_terms_add.join(', ')}</p>}
                         {i.search_terms_remove.length > 0 && <p><b>Çıkarılacak terimler:</b> {i.search_terms_remove.join(', ')}</p>}
