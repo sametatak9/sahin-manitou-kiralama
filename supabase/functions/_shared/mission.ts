@@ -96,7 +96,7 @@ export function socialProfile(url: string): { platform: 'instagram' | 'facebook'
     const u = new URL(url); const host = u.hostname.replace(/^(www\.|m\.|tr-tr\.|tr\.)/, '');
     const seg = u.pathname.split('/').filter(Boolean);
     if (!seg.length) return null;
-    const bad = ['p', 'reel', 'reels', 'explore', 'stories', 'tv', 'groups', 'events', 'hashtag', 'watch', 'search', 'share', 'photo', 'photos', 'videos', 'posts', 'people', 'pages', 'profile.php', 'marketplace', 'login'];
+    const bad = ['popular', 'p', 'reel', 'reels', 'explore', 'stories', 'tv', 'groups', 'events', 'hashtag', 'watch', 'search', 'share', 'photo', 'photos', 'videos', 'posts', 'people', 'pages', 'profile.php', 'marketplace', 'login'];
     if (bad.includes(seg[0].toLowerCase())) return null;
     if (host === 'instagram.com' && /^[A-Za-z0-9._]{2,30}$/.test(seg[0])) return { platform: 'instagram', handle: seg[0].toLowerCase() };
     if (host === 'facebook.com' && /^[A-Za-z0-9.\-]{2,60}$/.test(seg[0])) return { platform: 'facebook', handle: seg[0].toLowerCase() };
@@ -767,15 +767,21 @@ async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summ
 
 /** Bulgulardaki işletme profil linklerini (Instagram/Facebook) takip listesine (social_prospects) ekler. Kişi verisi yok; yalnızca herkese açık işletme profili. */
 async function saveSocialProspects(db: Db, cur: MissionRow, findings: Finding[]) {
+  if (!cur.created_by) return;
   const rows = findings.map((f) => ({ f, p: socialProfile(f.url) || (f.website ? socialProfile(f.website) : null) })).filter((x) => x.p);
+  // Yalnızca işletme/kurum hesabı: başlık veya kullanıcı adında işletme işareti olmalı; kişi profili (ad.soyad, telefonlu), okul/resmi kurum elenir (KVKK)
+  const BIZ = /insaat|yapi|yapı|mimar|muhendis|mühendis|makine|makina|kiralama|manitou|forklift|vinc|vinç|hafriyat|beton|demir|celik|çelik|iskele|prefabrik|group|grup|ltd|a\.s|a\.ş|san\.|tic\.|kentsel|donusum|dönüşüm|emlak|gayrimenkul|tadilat|cati|çatı|dekorasyon|haber|burada|medya|dergi|construction|build/i;
+  const NOT_BIZ = /lisesi|okulu|universitesi|üniversitesi|kaymakaml|valilig|muhtarl|cami/i;
   let n = 0;
   for (const { f, p } of rows) {
+    const label = `${f.title} ${p!.handle}`;
+    if (!BIZ.test(label) || NOT_BIZ.test(label) || /\d{7,}/.test(p!.handle)) continue;
     const t = norm(`${f.title} ${f.detail} ${f.fit ?? ''}`);
     const kind = /tedarik|malzeme|beton|demir|iskele|bayi|uretic/.test(t) ? 'supplier' : /haber|medya|dergi|gazete/.test(t) ? 'industry_media' : /catalca|silivri|yerel|belediye/.test(t) ? 'local_business' : 'competitor';
     const { error } = await db.from('social_prospects').upsert({ platform: p!.platform, handle: p!.handle, profile_name: f.company || f.title.slice(0, 120), profile_url: `https://www.${p!.platform}.com/${p!.handle}`,
       source_url: f.url, source_type: 'bot_mission', engagement_type: 'business_profile', relevance_score: Math.min(100, (f.relevance ?? 6) * 10), consent_status: 'not_required_public_note',
-      notes: (f.fit || f.detail || '').slice(0, 500), account_kind: kind, bot_mission_id: cur.id }, { onConflict: 'platform,handle', ignoreDuplicates: true });
-    if (!error) n++;
+      notes: (f.fit || f.detail || '').slice(0, 500), account_kind: kind, bot_mission_id: cur.id, owner_id: cur.created_by }, { onConflict: 'platform,handle', ignoreDuplicates: true });
+    if (!error) n++; else console.error('prospect', error.message);
   }
   if (n) await logStep(db, cur, cur.step_count + 1, 'prospects', `${n} işletme hesabı takip listesine eklendi (Raporlar → Takip listesi)`);
 }
