@@ -11,7 +11,48 @@ import { shareToPhone } from '../lib/share';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
 
-const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Reels', story: 'Hikâye', short: 'Shorts', video: 'Video' };
+const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Kısa video', story: 'Hikâye', short: 'Shorts', video: 'Video', banner: 'Banner' };
+const ALL_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'] as const;
+const P_NAME: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', x: 'X' };
+
+interface QuotaRow { platform: string; enabled: boolean; target: number; drafted: number; videos: number; banners: number; approved: number; published: number }
+
+/** İçerik Fabrikası: günde her platformda 3 içerik zorunluluğu — hazır / onaylı / paylaşılan. */
+function QuotaPanel({ onChanged }: { onChanged: () => void }) {
+  const session = useSession(); const admin = session.role === 'admin';
+  const q = useQuery(async () => unwrap(await db().rpc('content_quota_today')) as QuotaRow[], [] as QuotaRow[], [], ['social_drafts']);
+  const [busy, setBusy] = useState<string | null>(null); const [msg, setMsg] = useState<string | null>(null);
+  const run = async () => { setBusy('run'); setMsg(null); try { await callOps('content_factory_run'); setMsg('İçerik Fabrikası çalışıyor: eksik içerikler 1-2 dakika içinde aşağıdaki listeye “ONAY BEKLİYOR” olarak düşer.'); setTimeout(() => { q.reload(); onChanged(); }, 60000); } catch (e) { setMsg(errorText(e)); } finally { setBusy(null); } };
+  const approveAll = async () => {
+    setBusy('all'); setMsg(null);
+    try {
+      const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start.getTime() + 86400000);
+      const r = await db().from('social_drafts').update({ workflow_status: 'scheduled', status: 'planlandi', approved_by: session.userId, approved_at: new Date().toISOString() })
+        .eq('workflow_status', 'pending_approval').gte('scheduled_at', start.toISOString()).lt('scheduled_at', end.toISOString()).select('id');
+      setMsg(`${unwrap(r).length} içerik onaylandı ve saatine zamanlandı.`); q.reload(); onChanged();
+    } catch (e) { setMsg(errorText(e)); } finally { setBusy(null); }
+  };
+  const total = q.data.reduce((a, r) => a + (r.enabled ? r.target : 0), 0); const pub = q.data.reduce((a, r) => a + r.published, 0);
+  return (
+    <Panel title={<span className="inline-flex items-center gap-2"><Sparkles className="w-4 h-4" />Günlük paylaşım hedefi — her platformda 3 içerik (1 kısa video + 2 banner)</span>}>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {q.data.map((r) => { const pct = r.target ? Math.min(100, Math.round((r.published / r.target) * 100)) : 0; return (
+          <div key={r.platform} className="rounded-xl ring-1 ring-ink-700 p-2.5 space-y-1">
+            <div className="flex items-center gap-1.5"><PlatformBadge platform={r.platform} /><span className="text-xs font-semibold text-ink-100">{P_NAME[r.platform] ?? r.platform}</span></div>
+            <div className="text-[11px] text-ink-300">Hazır {r.drafted}/{r.target} · Onaylı {r.approved} · <b className={r.published >= r.target ? 'text-emerald-700' : 'text-amber-700'}>Paylaşılan {r.published}/{r.target}</b></div>
+            <div className="h-1.5 rounded-full bg-ink-800 overflow-hidden"><div className={cx('h-full', r.published >= r.target ? 'bg-emerald-600' : 'bg-amber-500')} style={{ width: `${pct}%` }} /></div>
+          </div>); })}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <span className="text-xs text-ink-400">Bugün: <b className="text-ink-100">{pub}/{total}</b> paylaşıldı. Taslaklar her sabah 06:30’da otomatik üretilir; 08:00 özet ve 18:30 hatırlatma Telegram’a gelir.</span>
+        <span className="flex-1" />
+        {admin && <Button variant="subtle" loading={busy === 'run'} onClick={run} icon={<Sparkles className="w-4 h-4" />}>Eksikleri şimdi üret</Button>}
+        {admin && <Button variant="primary" loading={busy === 'all'} onClick={approveAll}>Bugünkü taslakları toplu onayla</Button>}
+      </div>
+      {msg && <div className="mt-2"><Notice tone="info">{msg}</Notice></div>}
+    </Panel>
+  );
+}
 const WF: Record<string, { label: string; tone: Tone }> = {
   pending_approval: { label: 'ONAY BEKLİYOR', tone: 'wait' }, scheduled: { label: 'ZAMANLANDI', tone: 'info' }, approved: { label: 'ONAYLI', tone: 'info' },
   processing: { label: 'PAYLAŞILIYOR', tone: 'run' }, published: { label: 'PAYLAŞILDI', tone: 'go' }, failed: { label: 'BAŞARISIZ', tone: 'stop' },
@@ -188,7 +229,7 @@ export function QueueScreen() {
   const q = useQuery(async () => {
     const s = db();
     const [drafts, pubs] = await Promise.all([
-      s.from('social_drafts').select('*').in('primary_platform', ['instagram', 'facebook', 'youtube']).neq('archive_status', 'archived')
+      s.from('social_drafts').select('*').in('primary_platform', [...ALL_PLATFORMS]).neq('archive_status', 'archived')
         .not('scheduled_at', 'is', null).order('scheduled_at', { ascending: true }).limit(300),
       s.from('social_publications').select('id,content_id,platform,status,external_url,published_at,error,external_post_id,scheduled_at,created_at').order('created_at', { ascending: false }).limit(300),
     ]);
@@ -213,10 +254,10 @@ export function QueueScreen() {
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-xl font-semibold text-ink-100">Yayın Kuyruğu</h1>
-        <p className="text-sm text-ink-400">Instagram (gönderi · Reels · hikâye), Facebook ve YouTube (Shorts · video) için verdiğiniz içerikleri belirlediğiniz saatte bot paylaşır.</p>
+        <p className="text-sm text-ink-400">Instagram, TikTok, YouTube, Facebook ve X içerikleri. Bağlı platformlarda onaydan sonra bot saatinde paylaşır; bağlı olmayanlarda “Telefondan paylaş” ile tek dokunuş.</p>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        {(['instagram', 'facebook', 'youtube'] as const).map((p) => {
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {ALL_PLATFORMS.map((p) => {
           const c = status.data?.connectors.find((x) => x.key === p);
           const ok = c?.status === 'connected';
           return (
@@ -229,6 +270,7 @@ export function QueueScreen() {
         })}
       </div>
 
+      <QuotaPanel onChanged={q.reload} />
       <Composer status={status.data} onDone={(text) => { setMsg({ tone: 'ok', text }); setTab('upcoming'); q.reload(); }} />
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
 
@@ -252,7 +294,10 @@ export function QueueScreen() {
                       <PlatformBadge platform={d.primary_platform} /><span className="text-xs font-semibold text-ink-200">{FORMAT_LABEL[d.format ?? ''] ?? 'Gönderi'}</span>
                       <Pill tone={wf.tone}>{wf.label}</Pill>
                     </div>
+                    {d.headline && <div className="text-xs font-bold text-ink-100">{d.headline}</div>}
                     <div className="text-sm text-ink-100 line-clamp-2">{d.caption || d.body}</div>
+                    {(d as { image_brief?: string | null }).image_brief && <div className="text-[11px] font-semibold text-amber-700">{(d as { image_brief?: string | null }).image_brief}</div>}
+                    {(d as { design_brief?: string | null }).design_brief && <details className="text-[11px] text-ink-400"><summary className="cursor-pointer">Çekim senaryosu</summary>{(d as { design_brief?: string | null }).design_brief}</details>}
                     <div className="text-[11px] text-ink-400 font-mono">{d.scheduled_at ? `${fmtDateTime(d.scheduled_at)} · ${relTime(d.scheduled_at)}` : '—'}</div>
                     {pub?.external_url && <a href={pub.external_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 underline"><ExternalLink className="w-3.5 h-3.5" />Paylaşımı aç</a>}
                     {(d.error || (pub?.status === 'failed' && pub.error)) && <div className="text-xs text-rose-700">{pub?.error || d.error}</div>}

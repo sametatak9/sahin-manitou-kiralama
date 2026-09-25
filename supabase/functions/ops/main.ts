@@ -14,6 +14,8 @@ import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
 import { businessDiscovery, graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
+import { factoryTick, runContentFactory } from '../_shared/factory.ts';
+import { istanbulDayRange } from '../_shared/context.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
 
@@ -56,7 +58,15 @@ async function runWorker(db: Db, workerId: string) {
   const approvals = await processDueApprovals(db, workerId, 5);
   const content = await publishDueContent(db, workerId);
   const metrics = await syncMetrics(db, 3);
-  return { tasks: taskResults, approvals, content, metrics };
+  const factory = await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
+  return { tasks: taskResults, approvals, content, metrics, factory };
+}
+
+/** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
+function background(p: Promise<unknown>) {
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(p); else p.catch(() => undefined);
 }
 
 /** Onaylı + zamanı gelmiş içerikleri, hesabı gerçekten bağlı platformlarda yayınlar. Bağlı değilse dokunmaz. */
@@ -536,6 +546,14 @@ async function api(db: Db, req: Request) {
       }
       await logActivity(db, { connector_key: 'instagram', action: 'metrics_sync', status: failed.length && !ok ? 'failed' : 'ok', summary: `Rakip analizi: ${ok} hesap ölçüldü${failed.length ? `, ${failed.length} hata` : ''}` });
       return { measured: ok, failed };
+    }
+    // İçerik Fabrikası: bugünün eksik içeriklerini şimdi üret (yönetici). Kota dolu platformlar atlanır.
+    case 'content_factory_run': {
+      await requireUser(db, req, 'admin');
+      const { label: day } = istanbulDayRange();
+      await db.from('content_factory_days').upsert({ day }, { onConflict: 'day', ignoreDuplicates: true });
+      background(runContentFactory(db));
+      return { started: true, day };
     }
     case 'test_telegram': { await requireUser(db, req, 'admin'); return telegramSend('Embay Ops Center test mesajı ✅'); }
 
