@@ -84,10 +84,16 @@ export async function aiComplete(ctx: Pick<EngineCtx, 'db' | 'runId' | 'actorId'
       ['openrouter', COMPAT.openrouter.agentModel], ['github', COMPAT.github.agentModel], ['anthropic', 'claude-sonnet-5']];
     for (const [p, m] of alt) if (p !== agent.provider && (await getAiKey(p))) chain.push({ ...agent, provider: p, model: m });
     for (const a of chain) {
-      try { res = await getProvider(a.provider).complete(a, { system, prompt, schema }); used = a; break; }
+      // JSON şemasını yalnızca Claude/OpenAI yerel olarak uygular: diğerlerine şema istemde açıkça verilir
+      const p2 = schema && !['anthropic', 'openai'].includes(a.provider) ? `${prompt}\n\nYANIT BİÇİMİ: Yalnızca aşağıdaki JSON şemasına uyan TEK bir JSON nesnesi döndür, başka metin yazma.\n${JSON.stringify(schema)}` : prompt;
+      try {
+        const r = await getProvider(a.provider).complete({ ...a, max_tokens: Math.max(a.max_tokens || 0, 3000) }, { system, prompt: p2, schema });
+        if (schema && !r.json) { lastErr = new Error(`${a.provider}: JSON yanıt alınamadı (${r.stopReason || 'boş yanıt'})`); continue; }
+        res = r; used = a; break;
+      }
       catch (e) {
         lastErr = e;
-        if (!/credit|balance|quota|rate|429|402|401|403|overloaded|503|billing|not.?found|404|unavailable/i.test(String((e as Error)?.message ?? e))) throw e;
+        if (!/credit|balance|quota|rate|429|402|401|403|overloaded|503|billing|not.?found|404|unavailable|JSON/i.test(String((e as Error)?.message ?? e))) throw e;
       }
     }
     if (!res) throw lastErr ?? new Error('Hiçbir yapay zekâ sağlayıcısı yanıt vermedi');
