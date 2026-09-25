@@ -94,7 +94,7 @@ export function salvageFindings(text: string): { new_findings: Record<string, un
 const POS = ['temeli atil', 'temel atma', 'insaati basla', 'insaatina basla', 'aranıyor', 'araniyor', 'ariyor', 'arıyor', 'kat karsilig', 'bosaltil', 'yikim', 'yikil', 'riskli yapi', 'ced ', 'ced olumlu', 'yapilacak', 'insa edilecek', 'talep', 'ihale', 'proje'];
 const TARGET_REGION = ['istanbul', 'kocaeli', 'tekirdag', 'gebze', 'tuzla', 'pendik', 'kartal', 'esenyurt', 'basaksehir', 'arnavutkoy', 'silivri', 'catalca', 'buyukcekmece', 'beylikduzu', 'sancaktepe', 'cekmekoy', 'umraniye', 'atasehir', 'kadikoy', 'uskudar', 'beykoz', 'sile', 'sultanbeyli', 'eyup', 'kagithane', 'sariyer', 'bagcilar', 'kucukcekmece', 'esenler', 'gungoren', 'zeytinburnu', 'bahcelievler', 'avcilar', 'hadimkoy', 'corlu', 'cerkezkoy', 'izmit', 'darica', 'dilovasi', 'cayirova'];
 const OTHER_CITIES = ['ankara', 'izmir', 'bursa', 'iznik', 'antalya', 'adana', 'konya', 'mersin', 'gaziantep', 'kayseri', 'samsun', 'trabzon', 'eskisehir', 'diyarbakir', 'sakarya', 'yalova', 'bolu', 'duzce', 'manisa', 'balikesir', 'canakkale', 'edirne', 'kirklareli', 'malatya', 'erzurum', 'van', 'hatay', 'denizli', 'aydin', 'mugla', 'afyon', 'sivas', 'tokat', 'ordu', 'rize', 'zonguldak', 'karabuk', 'kastamonu', 'corum', 'yozgat', 'nevsehir', 'aksaray', 'nigde', 'karaman', 'isparta', 'burdur', 'usak', 'kutahya', 'bilecik', 'elazig', 'batman', 'mardin', 'sanliurfa', 'adiyaman', 'kahramanmaras', 'osmaniye', 'kilis'];
-const NEG = ['en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire'];
+const NEG = ['is ilanlari', 'ilanlari', 'hizmetleri', 'guclendirme', 'tadilat', 'dekorasyon', 'en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire'];
 export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title'>): Array<Omit<Finding, 'at' | 'step'>> {
   const anchors = anchorWords(m);
   const out: Array<Omit<Finding, 'at' | 'step'>> = [];
@@ -777,7 +777,8 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
   checks.forEach((c, i) => {
-    const v = verdicts.get(i) ?? (c.reachable && c.match ? { v: 'verified' as const, r: 'Kaynak açıldı ve başlık kaynakta geçiyor (kural tabanlı)' }
+    // AI hakemi yoksa "doğrulandı" verilmez: kural yalnızca kaynağın var olduğunu gösterir, amaca uygunluğu değil
+    const v = verdicts.get(i) ?? (c.reachable && c.match ? { v: 'suspicious' as const, r: 'Kaynak var ve başlık kaynakta geçiyor; AI hakemi çalışmadığı için amaca uygunluk doğrulanmadı' }
       : c.reachable ? { v: 'suspicious' as const, r: 'Kaynak açıldı ama bulgu metinde net görülmedi (kural tabanlı)' } : { v: 'suspicious' as const, r: 'Kaynak sayfası okunamadı (kural tabanlı)' });
     // Güvenlik: kaynağı açılamayan ve toplanan kaynaklarda da olmayan bulgu "doğrulandı" sayılmaz
     c.f.verdict = !c.reachable && v.v === 'verified' ? 'suspicious' : v.v; c.f.verdict_reason = v.r;
