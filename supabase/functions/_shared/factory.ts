@@ -164,8 +164,11 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
   const { data: admin } = await db.from('team_members').select('user_id').eq('role', 'admin').order('created_at').limit(1).maybeSingle();
   // Gerçek medya: en az kullanılan video/fotoğraf önce (Drive'dan gelenler dahil) → her gün farklı kareler
-  const { data: videos } = await db.from('media_library').select('id,url,cover_url,title,use_count').eq('kind', 'video').is('archived_at', null)
+  const { data: vids } = await db.from('media_library').select('id,url,cover_url,title,use_count,source,edit').eq('kind', 'video').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(40);
+  // Önce hazır montajlar (logolu, adım yazılı Reels), sonra ham videolar; HEVC en sona (bazı tarayıcılarda önizlenmez)
+  const rank = (v: { source?: string | null; edit?: { codec?: string } | null }) => (v.source === 'montage' ? 0 : v.edit?.codec === 'hevc' ? 2 : 1);
+  const videos = (vids || []).map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
   const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(60);
   let pIdx = 0;

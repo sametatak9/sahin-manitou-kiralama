@@ -1,7 +1,8 @@
 // Video Havuzu: telefondan video yükle → havuza kaydolur → uygulama/format seç → düzenle (kırp, kapak, ses) → kaydet →
 // istenirse Yayın Kuyruğu'na tarih/saat ile gönder. Her kayıt veritabanına tarihli yazılır (media_library).
 import { useEffect, useRef, useState } from 'react';
-import { Archive, CalendarClock, Image as ImageIcon, Scissors, Send, Share2, Upload, VolumeX, Save } from 'lucide-react';
+import { Archive, CalendarClock, Clapperboard, Image as ImageIcon, Scissors, Send, Share2, Upload, VolumeX, Save } from 'lucide-react';
+import { MontageStudio } from './MontageStudio';
 import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDateTime, istanbulToIso } from '../lib/format';
@@ -29,6 +30,7 @@ export function VideoPool() {
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [open, setOpen] = useState<MediaItem | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [montage, setMontage] = useState(false);
   const items = useQuery(async () => {
     let q = db().from('media_library').select('*').eq('kind', 'video').order('created_at', { ascending: false }).limit(100);
     q = showArchived ? q.not('archived_at', 'is', null) : q.is('archived_at', null);
@@ -72,6 +74,7 @@ export function VideoPool() {
         <input ref={fileRef} type="file" accept="video/*" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="primary" loading={Boolean(busy)} onClick={() => fileRef.current?.click()} icon={<Upload className="w-4 h-4" />}>Telefondan video seç</Button>
+          <Button variant="subtle" onClick={() => setMontage(true)} icon={<Clapperboard className="w-4 h-4" />}>Reels montajı yap</Button>
           <span className="text-xs text-ink-400">{busy ?? 'mp4 / mov · dosya başına en fazla 50 MB · aynı anda 10 video'}</span>
         </div>
         <p className="text-[11px] text-ink-400 mt-2">Seçtiğiniz video önce havuza kaydedilir (hiçbir yerde paylaşılmaz). Sonra uygulamayı seçip düzenleyebilir, istediğiniz gün ve saatte paylaşılması için kuyruğa gönderebilirsiniz.</p>
@@ -91,6 +94,7 @@ export function VideoPool() {
               <div className="relative aspect-[9/16] max-h-64 w-full bg-ink-900">
                 {m.cover_url ? <img src={m.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
                 <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-mono text-white">{fmtSec(m.duration_sec)}</span>
+                {(m as { source?: string }).source === 'montage' && <span className="absolute bottom-1 left-1 rounded bg-brand-green px-1.5 py-0.5 text-[9px] font-bold text-white">MONTAJ</span>}
                 {(m.edit as { codec?: string } | null)?.codec === 'hevc' && <span className="absolute top-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">iPhone</span>}
                 {(m.edit?.trim_start != null || m.edit?.muted) && <span className="absolute top-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">düzenlendi</span>}
               </div>
@@ -103,6 +107,7 @@ export function VideoPool() {
           ))}
         </div>
       )}
+      {montage && <MontageStudio onClose={() => setMontage(false)} onDone={() => items.reload()} />}
       {open && <VideoEditor item={open} onClose={() => setOpen(null)} onSaved={(m) => { setOpen(m); items.reload(); }} onGone={() => { setOpen(null); items.reload(); }} />}
     </div>
   );
