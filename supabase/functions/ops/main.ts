@@ -14,7 +14,7 @@ import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
 import { businessDiscovery, graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
-import { factoryTick, runContentFactory } from '../_shared/factory.ts';
+import { factoryTick, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
@@ -548,6 +548,13 @@ async function api(db: Db, req: Request) {
       return { measured: ok, failed };
     }
     // İçerik Fabrikası: bugünün eksik içeriklerini şimdi üret (yönetici). Kota dolu platformlar atlanır.
+    // Banner havuzu: şablondan yeni banner çiz veya mevcut banner'ı düzenleyip yeniden çiz
+    case 'banner_render': {
+      const u = await requireUser(db, req);
+      const t = body.template as { headline?: string } | undefined;
+      if (!t?.headline || String(t.headline).trim().length < 2) throw new HttpError(400, 'Banner başlığı gerekli');
+      return await renderBannerToPool(db, { id: (body.id as string) || null, title: body.title as string | undefined, platform: body.platform as string | undefined, template: t as never }, u.userId);
+    }
     case 'content_factory_run': {
       await requireUser(db, req, 'admin');
       const { label: day } = istanbulDayRange();

@@ -10,6 +10,7 @@ import { TARGETS, uploadMedia } from '../lib/media';
 import { shareToPhone } from '../lib/share';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
+import { PoolPicker } from '../components/Pools';
 
 const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Kısa video', story: 'Hikâye', short: 'Shorts', video: 'Video', banner: 'Banner' };
 const ALL_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'] as const;
@@ -63,7 +64,7 @@ const isVideoUrl = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);
 function tomorrow() { const d = new Date(Date.now() + 86400_000); return dayKey(d); }
 function addDays(key: string, n: number) { const d = new Date(`${key}T12:00:00+03:00`); d.setUTCDate(d.getUTCDate() + n); return dayKey(d); }
 
-interface Picked { file: File; preview: string; video: boolean }
+interface Picked { file?: File; url?: string; poolId?: string; preview: string; video: boolean }
 
 function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: string) => void }) {
   const session = useSession();
@@ -79,6 +80,7 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
   const [daily, setDaily] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [picker, setPicker] = useState<'media' | 'text' | null>(null);
 
   const hasImage = files.some((f) => !f.video);
   const hasVideo = files.some((f) => f.video);
@@ -120,7 +122,8 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
       const rows: Record<string, unknown>[] = [];
       for (let i = 0; i < files.length; i++) {
         setBusy(`Yükleniyor ${i + 1}/${files.length}`);
-        const url = await uploadMedia(files[i].file);
+        const url = files[i].url ?? await uploadMedia(files[i].file!);
+        if (files[i].poolId) await db().from('media_library').update({ status: 'queued', queued_at: new Date().toISOString() }).eq('id', files[i].poolId!);
         const when = slotIso(daily ? i : 0);
         for (const t of chosen) {
           if (t.needsVideo && !files[i].video) continue;
@@ -137,7 +140,7 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
       }
       setBusy('Kuyruğa ekleniyor');
       unwrap(await db().from('social_drafts').insert(rows).select('id'));
-      files.forEach((f) => URL.revokeObjectURL(f.preview));
+      files.forEach((f) => f.file && URL.revokeObjectURL(f.preview));
       setFiles([]); setCaption(''); setTitle('');
       onDone(admin
         ? `${rows.length} paylaşım kuyruğa eklendi. Hesap bağlıysa bot zamanı geldiğinde paylaşır; sonuç aşağıda API yanıtıyla görünür.`
@@ -163,12 +166,14 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
                   {f.video ? <video src={f.preview} className="w-full h-full object-cover" muted playsInline /> : <img src={f.preview} alt="" className="w-full h-full object-cover" />}
                   <span className="absolute left-1 top-1 rounded bg-white/90 px-1 text-[10px] font-bold text-slate-800">{f.video ? 'VİDEO' : 'GÖRSEL'}</span>
                   {daily && files.length > 1 && <span className="absolute left-1 bottom-1 rounded bg-brand-green px-1 text-[10px] font-bold text-white">{addDays(date, i).slice(5).split('-').reverse().join('.')}</span>}
-                  <button type="button" aria-label="Kaldır" onClick={() => { URL.revokeObjectURL(f.preview); setFiles(files.filter((_, j) => j !== i)); }} className="absolute right-1 top-1 rounded-full bg-white/90 p-0.5 text-slate-800"><X className="w-3.5 h-3.5" /></button>
+                  <button type="button" aria-label="Kaldır" onClick={() => { if (f.file) URL.revokeObjectURL(f.preview); setFiles(files.filter((_, j) => j !== i)); }} className="absolute right-1 top-1 rounded-full bg-white/90 p-0.5 text-slate-800"><X className="w-3.5 h-3.5" /></button>
                 </div>
               ))}
               <button type="button" onClick={() => fileRef.current?.click()} className="shrink-0 w-24 h-32 rounded-xl border-2 border-dashed border-ink-700 flex flex-col items-center justify-center text-ink-400 text-xs gap-1"><ImagePlus className="w-5 h-5" />Ekle</button>
+              <button type="button" onClick={() => setPicker('media')} className="shrink-0 w-24 h-32 rounded-xl border-2 border-dashed border-brand-green/60 flex flex-col items-center justify-center text-brand-green text-xs gap-1"><ImagePlus className="w-5 h-5" />Havuzdan</button>
             </div>
           )}
+          {files.length === 0 && <button type="button" onClick={() => setPicker('media')} className="mt-2 w-full rounded-xl ring-1 ring-brand-green/50 bg-ink-900/40 hover:bg-ink-800 p-3 text-sm font-semibold text-brand-green">Havuzdan seç (banner · video · fotoğraf)</button>}
         </div>
 
         <Field label="Nerede paylaşılsın?">
@@ -190,7 +195,8 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
           <Field label="Hashtag'ler"><input className="ops-input" value={hashtags} onChange={(e) => setHashtags(e.target.value)} /></Field>
           <Field label="Açıklama (caption) *" className="sm:col-span-2">
             <textarea className="ops-input min-h-[90px]" placeholder="Paylaşım metni…" value={caption} onChange={(e) => setCaption(e.target.value)} />
-            <div className="mt-1.5"><Button variant="ghost" loading={busy === 'ai'} onClick={aiCaption} icon={<Sparkles className="w-4 h-4" />}>AI ile açıklama yaz</Button></div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5"><Button variant="ghost" loading={busy === 'ai'} onClick={aiCaption} icon={<Sparkles className="w-4 h-4" />}>AI ile açıklama yaz</Button>
+              <Button variant="ghost" onClick={() => setPicker('text')}>Metin havuzundan seç</Button></div>
           </Field>
           <Field label="Tarih"><input type="date" className="ops-input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           <Field label="Saat (İstanbul)"><input type="time" className="ops-input" value={time} onChange={(e) => setTime(e.target.value)} /></Field>
@@ -202,6 +208,9 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
           </label>
         )}
 
+        {picker && <PoolPicker mode={picker} onClose={() => setPicker(null)}
+          onPickMedia={(items) => setFiles((cur) => [...cur, ...items.map((m) => ({ url: m.url, poolId: m.id, preview: m.url, video: m.video }))].slice(0, 30))}
+          onPickText={(t) => { setCaption(t.caption); if (t.hashtags.length) setHashtags(t.hashtags.join(' ')); if (!title && t.headline) setTitle(t.headline); }} />}
         {hasImage && hasVideo && chosen.some((t) => t.needsVideo) && <Notice tone="info">Görseller {chosen.filter((t) => t.needsVideo).map((t) => t.label).join(', ')} için atlanır; yalnızca videolar oraya yüklenir.</Notice>}
         {notConnected.length > 0 && <Notice tone="warn">{notConnected.map((p) => conn(p)?.name ?? p).join(', ')} hesabı henüz bağlı değil. Paylaşım kuyrukta bekler; hesap Uygulamalar sekmesinden bağlandığında zamanı gelmiş olanlar hemen paylaşılır.</Notice>}
         {inPast && <Notice tone="info">Seçilen zaman geçmişte — hesap bağlıysa ilk paylaşım bir dakika içinde yapılır.</Notice>}

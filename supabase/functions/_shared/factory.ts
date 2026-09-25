@@ -169,6 +169,9 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
           const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/png', upsert: true });
           if (up.error) throw up.error;
           media = [db.storage.from('design-exports').getPublicUrl(path).data.publicUrl];
+          await db.from('media_library').insert({ kind: 'banner', title: it.headline.slice(0, 120), url: media[0], mime: 'image/png', width: q.width, height: q.height, targets: [q.platform],
+            caption: it.caption, hashtags: it.hashtags, status: 'queued', platform: q.platform, pillar: it.badge, source: 'factory', created_by: admin?.user_id ?? null,
+            template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null } });
         } else {
           const v = videos?.[vIdx++ % Math.max(1, videos?.length ?? 0)];
           if (v) { video_url = v.url; media = [v.url]; }
@@ -184,6 +187,8 @@ export async function runContentFactory(db: Db, opts: { force?: boolean } = {}) 
           kvkk_basis: 'İçerik Fabrikası taslağı; yayın öncesi insan onayı zorunlu.',
         });
         if (error) throw error;
+        await db.from('post_templates').insert({ title: it.headline.slice(0, 200), platform: q.platform, brand: it.brand, pillar: it.badge, headline: it.headline, caption: it.caption,
+          hashtags: it.hashtags, cta: it.cta, source: 'factory', created_by: admin?.user_id ?? null });
         created++;
       } catch (e) { errors.push(`${q.platform}/${it.format}: ${String((e as Error).message).slice(0, 160)}`); }
     }
@@ -225,4 +230,27 @@ export async function factoryTick(db: Db, background: (p: Promise<unknown>) => v
     }
   }
   return null;
+}
+
+/** Havuzdaki banner'ı şablonundan (yeniden) çizer ve kaydeder. id verilirse aynı kayıt güncellenir, yoksa yeni banner eklenir. */
+export async function renderBannerToPool(db: Db, input: { id?: string | null; title?: string; platform?: string; template: { headline: string; subtitle?: string; badge?: string; cta?: string; brand?: string; width?: number; height?: number; photo_url?: string | null } }, userId: string | null) {
+  const t = input.template;
+  const brand = await defaultBrand(db);
+  const size: Record<string, [number, number]> = { instagram: [1080, 1350], facebook: [1080, 1350], tiktok: [1080, 1920], youtube: [1080, 1920], x: [1600, 900] };
+  const [w, h] = t.width && t.height ? [t.width, t.height] : size[input.platform ?? 'instagram'] ?? [1080, 1350];
+  let photo: Uint8Array | null = null; let photoMime: string | undefined;
+  if (t.photo_url) { const r = await fetch(t.photo_url).catch(() => null); if (r?.ok) { photo = new Uint8Array(await r.arrayBuffer()); photoMime = r.headers.get('content-type') ?? undefined; if (photo.length > 4_000_000) photo = null; } }
+  const brandName = (t.brand === 'Şahin Manitou' || t.brand === 'Embay Yapı') ? t.brand : 'İkisi';
+  const png = await renderBanner({ w, h, brand, brandName, badge: (t.badge || 'EMBAY').slice(0, 24), headline: t.headline, subtitle: t.subtitle ?? '', cta: t.cta || brand?.default_cta || 'Hemen arayın', photo, photoMime });
+  const path = `pool/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.png`;
+  const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/png', upsert: true });
+  if (up.error) throw up.error;
+  const url = db.storage.from('design-exports').getPublicUrl(path).data.publicUrl;
+  const row = { url, mime: 'image/png', width: w, height: h, template: { ...t, width: w, height: h }, title: (input.title || t.headline).slice(0, 120), platform: input.platform ?? null, pillar: t.badge ?? null, updated_at: new Date().toISOString() };
+  if (input.id) {
+    const { data, error } = await db.from('media_library').update(row).eq('id', input.id).eq('kind', 'banner').select('*').single();
+    if (error) throw error; return data;
+  }
+  const { data, error } = await db.from('media_library').insert({ ...row, kind: 'banner', status: 'pool', source: 'manual', targets: input.platform ? [input.platform] : [], created_by: userId }).select('*').single();
+  if (error) throw error; return data;
 }

@@ -19,7 +19,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Sosyal & İçerik', items: [
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'Instagram, Facebook… bağlantı ve botlar' },
     { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Görsel/video yükle · saatinde paylaş' },
-    { id: 'videos', label: 'Video Havuzu', icon: Film, hint: 'Higgsfield AI · hazır reklamlar' },
+    { id: 'videos', label: 'Havuzlar', icon: Film, hint: 'Video · banner · gönderi metni' },
     { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta · gün · kanban' },
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım + önizleme' },
   ] },

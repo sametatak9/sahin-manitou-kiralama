@@ -35,6 +35,7 @@ const SystemScreen = lazy(() => import('./screens/System').then((m) => ({ defaul
 const QueueScreen = lazy(() => import('./screens/Queue').then((m) => ({ default: m.QueueScreen })));
 const ReportsScreen = lazy(() => import('./screens/Reports').then((m) => ({ default: m.ReportsScreen })));
 const VideoStudioScreen = lazy(() => import('./screens/VideoStudio').then((m) => ({ default: m.VideoStudioScreen })));
+import { PoolsScreen } from './screens/Pools';
 
 function Screens() {
   const { state } = useRouter();
@@ -52,7 +53,7 @@ function Screens() {
     case 'reports': return <ReportsScreen />;
     case 'portfolio': return <PortfolioScreen />;
     case 'queue': return <QueueScreen />;
-    case 'videos': return <VideoStudioScreen />;
+    case 'videos': return <PoolsScreen />;
     case 'system': return <SystemScreen />;
     default: return <HomeScreen />;
   }
