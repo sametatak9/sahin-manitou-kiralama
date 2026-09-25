@@ -829,12 +829,14 @@ async function savePortfolio(db: Db, cur: MissionRow, findings: Finding[]) {
   let projects = 0, companies = 0;
   for (const f of findings) {
     if (f.verdict === 'rejected' || !/^https?:\/\//i.test(f.url || '') || socialProfile(f.url)) continue;
-    if (f.verdict !== 'verified' && (f.relevance ?? 0) < 7) continue;
+    // AI hakemi yokken: kaynağı açılıp başlığı kaynakta geçen bulgu da alınır (düşük öncelik, "doğrulanmadı" notuyla)
+    const sourceOk = /başlık kaynakta geçiyor/.test(f.verdict_reason ?? '');
+    if (f.verdict !== 'verified' && (f.relevance ?? 0) < 7 && !sourceOk) continue;
     const text = `${f.title} ${f.detail} ${f.location ?? ''} ${f.fit ?? ''}`;
     const { il, ilce } = placeOf(`${f.location ?? ''} ${f.title} ${f.detail}`);
-    const note = [f.verdict === 'verified' ? '✅ Denetimde doğrulandı.' : '⚠️ Şüpheli — aramadan önce kaynağı kontrol edin.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
+    const note = [f.verdict === 'verified' ? '✅ Denetimde doğrulandı.' : sourceOk && (f.relevance ?? 0) < 7 ? '⚠️ Doğrulanmadı — kaynak var ama uygunluk AI ile kontrol edilemedi; aramadan önce kaynağa bakın.' : '⚠️ Şüpheli — aramadan önce kaynağı kontrol edin.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
       .filter(Boolean).join('\n').slice(0, 1500);
-    const score = f.verdict === 'verified' ? Math.max(70, (f.relevance ?? 7) * 10) : Math.min(60, (f.relevance ?? 6) * 8);
+    const score = f.verdict === 'verified' ? Math.max(70, (f.relevance ?? 7) * 10) : (f.relevance ?? 0) >= 7 ? Math.min(60, (f.relevance ?? 6) * 8) : 40;
     let projectId: string | null = null;
     try {
       const { data, error } = await db.rpc('portfolio_upsert_project', { p: { name: f.title.slice(0, 200), project_type: projectType(text), stage: projectStage(text), il, ilce, address: f.location ?? null,
