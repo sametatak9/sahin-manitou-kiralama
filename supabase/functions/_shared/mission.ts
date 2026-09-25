@@ -21,6 +21,7 @@ export interface Finding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;
   // Liste/ilan görevlerinde yapılandırılmış alanlar (yalnızca kurumun kendi yayınladığı bilgiler)
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
+  relevance?: number; fit?: string;
 }
 interface Source { url: string; title?: string }
 
@@ -36,6 +37,22 @@ export const COMPLIANCE_RULES = [
   `- Giriş gerektiren sayfaları ve otomatik veri toplamayı kullanım koşullarında yasaklayan platformları (${NO_SCRAPE_HOSTS.join(', ')}) doğrudan kazıma; bu platformlar için yalnızca arama sonuçlarında herkese açık görünen başlık/özet ve linki ver.`,
   '- Her bilgiyi kaynak URL ile ver. Kaynağı olmayan bilgiyi yazma, uydurma. Bulamazsan boş liste döndür.',
 ].join('\n');
+
+/** Tüm botlar için alaka kuralları: yalnızca görevin amacına doğrudan hizmet eden, üzerine iş yapılabilecek kayıtlar. */
+export const RELEVANCE_RULES = [
+  'ALAKA KURALLARI (tüm botlar için zorunlu):',
+  '- Yalnızca GÖREVİN AMACINA DOĞRUDAN hizmet eden kayıtları bulgu yap. Konu, sektör ve bölge görevdekiyle birebir örtüşmeli.',
+  '- Her bulgu somut ve üzerine iş yapılabilir olmalı: belirli bir proje, ihale, ilan, talep, firma veya duyuru. Genel haber, yorum, köşe yazısı, istatistik, fiyat endeksi, borsa/ekonomi haberi, siyaset, magazin, reklam, başka sektör veya görev bölgesi dışı kayıt BULGU DEĞİLDİR.',
+  '- Her bulguya "relevance" (0-10) ve "fit" (tek cümle: bu kayıt görevdeki hangi ihtiyaca neden uyuyor) yaz. Emin değilsen veya 7\'nin altındaysa o kaydı hiç yazma.',
+  '- Aynı olayın farklı haberlerini tek bulgu say. Az ama doğru bulgu, çok ama alakasız bulgudan iyidir; uygun kayıt yoksa boş liste döndür.',
+].join('\n');
+const MIN_RELEVANCE = 7;
+const STOP = new Set(['icin', 'veya', 'olan', 'gibi', 'daha', 'kadar', 'yeni', 'ilan', 'ilani', 'proje', 'projesi', 'istanbul', 'turkiye']);
+/** Görevin anahtar kelimeleri (ARANACAK + başlık): bulgunun metninde en az biri geçmeli (deterministik ikinci kontrol). */
+export function anchorWords(m: Pick<MissionRow, 'search_for' | 'title'>): string[] {
+  const words = `${m.search_for || ''} ${m.title}`.split(/[^\p{L}\p{N}]+/u).map((w) => norm(w)).filter((w) => w.length >= 4 && !STOP.has(w));
+  return [...new Set(words.map((w) => w.slice(0, Math.max(4, w.length - 3))))]; // kök: ek farklarına dayanıklı (dönüşüm/dönüşümü)
+}
 
 async function robotsAllows(url: string): Promise<boolean> {
   try {
@@ -456,10 +473,11 @@ export async function stepMission(db: Db, m: MissionRow) {
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,
+        RELEVANCE_RULES,
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
         'Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
-        'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
+        'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)","relevance":8,"fit":"görevle neden ilgili (tek cümle)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
       const t0 = Date.now();
       const r = await aiCall(ai, prompt, async (msg) => { await logStep(db, m, step, 'ai_failover', msg); });
@@ -470,16 +488,22 @@ export async function stepMission(db: Db, m: MissionRow) {
       for (const s of r.sources) if (!sources.some((x) => canonical(x.url) === canonical(s.url))) sources.push(s);
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
       const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text)) as
-        { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
-      let added = 0, dropped = 0;
+        { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string; relevance?: number | string; fit?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
+      let added = 0, dropped = 0, offTopic = 0;
+      const anchors = anchorWords(m);
       for (const f of j?.new_findings ?? []) {
         if (!f.url || !allowed.has(canonical(f.url))) { dropped++; continue; }
+        // Alaka kapısı: AI puanı ≥ 7 + gerekçe + görevin anahtar kelimelerinden en az biri metinde geçmeli
+        const rel = Number(f.relevance);
+        const text = norm(`${f.title ?? ''} ${f.detail ?? ''} ${f.evidence ?? ''} ${f.fit ?? ''}`);
+        if (!(rel >= MIN_RELEVANCE) || !String(f.fit ?? '').trim() || (anchors.length && !anchors.some((a) => text.includes(a)))) { offTopic++; continue; }
         const opt = (v: unknown, n = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined);
         if (addFinding({ title: String(f.title || '').slice(0, 200), detail: String(f.detail || '').slice(0, 1500), url: f.url, evidence: opt(f.evidence, 500),
-          company: opt(f.company), location: opt(f.location), posted: opt(f.posted, 60), phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300) })) added++;
+          company: opt(f.company), location: opt(f.location), posted: opt(f.posted, 60), phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
+          relevance: Math.min(10, Math.round(rel)), fit: opt(f.fit, 300) })) added++;
       }
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
-      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
+      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
         null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
     } catch (e) {
@@ -538,7 +562,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
 const telHref = (p: string) => `tel:${p.replace(/[^\d+]/g, '')}`;
 /** Yapılandırılmış alanları (firma, konum, tarih, kurumsal iletişim) rapor satırına çevirir. */
 function factsHtml(f: Finding) {
-  const parts = [f.company && `<span>🏢 ${esc(f.company)}</span>`, f.location && `<span>📍 ${esc(f.location)}</span>`, f.posted && `<span>🗓 ${esc(f.posted)}</span>`,
+  const parts = [f.fit && `<span>🎯 ${esc(f.fit)}</span>`, f.company && `<span>🏢 ${esc(f.company)}</span>`, f.location && `<span>📍 ${esc(f.location)}</span>`, f.posted && `<span>🗓 ${esc(f.posted)}</span>`,
     f.phone && `<a href="${telHref(f.phone)}">📞 ${esc(f.phone)}</a>`, f.email && `<a href="mailto:${esc(f.email)}">✉️ ${esc(f.email)}</a>`, f.website && `<a href="${safeHref(f.website)}" target="_blank" rel="noopener">🌐 web</a>`].filter(Boolean);
   return parts.length ? `<div class="facts">${parts.join('')}</div>` : '';
 }
@@ -563,7 +587,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
       const r = await aiCall(ai, [
         `Aşağıdaki bot görevinin sonuç raporunu Türkçe yaz. YALNIZCA verilen bulguları kullan, yeni bilgi ekleme, web araması yapma.`,
         `Görev: ${cur.title}\nAmaç: ${cur.goal}${cur.search_for ? `\nAranan: ${cur.search_for}` : ''}${cur.report_spec ? `\nRaporda olması gereken: ${cur.report_spec}` : ''}`,
-        `Bulgular:\n${findings.map((f, i) => `${i + 1}. ${f.title} — ${f.detail} (${f.url})`).join('\n').slice(0, 8000)}`,
+        `Bulgular:\n${findings.map((f, i) => `${i + 1}. ${f.title} — ${f.detail}${f.fit ? ` [neden uygun: ${f.fit}]` : ''} (${f.url})`).join('\n').slice(0, 8000)}`,
         'Biçim: 1) 3-6 cümlelik yönetici özeti 2) madde madde sonuçlar 3) önerilen sonraki adım. Markdown başlık kullanma; düz paragraflar ve "- " maddeleri kullan.',
       ].join('\n\n'), async (msg) => { await logStep(db, cur, cur.step_count + 1, 'ai_failover', msg); });
       summary = r.text.trim(); tokensIn += r.tokensIn; tokensOut += r.tokensOut;
@@ -617,7 +641,7 @@ async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summ
     if (!appSecret('TELEGRAM_BOT_TOKEN') || !appSecret('TELEGRAM_CHAT_ID')) return;
     const list = findings.slice(0, 10).map((f, i) => {
       const facts = [f.company && `🏢 ${f.company}`, f.location && `📍 ${f.location}`, f.posted && `🗓 ${f.posted}`, f.phone && `📞 ${f.phone}`].filter(Boolean).join(' · ');
-      return `${i + 1}. ${f.title}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
+      return `${i + 1}. ${f.title}${f.fit ? `\n   🎯 ${f.fit}` : ''}${facts ? `\n   ${facts}` : ''}\n   ${f.url}`;
     }).join('\n\n');
     const text = [`📋 ${cur.title}`, `Durum: ${REASON[reason] ?? reason} · ${findings.length} bulgu`, '', summary.slice(0, 1400),
       findings.length ? `\n— Bulgular —\n${list}` : '', findings.length > 10 ? `\n(+${findings.length - 10} bulgu daha panelde)` : '',
