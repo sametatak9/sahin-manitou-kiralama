@@ -792,11 +792,18 @@ const ILCELER = ['Çatalca', 'Silivri', 'Büyükçekmece', 'Küçükçekmece', '
   'Bayrampaşa', 'Zeytinburnu', 'Bakırköy', 'Eyüpsultan', 'Sultangazi', 'Gaziosmanpaşa', 'Fatih', 'Beyoğlu', 'Şişli', 'Kağıthane', 'Sarıyer', 'Beşiktaş', 'Üsküdar', 'Kadıköy', 'Ataşehir',
   'Ümraniye', 'Maltepe', 'Kartal', 'Pendik', 'Tuzla', 'Sultanbeyli', 'Sancaktepe', 'Çekmeköy', 'Beykoz', 'Şile', 'Adalar'];
 const ILLER = ['İstanbul', 'Kocaeli', 'Tekirdağ', 'Kırklareli', 'Edirne', 'Sakarya', 'Bursa', 'Yalova', 'Ankara', 'İzmir'];
-function placeOf(text: string) {
-  const t = norm(text);
-  const ilce = ILCELER.find((i) => t.includes(norm(i))) ?? null;
-  const il = ilce ? 'İstanbul' : ILLER.find((i) => t.includes(norm(i))) ?? null;
-  return { il, ilce };
+// Önce konum alanı, sonra başlık, en son açıklama; metinde ilk geçen ilçe alınır (liste sırası değil)
+function placeOf(...parts: Array<string | null | undefined>) {
+  for (const part of parts) {
+    const t = norm(part ?? '');
+    if (!t) continue;
+    if (/havaliman[ıi]|havaalan[ıi]/.test(t) && /istanbul/.test(t)) return { il: 'İstanbul', ilce: 'Arnavutköy' };
+    const hits = ILCELER.map((i) => ({ i, at: t.search(new RegExp(`(^|[^\\p{L}])${norm(i)}([^\\p{L}]|$)`, 'u')) })).filter((h) => h.at >= 0).sort((a, b) => a.at - b.at);
+    if (hits.length) return { il: 'İstanbul', ilce: hits[0].i };
+    const il = ILLER.find((i) => t.includes(norm(i)));
+    if (il) return { il, ilce: null };
+  }
+  return { il: null, ilce: null };
 }
 function projectType(text: string) {
   const t = norm(text);
@@ -833,7 +840,7 @@ async function savePortfolio(db: Db, cur: MissionRow, findings: Finding[]) {
     const sourceOk = /başlık kaynakta geçiyor/.test(f.verdict_reason ?? '');
     if (f.verdict !== 'verified' && (f.relevance ?? 0) < 7 && !sourceOk) continue;
     const text = `${f.title} ${f.detail} ${f.location ?? ''} ${f.fit ?? ''}`;
-    const { il, ilce } = placeOf(`${f.location ?? ''} ${f.title} ${f.detail}`);
+    const { il, ilce } = placeOf(f.location, f.title, f.detail);
     const note = [f.verdict === 'verified' ? '✅ Denetimde doğrulandı.' : sourceOk && (f.relevance ?? 0) < 7 ? '⚠️ Doğrulanmadı — kaynak var ama uygunluk AI ile kontrol edilemedi; aramadan önce kaynağa bakın.' : '⚠️ Şüpheli — aramadan önce kaynağı kontrol edin.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
       .filter(Boolean).join('\n').slice(0, 1500);
     const score = f.verdict === 'verified' ? Math.max(70, (f.relevance ?? 7) * 10) : (f.relevance ?? 0) >= 7 ? Math.min(60, (f.relevance ?? 6) * 8) : 40;
