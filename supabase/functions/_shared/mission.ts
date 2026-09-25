@@ -90,6 +90,23 @@ export function salvageFindings(text: string): { new_findings: Record<string, un
   return out.length ? { new_findings: out } : null;
 }
 
+/** Kural tabanlı ön eleme (AI yokken): güçlü iş sinyali olan, rehber/liste/fiyat sayfası olmayan ve görev kelimesi geçen arama sonuçları. */
+const POS = ['temeli atil', 'temel atma', 'insaati basla', 'insaatina basla', 'aranıyor', 'araniyor', 'ariyor', 'arıyor', 'kat karsilig', 'bosaltil', 'yikim', 'yikil', 'riskli yapi', 'ced ', 'ced olumlu', 'yapilacak', 'insa edilecek', 'talep', 'ihale', 'proje'];
+const NEG = ['en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire'];
+export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title'>): Array<Omit<Finding, 'at' | 'step'>> {
+  const anchors = anchorWords(m);
+  const out: Array<Omit<Finding, 'at' | 'step'>> = [];
+  for (const r of results) {
+    const t = norm(`${r.title} ${r.snippet}`); const ti = t.replace(/ı/g, 'i');
+    const pos = POS.find((p) => ti.includes(p.replace(/ı/g, 'i')));
+    if (!pos || NEG.some((n) => norm(r.title).replace(/ı/g, 'i').includes(n)) || (anchors.length && !anchors.some((a) => ti.includes(a.replace(/ı/g, 'i'))))) continue;
+    out.push({ title: r.title.slice(0, 200), detail: (r.snippet || r.title).slice(0, 600), url: r.url, evidence: r.snippet ? r.snippet.slice(0, 300) : r.title,
+      posted: r.posted ?? undefined, relevance: 6, fit: `Kural tabanlı ön eleme: “${pos.trim()}” işareti var — denetimde doğrulanacak` });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
 // ── Haber/duyuru araması (herkese açık Google Haberler RSS) ───────────────────
 // Ücretsiz AI modellerinde internet araması yok: her adımda bir arama terimi için son 7 günün haber/duyuru
 // başlıkları (gerçek link + yayın tarihi + kaynak) çekilir ve AI'a yalnızca bunlardan seçmesi söylenir.
@@ -326,7 +343,7 @@ async function groqResearch(key: string, model: string, system: string, prompt: 
 async function compatResearch(provider: 'openrouter' | 'github', key: string, model: string, system: string, prompt: string): Promise<AiResult> {
   const res = await fetch(COMPAT[provider].url, {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, max_tokens: 3000, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, max_tokens: 3000, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: prompt.length > 18000 ? `${prompt.slice(0, 4000)}\n…\n${prompt.slice(-14000)}` : prompt }] }),
   });
   const data = await res.json().catch(() => ({}));
   const label = provider === 'github' ? 'GitHub Models' : 'OpenRouter';
@@ -476,11 +493,11 @@ export async function stepMission(db: Db, m: MissionRow) {
       return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut, error_kind: 'budget' }, 'budget');
     }
     const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model);
-    let useScan = !ai;
+    let useScan = !ai; let lastResults: WebResult[] = [];
     if (ai) try {
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
       // Her adımda (AI hangisi olursa olsun; Claude kredisi yoksa zincir aramasız modellere düşer) bu adımın terimiyle gerçek haber/duyuru sonuçları
-      let newsNote = '';
+      let newsNote = ''; let stepResults: WebResult[] = [];
       if (!m.target_url && terms.length) {
         // Her adımda 2 konu. Önce gerçek web araması (Tavily, anahtar varsa), yoksa/boşsa Google Haberler yedeği.
         const qs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
@@ -499,7 +516,7 @@ export async function stepMission(db: Db, m: MissionRow) {
           for (const g of got) if (!results.some((x) => x.url === g.url || x.title === g.title)) { results.push(g); n++; }
           counts.push(`“${q}” → ${n}`);
         }
-        results.splice(24);
+        results.splice(24); stepResults = results; lastResults = results;
         for (const n of results) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
         await logStep(db, m, step, 'news_search', `${engine === 'web' ? 'Web araması' : 'Haber/duyuru araması'}: ${counts.join(' · ')} sonuç`, null, { engine, queries: qs, count: results.length, titles: results.map((n) => n.title).slice(0, 24) });
         if (results.length) newsNote = results.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}${n.snippet ? `\n   Özet: ${n.snippet}` : ''}\n   ${n.url}`).join('\n');
@@ -546,11 +563,21 @@ export async function stepMission(db: Db, m: MissionRow) {
           company: opt(f.company), location: opt(f.location), posted: opt(f.posted, 60), phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
           relevance: Math.min(10, Math.round(rel)), fit: opt(f.fit, 300) })) added++;
       }
+      // AI cevap veremediyse (boş/okunamaz) veri akışı durmasın: kural tabanlı ön eleme, denetçi sonra doğrular
+      let ruleAdded = 0;
+      if ((!j || !r.text.trim()) && stepResults.length) { for (const f of ruleFindings(stepResults, m)) if (addFinding(f)) ruleAdded++; }
+      if (ruleAdded) await logStep(db, m, step, 'rule_filter', `Yapay zekâ bu adımda sonuç okuyamadı → kural tabanlı ön eleme ${ruleAdded} aday buldu (denetimde doğrulanacak)`);
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
       await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
         null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
     } catch (e) {
+      if (e instanceof AiFatalError && !m.target_url && lastResults.length) {
+        let n = 0; for (const f of ruleFindings(lastResults, m)) if (addFinding(f)) n++;
+        await logStep(db, m, step, 'rule_filter', `Yapay zekâ kullanılamadı (${String(e.message).slice(0, 120)}) → kural tabanlı ön eleme ${n} aday buldu (denetimde doğrulanacak)`);
+        await persist();
+        return { mission_id: m.id, step, findings: findings.length };
+      }
       if (!(e instanceof AiFatalError) || !m.target_url) throw e;
       m.error_kind = e.kind;
       await db.from('bot_missions').update({ error_kind: e.kind, error: String(e.message).slice(0, 500) }).eq('id', m.id);
