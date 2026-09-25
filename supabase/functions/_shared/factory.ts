@@ -2,6 +2,7 @@
 // Kurallar: gerçek hizmetlerimiz, uydurma müşteri/rakam/proje yok; platform uzunluk/hashtag kuralları; paylaşım insan onayından sonra.
 // Banner PNG sunucuda üretilir (SVG → PNG, resvg-wasm). Video: Video Havuzu'ndan gerçek video seçilir; yoksa çekim senaryosuyla "video gerekli" taslağı.
 import { initWasm, Resvg } from 'npm:@resvg/resvg-wasm@2.6.2';
+import jpeg from 'npm:jpeg-js@0.4.4';
 import { aiComplete, defaultBrand, istanbulDayRange, type Db } from './context.ts';
 import { telegramSend } from './connectors/messaging.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
@@ -137,7 +138,11 @@ ${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.0
 <text x="${w - pad}" y="${h - barH / 2 + ctaSize * 0.36}" text-anchor="end" font-family="DejaVu Sans" font-weight="700" font-size="${ctaSize}" fill="${p.bg2}">☎ ${x(phone)}</text>
 </svg>`;
   const r = new Resvg(svg, { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
-  return r.render().asPng();
+  // Instagram API yalnızca JPEG görsel kabul eder → banner JPEG olarak üretilir
+  const img = r.render();
+  const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;
+  img.free?.(); r.free?.();
+  return new Uint8Array(out);
 }
 
 // ── Günlük üretim ────────────────────────────────────────────────────────────
@@ -213,11 +218,11 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
           const photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null;
           if (ph) await markUsed(ph);
           const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: it.brand, badge: it.badge, headline: it.headline, subtitle: it.subtitle, cta: it.cta, photo: photo && photo.length < 4_000_000 ? photo : null, photoMime: ph?.mime });
-          const path = `factory/${day}/${q.platform}-${Date.now()}-${i}.png`;
-          const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/png', upsert: true });
+          const path = `factory/${day}/${q.platform}-${Date.now()}-${i}.jpg`;
+          const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/jpeg', upsert: true });
           if (up.error) throw up.error;
           media = [db.storage.from('design-exports').getPublicUrl(path).data.publicUrl];
-          await db.from('media_library').insert({ kind: 'banner', title: it.headline.slice(0, 120), url: media[0], mime: 'image/png', width: q.width, height: q.height, targets: [q.platform],
+          await db.from('media_library').insert({ kind: 'banner', title: it.headline.slice(0, 120), url: media[0], mime: 'image/jpeg', width: q.width, height: q.height, targets: [q.platform],
             caption: it.caption, hashtags: it.hashtags, status: 'queued', platform: q.platform, pillar: it.badge, source: 'factory', created_by: admin?.user_id ?? null,
             template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null } });
         } else {
@@ -299,11 +304,11 @@ export async function renderBannerToPool(db: Db, input: { id?: string | null; ti
   if (t.photo_url) { const r = await fetch(t.photo_url).catch(() => null); if (r?.ok) { photo = new Uint8Array(await r.arrayBuffer()); photoMime = r.headers.get('content-type') ?? undefined; if (photo.length > 4_000_000) photo = null; } }
   const brandName = (t.brand === 'Şahin Manitou' || t.brand === 'Embay Yapı') ? t.brand : 'İkisi';
   const png = await renderBanner({ w, h, brand, brandName, badge: (t.badge || 'EMBAY').slice(0, 24), headline: t.headline, subtitle: t.subtitle ?? '', cta: t.cta || brand?.default_cta || 'Hemen arayın', photo, photoMime });
-  const path = `pool/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.png`;
-  const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/png', upsert: true });
+  const path = `pool/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.jpg`;
+  const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/jpeg', upsert: true });
   if (up.error) throw up.error;
   const url = db.storage.from('design-exports').getPublicUrl(path).data.publicUrl;
-  const row = { url, mime: 'image/png', width: w, height: h, template: { ...t, width: w, height: h }, title: (input.title || t.headline).slice(0, 120), platform: input.platform ?? null, pillar: t.badge ?? null, updated_at: new Date().toISOString() };
+  const row = { url, mime: 'image/jpeg', width: w, height: h, template: { ...t, width: w, height: h }, title: (input.title || t.headline).slice(0, 120), platform: input.platform ?? null, pillar: t.badge ?? null, updated_at: new Date().toISOString() };
   if (input.id) {
     const { data, error } = await db.from('media_library').update(row).eq('id', input.id).eq('kind', 'banner').select('*').single();
     if (error) throw error; return data;
