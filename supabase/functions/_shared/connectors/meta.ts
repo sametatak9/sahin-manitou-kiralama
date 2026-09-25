@@ -35,7 +35,9 @@ export function metaAuthorizeUrl(state: string, redirectUri: string, switchAccou
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', (withInstagram ? META_SCOPES : META_PAGE_SCOPES).join(','));
   // Hesap değiştir: Facebook izin/sayfa seçim ekranını yeniden gösterir (başka sayfa/IG hesabı seçilebilir)
-  if (switchAccount) u.searchParams.set('auth_type', 'rerequest');
+  // Her girişte izin/sayfa seçim ekranı yeniden gösterilir (eski "hiç sayfa seçilmedi" ayarı tekrar kullanılmasın)
+  u.searchParams.set('auth_type', 'rerequest');
+  void switchAccount;
   return u.toString();
 }
 
@@ -45,7 +47,7 @@ export interface MetaPageAccount {
 }
 
 /** code → uzun ömürlü kullanıcı token'ı → sayfa token'ları + bağlı IG hesabı. */
-export async function metaExchange(code: string, redirectUri: string): Promise<{ pages: MetaPageAccount[]; userName: string | null }> {
+export async function metaExchange(code: string, redirectUri: string): Promise<{ pages: MetaPageAccount[]; userName: string | null; granted: string[]; declined: string[] }> {
   const appId = appSecret('META_APP_ID') || '';
   const secret = appSecret('META_APP_SECRET') || '';
   const short = await call('GET', 'oauth/access_token', { client_id: appId, client_secret: secret, redirect_uri: redirectUri, code });
@@ -59,7 +61,13 @@ export async function metaExchange(code: string, redirectUri: string): Promise<{
     pageId: p.id, pageName: p.name, pageToken: p.access_token,
     igId: p.instagram_business_account?.id ?? null, igUsername: p.instagram_business_account?.username ?? null,
   }));
-  return { pages, userName: me.name ?? null };
+  // Tanı: hangi izinler verildi / reddedildi (sayfa bulunamazsa kullanıcıya net sebep göstermek için)
+  const perms = await call('GET', 'me/permissions', { access_token: long.access_token }).catch(() => ({ data: [] }));
+  // deno-lint-ignore no-explicit-any
+  const granted = (perms.data || []).filter((x: any) => x.status === 'granted').map((x: any) => String(x.permission));
+  // deno-lint-ignore no-explicit-any
+  const declined = (perms.data || []).filter((x: any) => x.status !== 'granted').map((x: any) => String(x.permission));
+  return { pages, userName: me.name ?? null, granted, declined };
 }
 
 const isVideo = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);

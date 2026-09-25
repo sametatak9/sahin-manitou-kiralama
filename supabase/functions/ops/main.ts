@@ -371,8 +371,14 @@ async function oauthCallback(db: Db, url: URL) {
   if (!code) return back('oauth_error=' + encodeURIComponent(url.searchParams.get('error_description') || 'İzin verilmedi'));
   try {
     if (st.provider === 'meta') {
-      const { pages } = await metaExchange(code, REDIRECT_URI());
-      if (!pages.length) return back('oauth_error=' + encodeURIComponent('Yönetici olduğunuz Facebook Sayfası bulunamadı'));
+      const { pages, userName, granted, declined } = await metaExchange(code, REDIRECT_URI());
+      if (!pages.length) {
+        const why = declined.some((p) => p.startsWith('pages_')) || !granted.includes('pages_show_list')
+          ? 'Facebook izin ekranında sayfa izni verilmedi veya hiçbir sayfa seçilmedi. Tekrar “Hesabımla bağla” → açılan ekranda “Ayarları düzenle” → Embay sayfasını işaretleyip tüm izinleri açın.'
+          : `“${userName ?? 'Bu hesap'}” hesabının yönetici olduğu bir Facebook Sayfası yok (kişisel profil sayfa sayılmaz). Önce facebook.com/pages/create ile firma sayfası açın ya da sayfada bu hesaba yönetici yetkisi verin.`;
+        await logActivity(db, { connector_key: 'facebook', action: 'connect', status: 'failed', actor: st.user_id, summary: `Facebook bağlanamadı: sayfa yok (${userName ?? '?'})`, data: { granted, declined } });
+        return back('oauth_error=' + encodeURIComponent(why));
+      }
       for (const p of pages) {
         await upsertAccount(db, st.user_id, { platform: 'facebook', connector_key: 'facebook', account_name: p.pageName, external_account_id: p.pageId, external_account_name: p.pageName,
           profile_url: `https://facebook.com/${p.pageId}`, scopes: [], capabilities: { publish: true, metrics: true } }, p.pageToken);
