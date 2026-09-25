@@ -91,6 +91,7 @@ export function VideoPool() {
               <div className="relative aspect-[9/16] max-h-64 w-full bg-ink-900">
                 {m.cover_url ? <img src={m.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
                 <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-mono text-white">{fmtSec(m.duration_sec)}</span>
+                {(m.edit as { codec?: string } | null)?.codec === 'hevc' && <span className="absolute top-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">iPhone</span>}
                 {(m.edit?.trim_start != null || m.edit?.muted) && <span className="absolute top-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">düzenlendi</span>}
               </div>
               <div className="p-2 space-y-1">
@@ -112,7 +113,15 @@ function VideoEditor({ item, onClose, onSaved, onGone }: { item: MediaItem; onCl
   const admin = session.role === 'admin';
   const status = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
   const vref = useRef<HTMLVideoElement>(null);
-  const dur = item.duration_sec ?? 0;
+  const [dur, setDur] = useState(item.duration_sec ?? 0);
+  const [playErr, setPlayErr] = useState(false);
+  const hevc = (item.edit as { codec?: string } | null)?.codec === 'hevc';
+  // Süre/ölçü kayıtlı değilse (Drive'dan gelen videolar) ilk açılışta okunur ve kaydedilir
+  const onMeta = (v: HTMLVideoElement) => {
+    if (dur > 0 || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    setDur(v.duration); setEnd(v.duration);
+    void db().from('media_library').update({ duration_sec: Math.round(v.duration * 10) / 10, width: v.videoWidth || null, height: v.videoHeight || null }).eq('id', item.id);
+  };
   const [title, setTitle] = useState(item.title);
   const [caption, setCaption] = useState(item.caption ?? '');
   const [hashtags, setHashtags] = useState(item.hashtags.join(' '));
@@ -223,7 +232,8 @@ function VideoEditor({ item, onClose, onSaved, onGone }: { item: MediaItem; onCl
       </div>}>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-3">
-          <video ref={vref} src={item.original_url ?? item.url} controls playsInline preload="metadata" className="w-full max-h-[60vh] rounded-xl bg-ink-900" onLoadedMetadata={(e) => { if (!dur) setEnd((e.target as HTMLVideoElement).duration); }} />
+          <video ref={vref} src={item.original_url ?? item.url} controls playsInline preload="metadata" className="w-full max-h-[60vh] rounded-xl bg-ink-900" poster={item.cover_url ?? undefined} onLoadedMetadata={(e) => onMeta(e.target as HTMLVideoElement)} onError={() => setPlayErr(true)} />
+          {(playErr || hevc) && <Notice tone="warn">{playErr ? 'Bu video bu tarayıcıda oynatılamıyor' : 'Bu video iPhone (HEVC) formatında; bazı Android/Windows tarayıcılarında oynamayabilir'}. Instagram, TikTok ve YouTube bu formatı kabul eder — paylaşımda sorun yok. Kırpma/kapak seçmek için iPhone’da Safari veya bilgisayarda Safari/Edge kullanın.</Notice>}
           <div className="text-[11px] text-ink-400">{fmtSec(item.duration_sec)} · {item.width && item.height ? `${item.width}×${item.height} ${item.height > item.width ? '(dikey)' : '(yatay)'}` : ''} {fmtMb(item.size_bytes)} · Yüklendi: {fmtDateTime(item.created_at)}</div>
 
           <Panel title={<span className="inline-flex items-center gap-2"><Scissors className="w-4 h-4" />Düzenleme</span>}>
@@ -238,7 +248,7 @@ function VideoEditor({ item, onClose, onSaved, onGone }: { item: MediaItem; onCl
               {trimChanged && <Notice tone="info">Kaydet’e bastığınızda seçtiğiniz bölüm gerçek bir yeni video dosyası olarak oluşturulur ({fmtSec(cutLen)} sürer — video o süre boyunca işlenir, ekranı kapatmayın). Orijinal dosya silinmez.</Notice>}
               {!fmt && <Notice tone="warn">Bu tarayıcı kırpmayı desteklemiyor; Chrome kullanın. Diğer bilgiler yine kaydedilir.</Notice>}
               {fmt?.ext === 'webm' && trimChanged && <Notice tone="warn">Bu tarayıcı kırpılmış videoyu WebM olarak üretir: YouTube kabul eder, Instagram kabul etmez. Instagram için kırpmadan paylaşın veya Chrome’un güncel sürümünü kullanın.</Notice>}
-            </div>) : <p className="text-xs text-ink-400">Video süresi okunamadı; kırpma kullanılamıyor.</p>}
+            </div>) : <p className="text-xs text-ink-400">{playErr ? 'Video bu tarayıcıda açılamadığı için kırpma kullanılamıyor; başlık, açıklama ve paylaşım ayarları yine kaydedilir.' : 'Video yükleniyor…'}</p>}
           </Panel>
         </div>
 

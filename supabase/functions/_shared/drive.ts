@@ -114,7 +114,7 @@ export async function syncDriveFolder(db: Db, src: { id: string; folder_id: stri
         const url = await upload(db, store, bytes, mime);
         const th = await thumbnail(f.id, 1080).catch(() => null);
         const cover = th ? await upload(db, `drive/${f.id}-cover.jpg`, th.bytes, 'image/jpeg').catch(() => null) : null;
-        const { error } = await db.from('media_library').insert({ ...base, edit: { ...base.edit, codec }, kind: 'video', url, original_url: url, storage_path: store, mime, size_bytes: bytes.length, cover_url: cover, targets: ['instagram', 'tiktok', 'youtube', 'facebook'] });
+        const { error } = await db.from('media_library').insert({ ...base, edit: { ...base.edit, codec }, kind: 'video', url, original_url: url, storage_path: store, mime, size_bytes: bytes.length, cover_url: cover, targets: ['ig_reel', 'yt_short', 'fb_post'] });
         if (error) throw new Error(error.message);
       }
       res.imported++;
