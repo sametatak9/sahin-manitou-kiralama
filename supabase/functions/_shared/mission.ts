@@ -353,16 +353,16 @@ const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p =
 async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
   const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'openrouter', 'github'].filter((p) => p !== c.provider)];
   const errors: string[] = [];
-  let firstErr: unknown = null; let prev: string = c.provider;
+  let firstErr: unknown = null; let lastErr: unknown = null; let prev: string = c.provider;
   for (const p of chain) {
     const key = p === c.provider ? c.key : await getAiKey(p as 'anthropic' | 'gemini' | 'groq' | 'openrouter' | 'github');
     if (!key) continue;
     if (p !== c.provider) {
       if (!isQuotaOrRateLimit(firstErr)) break; // ilk hata kredi/anahtar/limit değilse yedeğe geçme
-      if (onFailover) await onFailover(`${AI_LABEL[prev]} kullanılamadı (${String((firstErr as Error)?.message || firstErr).slice(0, 80)}) — yedek ${AI_LABEL[p]} ile devam ediliyor.`);
+      if (onFailover) await onFailover(`${AI_LABEL[prev]} kullanılamadı (${String((lastErr as Error)?.message || lastErr).slice(0, 80)}) — yedek ${AI_LABEL[p]} ile devam ediliyor.`);
     }
     try { return await research(p, key, p === c.provider ? c.model : defaultModel(p), c.system, prompt); }
-    catch (e) { errors.push(`${AI_LABEL[p]}: ${String((e as Error).message || e).slice(0, 140)}`); firstErr ??= e; prev = p; }
+    catch (e) { errors.push(`${AI_LABEL[p]}: ${String((e as Error).message || e).slice(0, 140)}`); firstErr ??= e; lastErr = e; prev = p; }
   }
   if (errors.length <= 1 && firstErr) throw firstErr;
   throw new AiFatalError(firstErr instanceof AiFatalError ? firstErr.kind : 'ai_credit', errors.join(' · '));
@@ -774,7 +774,7 @@ async function coachMission(db: Db, cur: MissionRow, ai: AiChoice, ctx: { skills
     ].join('\n\n'));
     await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: 0 });
     const j = extractJson(r.text) as { diagnosis?: string; instructions_add?: string; search_terms_add?: string[]; search_terms_remove?: string[]; sources_add?: string[] } | null;
-    if (!j?.diagnosis) return null;
+    if (!j?.diagnosis) { await logStep(db, cur, cur.step_count + 1, 'error', `Koç yanıtı okunamadı (${r.provider ?? ai.provider}): ${r.text.slice(0, 200)}`); return null; }
     const arr = (a: unknown, n: number) => (Array.isArray(a) ? a.map((x) => String(x).trim()).filter((x) => x.length > 1 && x.length < 80).slice(0, n) : []);
     const skillId = ctx.skills[0]?.id;
     if (skillId) {
