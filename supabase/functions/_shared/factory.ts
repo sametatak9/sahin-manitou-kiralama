@@ -185,7 +185,7 @@ export async function renderBanner(o: BannerOpts) {
   const ctaFont = ctaText.length > ctaMax ? Math.max(Math.round(ctaSize * 0.75), Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaText.length * 0.56))) : ctaSize;
   const ctaMax2 = Math.floor((w - pad * 2 - phoneW - pad * 0.6) / (ctaFont * 0.56));
   const cta = ctaText.length > ctaMax2 ? ctaText.slice(0, Math.max(0, ctaMax2 - 1)).replace(/\s+\S*$/, '') + '…' : ctaText;
-  const longBrand = o.brandName === 'İkisi';
+  const longBrand = (o.brandName as string) === 'İkisi';
   const chips: Array<[string, string]> = [['baret', 'Ücretsiz keşif'], ['vinc', 'Hızlı teklif'], ['bina', 'Güvenli iş']];
   const ic = o.icon ?? iconFor(o.badge);
   const chipsY = h - barH - Math.round(u * 0.1);
