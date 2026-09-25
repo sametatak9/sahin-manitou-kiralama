@@ -3,9 +3,10 @@ import { db, unwrap, useQuery } from '../lib/hooks';
 import type { Bot } from '../lib/types';
 import { MissionList } from '../components/Missions';
 import { SchedulesPanel } from '../components/Schedules';
+import { FollowList } from '../components/FollowList';
 import { ErrorState, Tabs } from '../ui';
 
-type View = 'all' | 'pending' | 'approved' | 'auto';
+type View = 'all' | 'pending' | 'approved' | 'auto' | 'follow';
 
 /** Tüm botların görevleri ve raporları + yönetici onayından geçmiş sonuçlar. */
 export function ReportsScreen() {
@@ -18,8 +19,8 @@ export function ReportsScreen() {
         <h2 className="font-display text-xl font-semibold text-ink-100">Bot Raporları & Araştırma</h2>
         <p className="text-xs text-ink-400">Botlara verilen tüm görevler, canlı adımları ve sonuç raporları. Biten görevi açıp “Onayla ve kaydet” derseniz sonuç kalıcı listeye alınır.</p>
       </div>
-      <Tabs value={view} onChange={setView} items={[{ id: 'all', label: 'Tüm görevler' }, { id: 'pending', label: 'Onay bekleyen sonuçlar' }, { id: 'approved', label: 'Onaylı sonuçlar' }, { id: 'auto', label: 'Otomatik görevler' }]} />
-      {view === 'auto' ? <SchedulesPanel bots={q.data} /> : <MissionList bots={q.data} review={view === 'all' ? undefined : view} />}
+      <Tabs value={view} onChange={setView} items={[{ id: 'all', label: 'Tüm görevler' }, { id: 'pending', label: 'Onay bekleyen sonuçlar' }, { id: 'approved', label: 'Onaylı sonuçlar' }, { id: 'auto', label: 'Otomatik görevler' }, { id: 'follow', label: 'Takip listesi' }]} />
+      {view === 'follow' ? <FollowList /> : view === 'auto' ? <SchedulesPanel bots={q.data} /> : <MissionList bots={q.data} review={view === 'all' ? undefined : view} />}
     </div>
   );
 }

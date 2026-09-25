@@ -90,15 +90,36 @@ export function salvageFindings(text: string): { new_findings: Record<string, un
   return out.length ? { new_findings: out } : null;
 }
 
+/** instagram.com/<kullanıcı> veya facebook.com/<sayfa> profil linki mi? (gönderi, reel, hashtag, grup, arama sayfaları hariç) */
+export function socialProfile(url: string): { platform: 'instagram' | 'facebook'; handle: string } | null {
+  try {
+    const u = new URL(url); const host = u.hostname.replace(/^(www\.|m\.|tr-tr\.|tr\.)/, '');
+    const seg = u.pathname.split('/').filter(Boolean);
+    if (!seg.length) return null;
+    const bad = ['p', 'reel', 'reels', 'explore', 'stories', 'tv', 'groups', 'events', 'hashtag', 'watch', 'search', 'share', 'photo', 'photos', 'videos', 'posts', 'people', 'pages', 'profile.php', 'marketplace', 'login'];
+    if (bad.includes(seg[0].toLowerCase())) return null;
+    if (host === 'instagram.com' && /^[A-Za-z0-9._]{2,30}$/.test(seg[0])) return { platform: 'instagram', handle: seg[0].toLowerCase() };
+    if (host === 'facebook.com' && /^[A-Za-z0-9.\-]{2,60}$/.test(seg[0])) return { platform: 'facebook', handle: seg[0].toLowerCase() };
+  } catch { /* */ }
+  return null;
+}
+
 /** Kural tabanlı ön eleme (AI yokken): güçlü iş sinyali olan, rehber/liste/fiyat sayfası olmayan ve görev kelimesi geçen arama sonuçları. */
 const POS = ['temeli atil', 'temel atma', 'insaati basla', 'insaatina basla', 'aranıyor', 'araniyor', 'ariyor', 'arıyor', 'kat karsilig', 'bosaltil', 'yikim', 'yikil', 'riskli yapi', 'ced ', 'ced olumlu', 'yapilacak', 'insa edilecek', 'talep', 'ihale', 'proje'];
 const TARGET_REGION = ['istanbul', 'kocaeli', 'tekirdag', 'gebze', 'tuzla', 'pendik', 'kartal', 'esenyurt', 'basaksehir', 'arnavutkoy', 'silivri', 'catalca', 'buyukcekmece', 'beylikduzu', 'sancaktepe', 'cekmekoy', 'umraniye', 'atasehir', 'kadikoy', 'uskudar', 'beykoz', 'sile', 'sultanbeyli', 'eyup', 'kagithane', 'sariyer', 'bagcilar', 'kucukcekmece', 'esenler', 'gungoren', 'zeytinburnu', 'bahcelievler', 'avcilar', 'hadimkoy', 'corlu', 'cerkezkoy', 'izmit', 'darica', 'dilovasi', 'cayirova'];
 const OTHER_CITIES = ['ankara', 'izmir', 'bursa', 'iznik', 'antalya', 'adana', 'konya', 'mersin', 'gaziantep', 'kayseri', 'samsun', 'trabzon', 'eskisehir', 'diyarbakir', 'sakarya', 'yalova', 'bolu', 'duzce', 'manisa', 'balikesir', 'canakkale', 'edirne', 'kirklareli', 'malatya', 'erzurum', 'van', 'hatay', 'denizli', 'aydin', 'mugla', 'afyon', 'sivas', 'tokat', 'ordu', 'rize', 'zonguldak', 'karabuk', 'kastamonu', 'corum', 'yozgat', 'nevsehir', 'aksaray', 'nigde', 'karaman', 'isparta', 'burdur', 'usak', 'kutahya', 'bilecik', 'elazig', 'batman', 'mardin', 'sanliurfa', 'adiyaman', 'kahramanmaras', 'osmaniye', 'kilis'];
-const NEG = ['is ilanlari', 'ilanlari', 'hizmetleri', 'guclendirme', 'tadilat', 'dekorasyon', 'en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire'];
+const NEG = ['is ilanlari', 'ilanlari', 'hizmetleri', 'guclendirme hizmet', 'tadilat firmasi', 'tadilat hizmet', 'dekorasyon', 'en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire'];
 export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title'>): Array<Omit<Finding, 'at' | 'step'>> {
   const anchors = anchorWords(m);
   const out: Array<Omit<Finding, 'at' | 'step'>> = [];
   for (const r of results) {
+    const prof = socialProfile(r.url);
+    if (prof) { // sektör hesap keşfi: işletme profil sayfası (gönderi/hashtag/grup değil)
+      out.push({ title: r.title.slice(0, 200), detail: (r.snippet || r.title).slice(0, 600), url: r.url, evidence: r.snippet?.slice(0, 300) || r.title,
+        website: r.url, relevance: 6, fit: `Kural tabanlı ön eleme: ${prof.platform} işletme profili — denetimde doğrulanacak` });
+      if (out.length >= 8) break;
+      continue;
+    }
     const t = norm(`${r.title} ${r.snippet}`); const ti = t.replace(/ı/g, 'i');
     const pos = POS.find((p) => ti.includes(p.replace(/ı/g, 'i')));
     if (!pos || NEG.some((n) => norm(r.title).replace(/ı/g, 'i').includes(n)) || (anchors.length && !anchors.some((a) => ti.includes(a.replace(/ı/g, 'i'))))) continue;
@@ -719,6 +740,7 @@ ${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachN
   await db.from('bot_missions').update({ status, finish_reason: reason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null,
     ...(audit ? { audit, findings: allFindings } : {}), ...(coachNote ? { coach_note: coachNote } : {}) }).eq('id', m.id);
   await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
+  await saveSocialProspects(db, cur, findings);
   await sendMissionTelegram(db, cur, reason, summary, findings, audit);
   return { mission_id: m.id, finalized: true, reason, findings: findings.length };
 }
@@ -741,6 +763,21 @@ async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summ
   } catch (e) {
     await logActivity(db, { connector_key: 'telegram', action: 'message_send', status: 'failed', bot_id: cur.bot_id, ref_type: 'bot_mission', ref_id: cur.id, error: String((e as Error).message), summary: `Görev raporu gönderilemedi: ${cur.title}` });
   }
+}
+
+/** Bulgulardaki işletme profil linklerini (Instagram/Facebook) takip listesine (social_prospects) ekler. Kişi verisi yok; yalnızca herkese açık işletme profili. */
+async function saveSocialProspects(db: Db, cur: MissionRow, findings: Finding[]) {
+  const rows = findings.map((f) => ({ f, p: socialProfile(f.url) || (f.website ? socialProfile(f.website) : null) })).filter((x) => x.p);
+  let n = 0;
+  for (const { f, p } of rows) {
+    const t = norm(`${f.title} ${f.detail} ${f.fit ?? ''}`);
+    const kind = /tedarik|malzeme|beton|demir|iskele|bayi|uretic/.test(t) ? 'supplier' : /haber|medya|dergi|gazete/.test(t) ? 'industry_media' : /catalca|silivri|yerel|belediye/.test(t) ? 'local_business' : 'competitor';
+    const { error } = await db.from('social_prospects').upsert({ platform: p!.platform, handle: p!.handle, profile_name: f.company || f.title.slice(0, 120), profile_url: `https://www.${p!.platform}.com/${p!.handle}`,
+      source_url: f.url, source_type: 'bot_mission', engagement_type: 'business_profile', relevance_score: Math.min(100, (f.relevance ?? 6) * 10), consent_status: 'not_required_public_note',
+      notes: (f.fit || f.detail || '').slice(0, 500), account_kind: kind, bot_mission_id: cur.id }, { onConflict: 'platform,handle', ignoreDuplicates: true });
+    if (!error) n++;
+  }
+  if (n) await logStep(db, cur, cur.step_count + 1, 'prospects', `${n} işletme hesabı takip listesine eklendi (Raporlar → Takip listesi)`);
 }
 
 const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicious: '⚠️ Şüpheli', rejected: '❌ Elendi' };

@@ -6,7 +6,7 @@ import { getHandler } from './tools/registry.ts';
 import { instagramRefresh } from './connectors/meta.ts';
 import { logActivity } from './activity.ts';
 
-async function tokenFor(db: Db, account: AccountRow) {
+export async function tokenFor(db: Db, account: AccountRow) {
   if (!account.credential_secret_id) throw new ConnectorError('Hesap token’ı yok — yeniden bağlanın', 'OAUTH_REQUIRED');
   const { data, error } = await db.rpc('read_connector_secret', { p_id: account.credential_secret_id });
   if (error || !data) throw new ConnectorError('Token okunamadı — yeniden bağlanın', 'OAUTH_REQUIRED');

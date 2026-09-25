@@ -165,3 +165,26 @@ export async function instagramRefresh(token: string) {
   if (!r.ok || !d.access_token) throw new ConnectorError(d.error?.message || `Instagram token yenilenemedi (HTTP ${r.status})`, 'IG_REFRESH', d);
   return { token: d.access_token as string, expiresIn: (d.expires_in ?? 5184000) as number };
 }
+
+/** Rakip/tedarikçi İşletme hesabı analizi — resmi Instagram Graph API "Business Discovery" (yalnızca herkese açık işletme/yaratıcı hesaplar).
+ *  Facebook Girişi ile bağlanmış Instagram işletme hesabı token'ı gerekir (Instagram Girişi token'ı bu uç noktayı desteklemez). Kişi verisi dönmez. */
+export async function businessDiscovery(igUserId: string, token: string, username: string) {
+  const fields = `business_discovery.username(${username}){username,name,followers_count,media_count,media.limit(12){like_count,comments_count,media_type,timestamp,permalink,caption}}`;
+  const d = await call('GET', igUserId, { fields, access_token: token });
+  const b = d.business_discovery ?? {};
+  // deno-lint-ignore no-explicit-any
+  const media: any[] = b.media?.data ?? [];
+  const eng = media.map((m) => (m.like_count ?? 0) + (m.comments_count ?? 0));
+  const avg = eng.length ? eng.reduce((a, c) => a + c, 0) / eng.length : 0;
+  const days = media.length > 1 ? (new Date(media[0].timestamp).getTime() - new Date(media[media.length - 1].timestamp).getTime()) / 86400000 : null;
+  const byType: Record<string, number[]> = {};
+  for (const m of media) (byType[m.media_type] ??= []).push((m.like_count ?? 0) + (m.comments_count ?? 0));
+  return {
+    username: b.username as string, name: b.name as string | undefined, followers: b.followers_count as number | undefined, media_count: b.media_count as number | undefined,
+    avg_engagement: Math.round(avg), engagement_rate: b.followers_count ? Math.round((avg / b.followers_count) * 10000) / 100 : null,
+    posts_per_week: days && days > 0 ? Math.round(((media.length - 1) / days) * 7 * 10) / 10 : null,
+    by_type: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v.reduce((a, c) => a + c, 0) / v.length)])),
+    top_posts: media.map((m) => ({ url: m.permalink, type: m.media_type, at: m.timestamp, engagement: (m.like_count ?? 0) + (m.comments_count ?? 0), caption: String(m.caption ?? '').slice(0, 140) }))
+      .sort((a, c) => c.engagement - a.engagement).slice(0, 3),
+  };
+}

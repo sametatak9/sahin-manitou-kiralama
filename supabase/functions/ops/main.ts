@@ -11,10 +11,10 @@ import { executeTask } from '../_shared/engine.ts';
 import { logActivity } from '../_shared/activity.ts';
 import { CONNECTORS, connectorByKey, publicConnectorInfo } from '../_shared/connectors/registry.ts';
 import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
-import { graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
+import { businessDiscovery, graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
-import { processDueApprovals, publishContent, syncMetrics } from '../_shared/publisher.ts';
+import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
 
 const PANEL_URL = () => Deno.env.get('PANEL_URL') || 'https://embay-panel.vercel.app';
@@ -515,6 +515,28 @@ async function api(db: Db, req: Request) {
       return { ok: true, bots_waiting: !count };
     }
 
+    // Takip listesindeki Instagram işletme hesaplarının herkese açık metrikleri (resmi Business Discovery). Meta (Facebook Girişi) bağlantısı gerekir.
+    case 'ig_benchmark': {
+      await requireUser(db, req, 'admin');
+      const { data: accs } = await db.from('social_accounts').select('*').eq('connector_key', 'instagram').eq('connection_status', 'connected');
+      // deno-lint-ignore no-explicit-any
+      const acc = (accs || []).find((a: any) => a.metadata?.login !== 'instagram');
+      if (!acc) throw new HttpError(409, 'Rakip analizi için Instagram işletme hesabının “Facebook sayfası üzerinden” bağlanması gerekir (Meta bağlantısı tamamlanınca otomatik çalışır).', 'META_REQUIRED');
+      const token = await tokenFor(db, acc);
+      const { data: list } = await db.from('social_prospects').select('id,handle').eq('platform', 'instagram').not('handle', 'is', null)
+        .order('last_benchmarked_at', { ascending: true, nullsFirst: true }).limit(Math.min(25, Number(body.limit) || 15));
+      let ok = 0; const failed: string[] = [];
+      for (const p of list || []) {
+        try {
+          const m = await businessDiscovery(acc.external_account_id, token, p.handle);
+          await db.from('social_prospects').update({ followers: m.followers ?? null, media_count: m.media_count ?? null, avg_engagement: m.avg_engagement, engagement_rate: m.engagement_rate,
+            metrics: { posts_per_week: m.posts_per_week, by_type: m.by_type, top_posts: m.top_posts, name: m.name }, last_benchmarked_at: new Date().toISOString() }).eq('id', p.id);
+          ok++;
+        } catch (e) { failed.push(`${p.handle}: ${String((e as Error).message).slice(0, 80)}`); await db.from('social_prospects').update({ last_benchmarked_at: new Date().toISOString() }).eq('id', p.id); }
+      }
+      await logActivity(db, { connector_key: 'instagram', action: 'metrics_sync', status: failed.length && !ok ? 'failed' : 'ok', summary: `Rakip analizi: ${ok} hesap ölçüldü${failed.length ? `, ${failed.length} hata` : ''}` });
+      return { measured: ok, failed };
+    }
     case 'test_telegram': { await requireUser(db, req, 'admin'); return telegramSend('Embay Ops Center test mesajı ✅'); }
 
     case 'canva_create_design': {
