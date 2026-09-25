@@ -32,7 +32,7 @@ function drawEmblem(g: CanvasRenderingContext2D, name: EmblemName, x: number, y:
 }
 
 const W = 1080, H = 1920, FPS = 30;
-const PALETTE = { 'Embay Yapı': { bg: '#0B3D22', acc: '#F5B301', ink: '#0B3D22' }, 'Şahin Manitou': { bg: '#111827', acc: '#F5B301', ink: '#111827' } } as const;
+const PALETTE = { 'Embay Yapı': { bg: '#262A6B', acc: '#8FC6F2', ink: '#1B1F52' }, 'Şahin Manitou': { bg: '#111827', acc: '#F5B301', ink: '#111827' } } as const;
 
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) { g.beginPath(); g.roundRect(x, y, w, h, r); }
 function cover(g: CanvasRenderingContext2D, src: CanvasImageSource, sw: number, sh: number, zoom = 1) {

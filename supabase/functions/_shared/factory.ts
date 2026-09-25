@@ -47,7 +47,7 @@ async function ensureRenderer() {
   await wasmReady;
   if (!fonts) {
     const get = async (f: string) => new Uint8Array(await (await fetch(`https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/${f}`)).arrayBuffer());
-    fonts = await Promise.all([get('DejaVuSans-Bold.ttf'), get('DejaVuSans.ttf')]);
+    fonts = await Promise.all([get('DejaVuSans-Bold.ttf'), get('DejaVuSans.ttf'), get('DejaVuSans-ExtraLight.ttf')]);
   }
 }
 function b64(bytes: Uint8Array) { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
@@ -89,8 +89,82 @@ function icon(name: string, x0: number, y0: number, size: number, color: string,
 }
 void PILLAR_ICON;
 
-export async function renderBanner(o: { w: number; h: number; brand: Record<string, string> | null; brandName: string; badge: string; headline: string; subtitle: string; cta: string; photo?: Uint8Array | null; photoMime?: string; icon?: string }) {
+type BannerOpts = { w: number; h: number; brand: Record<string, string> | null; brandName: string; badge: string; headline: string; subtitle: string; cta: string; photo?: Uint8Array | null; photoMime?: string; icon?: string };
+
+// ── EMBAY YAPI kimliği (Instagram @embayyapi): lacivert + kraliyet mavisi + bulutlu gökyüzü, beyaz çizgi ev logosu,
+//    kalın büyük harfli başlık, altta lacivert şerit (iki telefon + web). Eski tarzın modern hali: amblemli etiket, ✓ hizmet çipleri.
+const EMBAY = { navy: '#262A6B', navy2: '#1B1F52', royal: '#1E3FA0', sky: '#8FC6F2', skyLight: '#EAF4FD', white: '#FFFFFF' };
+function embayLogo(cx: number, cy: number, r: number, color: string) {
+  // Yuvarlak lacivert rozet içinde: iç içe iki çizgi ev + "EMBAY" + geniş aralıklı ince "YAPI" (Instagram logosunun sadeleştirilmiş hali)
+  const k = r / 50; // rozet çapı 100 birim
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${EMBAY.navy}" stroke="${EMBAY.white}" stroke-width="${r * 0.05}"/>
+<g transform="translate(${cx - 33 * k} ${cy - 40 * k}) scale(${k})" fill="none" stroke="${color}" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round">
+<path d="M6 44V26L24 12l18 14v18z"/><path d="M24 12l10-8 24 18v22H42"/><rect x="14" y="28" width="6" height="6"/><rect x="26" y="28" width="6" height="6"/><path d="M19 44v-6h10v6"/><rect x="47" y="26" width="5" height="5"/></g>
+<text x="${cx}" y="${cy + 18 * k}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${15 * k}" fill="${color}" letter-spacing="${1.2 * k}">EMBAY</text>
+<text x="${cx + 3 * k}" y="${cy + 33 * k}" text-anchor="middle" font-family="DejaVu Sans" font-weight="200" font-size="${13 * k}" fill="${color}" letter-spacing="${5 * k}">YAPI</text>`;
+}
+function renderEmbay(o: BannerOpts) {
+  const { w, h } = o; const wide = w / h > 1.3; const tall = h / w > 1.5; const u = Math.min(w, h);
+  const pad = Math.round(u * 0.07);
+  const barH = Math.round(u * (wide ? 0.15 : 0.14));
+  const phone = o.brand?.phone || '0531 436 29 04'; const phone2 = o.brand?.phone2 || '0536 784 62 22'; const site = o.brand?.website || 'www.embayyapi.com.tr';
+  const ic = o.icon ?? iconFor(o.badge);
+  const photoUri = o.photo ? `data:${o.photoMime || 'image/jpeg'};base64,${b64(o.photo)}` : null;
+  const hSize = Math.round(u * (wide ? 0.075 : 0.07)); const sSize = Math.round(u * (wide ? 0.034 : 0.033));
+  const panelW = wide ? Math.round(w * 0.5) : w;
+  const textW = panelW - pad * 2;
+  const hLines = wrap(o.headline.toLocaleUpperCase('tr-TR'), Math.floor(textW / (hSize * 0.68)), 3);
+  const sLines = wrap(o.subtitle, Math.floor(textW / (sSize * 0.56)), 2);
+  const cta = o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').trim();
+  const badgeH = Math.round(sSize * 1.7); const badgeW = Math.round(o.badge.length * sSize * 0.78 + sSize * 2.8);
+  const chips: Array<[string, string]> = [['bina', 'Betonarme'], ['vinc', 'Çelik yapı'], ['ev', 'Anahtar teslim']];
+  const chipH = Math.round(sSize * 1.8); const showChips = tall;
+  // Panel yüksekliği içerikten hesaplanır; fotoğraf kalan alanı kaplar
+  const contentH = Math.round(pad * 0.8) + badgeH + Math.round(hSize * 1.15) + (hLines.length - 1) * hSize * 1.08 + sSize * 1.9 + sLines.length * sSize * 1.35 + (cta ? sSize * 1.4 : 0) + (showChips ? chipH + pad * 0.6 : 0) + pad * 0.7;
+  const phH = wide ? h - barH : Math.round(Math.min(h * 0.62, Math.max(h * 0.38, h - barH - contentH)));
+  const ph = wide ? { x: panelW, y: 0, w: w - panelW, h: phH } : { x: 0, y: 0, w, h: phH };
+  const panel = wide ? { x: 0, y: 0, w: panelW, h: h - barH } : { x: 0, y: phH, w, h: h - barH - phH };
+  const badgeY = wide ? Math.round(pad + u * 0.2) : panel.y + Math.round(pad * 0.8);
+  const textTop = badgeY + badgeH + Math.round(hSize * 1.15);
+  const subTop = textTop + (hLines.length - 1) * hSize * 1.08 + sSize * 1.9;
+  const ctaY = subTop + sLines.length * sSize * 1.35 + sSize * 0.35;
+  const chipY = ctaY + sSize * 1.2;
+  const cloud = (cx: number, cy: number, r: number, op: number) => `<g fill="#FFFFFF" opacity="${op}"><circle cx="${cx}" cy="${cy}" r="${r}"/><circle cx="${cx + r * 0.9}" cy="${cy + r * 0.2}" r="${r * 0.8}"/><circle cx="${cx - r * 0.9}" cy="${cy + r * 0.25}" r="${r * 0.7}"/><rect x="${cx - r * 1.6}" y="${cy + r * 0.2}" width="${r * 3.3}" height="${r * 0.8}" rx="${r * 0.4}"/></g>`;
+  const sky = `<rect x="${ph.x}" y="${ph.y}" width="${ph.w}" height="${ph.h}" fill="url(#sky)"/>${cloud(ph.x + ph.w * 0.62, ph.y + ph.h * 0.2, u * 0.06, 0.85)}${cloud(ph.x + ph.w * 0.85, ph.y + ph.h * 0.45, u * 0.04, 0.7)}${icon(ic, ph.x + ph.w / 2 - u * 0.16, ph.y + ph.h - u * 0.36, u * 0.32, EMBAY.navy, 3.5, 0.5)}`;
+  const photo = photoUri ? `<image href="${photoUri}" x="${ph.x}" y="${ph.y}" width="${ph.w}" height="${ph.h}" preserveAspectRatio="xMidYMid slice"/><rect x="${ph.x}" y="${ph.y}" width="${ph.w}" height="${ph.h}" fill="url(#fade)"/>` : sky;
+  const logoR = u * 0.085;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${EMBAY.sky}"/><stop offset="1" stop-color="${EMBAY.skyLight}"/></linearGradient>
+<linearGradient id="pan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${EMBAY.royal}"/><stop offset="1" stop-color="${EMBAY.navy}"/></linearGradient>
+<linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${EMBAY.navy2}" stop-opacity="0.45"/><stop offset="0.28" stop-color="${EMBAY.navy2}" stop-opacity="0"/></linearGradient></defs>
+<rect width="${w}" height="${h}" fill="url(#pan)"/>
+${photo}
+${wide ? `<rect x="${ph.x - 4}" y="0" width="5" height="${ph.h}" fill="${EMBAY.sky}"/>` : `<rect x="0" y="${ph.h - 5}" width="${w}" height="5" fill="${EMBAY.sky}"/>`}
+${icon(ic, panel.x + panel.w - pad - u * 0.22, panel.y + (wide ? panel.h - u * 0.3 : pad * 0.6), u * 0.22, EMBAY.sky, 4, 0.14)}
+${embayLogo(pad + logoR, pad + logoR, logoR, EMBAY.white)}
+<rect x="${pad}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${EMBAY.sky}"/>
+${icon(ic, pad + sSize * 0.55, badgeY + sSize * 0.25, sSize * 1.2, EMBAY.navy, 9)}
+<text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${EMBAY.navy}">${x(o.badge)}</text>
+${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.08}" font-family="DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${EMBAY.white}">${x(l)}</text>`).join('')}
+${sLines.map((l, i) => `<text x="${pad}" y="${subTop + i * sSize * 1.35}" font-family="DejaVu Sans" font-size="${sSize}" fill="#DCE9FB">${x(l)}</text>`).join('')}
+${cta ? `<text x="${pad}" y="${ctaY + sSize * 0.9}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.95)}" fill="${EMBAY.sky}">→ ${x(cta)}</text>` : ''}
+${showChips ? chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); const cx0 = pad + i * (cw + u * 0.02); return `<rect x="${cx0}" y="${chipY + pad * 0.3}" width="${cw}" height="${chipH}" rx="${chipH / 2}" fill="none" stroke="${EMBAY.sky}" stroke-width="2" opacity="0.8"/>${icon(c[0], cx0 + sSize * 0.5, chipY + pad * 0.3 + sSize * 0.35, sSize * 1.1, EMBAY.sky, 8)}<text x="${cx0 + sSize * 1.85}" y="${chipY + pad * 0.3 + chipH * 0.66}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.7)}" fill="${EMBAY.white}">${x(c[1])}</text>`; }).join('') : ''}
+<rect x="0" y="${h - barH}" width="${w}" height="${barH}" fill="${EMBAY.navy2}"/>
+<rect x="0" y="${h - barH}" width="${w}" height="3" fill="${EMBAY.sky}" opacity="0.7"/>
+<text x="${w / 2}" y="${h - barH * 0.5}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 1.0)}" fill="${EMBAY.white}">☎ ${x(phone2)}     ☎ ${x(phone)}</text>
+<text x="${w / 2}" y="${h - barH * 0.2}" text-anchor="middle" font-family="DejaVu Sans" font-size="${Math.round(sSize * 0.72)}" fill="#C9DBF5" letter-spacing="2">${x(site)}</text>
+</svg>`;
+}
+
+export async function renderBanner(o: BannerOpts) {
   await ensureRenderer();
+  if (o.brandName !== 'Şahin Manitou') {
+    const r = new Resvg(renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
+    const img = r.render();
+    const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;
+    img.free?.(); r.free?.();
+    return new Uint8Array(out);
+  }
   const p = o.brandName === 'Şahin Manitou' ? { bg1: '#1F2933', bg2: '#111827', acc: '#F5B301', txt: '#FFFFFF' } : { bg1: '#115A31', bg2: '#0B3D22', acc: '#F5B301', txt: '#FFFFFF' };
   const { w, h } = o; const wide = w / h > 1.3; const u = Math.min(w, h);
   const pad = Math.round(u * 0.075); const logo = Math.round(u * 0.085);
