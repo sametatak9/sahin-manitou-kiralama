@@ -83,8 +83,8 @@ export const stepIntervalMs = (m: Pick<MissionRow, 'duration_minutes' | 'max_ste
 // Ücretsiz AI modellerinde internet araması yok: her adımda bir arama terimi için son 7 günün haber/duyuru
 // başlıkları (gerçek link + yayın tarihi + kaynak) çekilir ve AI'a yalnızca bunlardan seçmesi söylenir.
 export interface NewsItem { title: string; url: string; posted: string | null; source: string | null }
-export async function newsSearch(q: string, limit = 15): Promise<NewsItem[]> {
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:7d`)}&hl=tr&gl=TR&ceid=TR:tr`;
+export async function newsSearch(q: string, limit = 15, days = 7): Promise<NewsItem[]> {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:${days}d`)}&hl=tr&gl=TR&ceid=TR:tr`;
   const res = await fetch(url, { headers: { 'user-agent': 'EmbayOpsBot/1.0 (+https://embay-panel.vercel.app)' }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
   if (!res?.ok) return [];
   const xml = await res.text();
@@ -455,10 +455,19 @@ export async function stepMission(db: Db, m: MissionRow) {
       // Her adımda (AI hangisi olursa olsun; Claude kredisi yoksa zincir aramasız modellere düşer) bu adımın terimiyle gerçek haber/duyuru sonuçları
       let newsNote = '';
       if (!m.target_url && terms.length) {
-        const q = terms[(step - 1) % terms.length];
-        const news = await newsSearch(/stanbul/i.test(q) ? q : `${q} İstanbul`);
+        // Her adımda 2 konu; sonuç azsa bölge filtresiz ve 14 güne genişletilir
+        const qs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
+        const news: NewsItem[] = []; const counts: string[] = [];
+        for (const q of qs) {
+          let got = await newsSearch(/stanbul/i.test(q) ? q : `${q} İstanbul`, 12);
+          if (got.length < 3) got = [...got, ...(await newsSearch(q, 12, 14))];
+          let n = 0;
+          for (const g of got) if (!news.some((x) => x.url === g.url || x.title === g.title)) { news.push(g); n++; }
+          counts.push(`“${q}” → ${n}`);
+        }
+        news.splice(24);
         for (const n of news) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
-        await logStep(db, m, step, 'news_search', `Haber/duyuru araması: “${q}” → ${news.length} sonuç (son 7 gün)`, null, { query: q, count: news.length });
+        await logStep(db, m, step, 'news_search', `Haber/duyuru araması: ${counts.join(' · ')} sonuç`, null, { queries: qs, count: news.length, titles: news.map((n) => n.title).slice(0, 24) });
         if (news.length) newsNote = news.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}\n   ${n.url}`).join('\n');
       }
       const prompt = [
