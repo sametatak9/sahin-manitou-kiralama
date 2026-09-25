@@ -16,6 +16,7 @@ import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, ca
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { factoryTick, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
+import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
 
@@ -59,7 +60,8 @@ async function runWorker(db: Db, workerId: string) {
   const content = await publishDueContent(db, workerId);
   const metrics = await syncMetrics(db, 3);
   const factory = await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory };
+  const drive = await driveTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
+  return { tasks: taskResults, approvals, content, metrics, factory, drive };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
@@ -561,6 +563,25 @@ async function api(db: Db, req: Request) {
       await db.from('content_factory_days').upsert({ day }, { onConflict: 'day', ignoreDuplicates: true });
       background(runContentFactory(db));
       return { started: true, day };
+    }
+    // Google Drive klasörü (herkese açık link) → Video / Fotoğraf havuzu. Klasör kaydedilir, her sabah otomatik eşitlenir.
+    case 'drive_sync': {
+      const u = await requireUser(db, req, 'admin');
+      let src: { id: string; folder_id: string; created_by: string | null } | null = null;
+      if (body.url) {
+        const folderId = parseFolderId(String(body.url));
+        if (!folderId) throw new HttpError(400, 'Geçerli bir Google Drive klasör linki girin (…/drive/folders/…)');
+        const { data, error } = await db.from('drive_sources').upsert({ folder_id: folderId, url: String(body.url).trim(), enabled: true, archived_at: null, created_by: u.userId }, { onConflict: 'folder_id' }).select('id,folder_id,created_by').single();
+        if (error) throw error;
+        src = data;
+      } else if (body.id) {
+        const { data } = await db.from('drive_sources').select('id,folder_id,created_by').eq('id', body.id).single();
+        src = data;
+      }
+      if (!src) throw new HttpError(400, 'Klasör linki gerekli');
+      await db.from('drive_sources').update({ last_synced_at: new Date().toISOString(), last_result: { running: true, started_at: new Date().toISOString() } }).eq('id', src.id);
+      background(syncDriveFolder(db, src, 110_000).catch(async (e) => { await db.from('drive_sources').update({ last_result: { error: String((e as Error).message || e).slice(0, 300) } }).eq('id', src!.id); }));
+      return { started: true, id: src.id };
     }
     case 'test_telegram': { await requireUser(db, req, 'admin'); return telegramSend('Embay Ops Center test mesajı ✅'); }
 

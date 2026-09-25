@@ -30,7 +30,7 @@ export function VideoPool() {
   const [open, setOpen] = useState<MediaItem | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const items = useQuery(async () => {
-    let q = db().from('media_library').select('*').order('created_at', { ascending: false }).limit(100);
+    let q = db().from('media_library').select('*').eq('kind', 'video').order('created_at', { ascending: false }).limit(100);
     q = showArchived ? q.not('archived_at', 'is', null) : q.is('archived_at', null);
     return unwrap(await q) as MediaItem[];
   }, [] as MediaItem[], [showArchived], ['media_library']);
@@ -89,7 +89,7 @@ export function VideoPool() {
           {items.data.map((m) => (
             <button key={m.id} type="button" onClick={() => setOpen(m)} className="text-left rounded-2xl bg-white ring-1 ring-ink-700 overflow-hidden hover:ring-brand-green/60 transition">
               <div className="relative aspect-[9/16] max-h-64 w-full bg-ink-900">
-                {m.cover_url ? <img src={m.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <video src={m.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
+                {m.cover_url ? <img src={m.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
                 <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-mono text-white">{fmtSec(m.duration_sec)}</span>
                 {(m.edit?.trim_start != null || m.edit?.muted) && <span className="absolute top-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">düzenlendi</span>}
               </div>

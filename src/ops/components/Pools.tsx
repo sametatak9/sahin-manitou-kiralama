@@ -217,7 +217,7 @@ export function PoolPicker({ mode, onClose, onPickMedia, onPickText }: { mode: '
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-[55vh] overflow-y-auto">
               {media.data.map((m) => { const on = sel.some((x) => x.id === m.id); return (
                 <button key={m.id} onClick={() => toggle(m)} className={cx('relative rounded-lg overflow-hidden ring-2 bg-ink-900', on ? 'ring-brand-green' : 'ring-transparent')}>
-                  {m.kind === 'video' ? <video src={m.url} className="w-full aspect-[4/5] object-cover" muted playsInline preload="metadata" /> : <img src={m.cover_url ?? m.url} alt="" className="w-full aspect-[4/5] object-cover" loading="lazy" />}
+                  {m.kind === 'video' && !m.cover_url ? <video src={`${m.url}#t=0.1`} className="w-full aspect-[4/5] object-cover" muted playsInline preload="metadata" /> : <img src={m.cover_url ?? m.url} alt="" className="w-full aspect-[4/5] object-cover" loading="lazy" />}
                   {on && <span className="absolute right-1 top-1 rounded-full bg-brand-green text-white text-[10px] font-bold px-1.5">✓</span>}
                   <span className="absolute left-0 right-0 bottom-0 bg-black/55 text-white text-[10px] px-1 truncate">{m.title}</span>
                 </button>); })}

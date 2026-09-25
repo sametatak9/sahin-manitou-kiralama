@@ -59,7 +59,7 @@ const WF: Record<string, { label: string; tone: Tone }> = {
   processing: { label: 'PAYLAŞILIYOR', tone: 'run' }, published: { label: 'PAYLAŞILDI', tone: 'go' }, failed: { label: 'BAŞARISIZ', tone: 'stop' },
   cancelled: { label: 'İPTAL', tone: 'idle' }, draft: { label: 'TASLAK', tone: 'idle' }, rejected: { label: 'REDDEDİLDİ', tone: 'stop' },
 };
-const isVideoUrl = (u: string) => /\.(mp4|mov|m4v)(\?|$)/i.test(u);
+const isVideoUrl = (u: string) => /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(u);
 
 function tomorrow() { const d = new Date(Date.now() + 86400_000); return dayKey(d); }
 function addDays(key: string, n: number) { const d = new Date(`${key}T12:00:00+03:00`); d.setUTCDate(d.getUTCDate() + n); return dayKey(d); }
@@ -163,7 +163,7 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
             <div className="flex gap-2 overflow-x-auto pb-1">
               {files.map((f, i) => (
                 <div key={f.preview} className="relative shrink-0 w-24 h-32 rounded-xl overflow-hidden ring-1 ring-ink-700 bg-ink-900">
-                  {f.video ? <video src={f.preview} className="w-full h-full object-cover" muted playsInline /> : <img src={f.preview} alt="" className="w-full h-full object-cover" />}
+                  {f.video ? <video src={f.file ? f.preview : `${f.preview}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={f.preview} alt="" className="w-full h-full object-cover" />}
                   <span className="absolute left-1 top-1 rounded bg-white/90 px-1 text-[10px] font-bold text-slate-800">{f.video ? 'VİDEO' : 'GÖRSEL'}</span>
                   {daily && files.length > 1 && <span className="absolute left-1 bottom-1 rounded bg-brand-green px-1 text-[10px] font-bold text-white">{addDays(date, i).slice(5).split('-').reverse().join('.')}</span>}
                   <button type="button" aria-label="Kaldır" onClick={() => { if (f.file) URL.revokeObjectURL(f.preview); setFiles(files.filter((_, j) => j !== i)); }} className="absolute right-1 top-1 rounded-full bg-white/90 p-0.5 text-slate-800"><X className="w-3.5 h-3.5" /></button>
@@ -296,7 +296,7 @@ export function QueueScreen() {
               return (
                 <li key={d.id} className="py-3 flex gap-3">
                   <div className="w-16 h-20 shrink-0 rounded-lg overflow-hidden bg-ink-800 ring-1 ring-ink-700">
-                    {media ? (isVideoUrl(media) ? <video src={media} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={media} alt="" className="w-full h-full object-cover" loading="lazy" />) : null}
+                    {media ? (isVideoUrl(media) ? <video src={`${media}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={media} alt="" className="w-full h-full object-cover" loading="lazy" />) : null}
                   </div>
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-1.5">
