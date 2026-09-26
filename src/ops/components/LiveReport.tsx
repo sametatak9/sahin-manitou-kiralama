@@ -1,54 +1,14 @@
 // Canlı rapor penceresi: görev çalışırken de açılır, bulgular geldikçe güncellenir. Kurumsal başlıklı,
 // her kayıtta yönlendirme butonları (kaynağa git, ara, WhatsApp, e-posta, portföye arşivle).
 import { useMemo, useState } from 'react';
-import { Archive, Download, ExternalLink, Globe, Mail, MessageCircle, Phone, Printer, Radio, Search } from 'lucide-react';
+import { Download, Printer, Radio, Search } from 'lucide-react';
+import { FindingCard } from './FindingCard';
 import { db, unwrap, useQuery } from '../lib/hooks';
-import { fmtDateTime, relTime } from '../lib/format';
-import type { Mission, MissionFinding } from '../lib/types';
+import { fmtDateTime } from '../lib/format';
+import type { Mission } from '../lib/types';
 import { Button, cx, Modal, Pill, StateView } from '../ui';
 
-/** Türkiye numarasını wa.me biçimine çevirir (905xxxxxxxxx). Geçersizse null. */
-export function waNumber(phone?: string | null) {
-  const d = (phone || '').replace(/\D/g, '');
-  if (/^90\d{10}$/.test(d)) return d;
-  if (/^0\d{10}$/.test(d)) return `9${d}`;
-  if (/^\d{10}$/.test(d)) return `90${d}`;
-  return null;
-}
-const WA_TEXT = (f: MissionFinding) => `Merhaba${f.company ? ` ${f.company}` : ''}, "${f.title.slice(0, 80)}" ilanınızı gördük. Embay Yapı & Şahin Manitou olarak operatörlü Manitou / teleskopik yükleyici kiralama ve inşaat hizmetlerimizle destek olabiliriz. Bilgi almak ister misiniz? 0531 436 29 04`;
-
-function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Mission }) {
-  const [archived, setArchived] = useState<string | null>(null);
-  const wa = waNumber(f.phone);
-  const archive = async () => {
-    const { data, error } = await db().rpc('portfolio_upsert_company', { p: { firm_name: (f.company || f.title).slice(0, 160), source_url: f.url, public_phone: f.phone ?? null, public_email: f.email ?? null, website: f.website ?? null, ilce: f.location ?? null,
-      ai_notes: `${f.title} — ${f.detail}`.slice(0, 1500), source: 'bot_mission', need: m.search_for ?? null }, p_bot_id: m.bot_id, p_run_id: null, p_finding_id: null });
-    setArchived(error ? `Hata: ${error.message}` : (data as { action: string }).action === 'merged' ? 'Mevcut kayıtla birleşti' : 'Portföye eklendi');
-  };
-  return (
-    <li className="rounded-2xl bg-white ring-1 ring-ink-700 p-3.5 space-y-2">
-      <div className="flex items-start gap-2">
-        <span className="shrink-0 w-6 h-6 rounded-full bg-brand-green text-white text-[11px] font-bold grid place-items-center">{i + 1}</span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-ink-100">{f.title}</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-ink-400 mt-0.5">
-            {f.company && <span>🏢 {f.company}</span>}{f.location && <span>📍 {f.location}</span>}{f.posted && <span>🗓 {f.posted}</span>}<span>{relTime(f.at)} bulundu</span>
-          </div>
-        </div>
-      </div>
-      <p className="text-xs text-ink-300 whitespace-pre-line">{f.detail}</p>
-      <div className="flex flex-wrap gap-1.5">
-        <a href={f.url} target="_blank" rel="noreferrer" className="ops-chip"><ExternalLink className="w-3.5 h-3.5" />Kaynağa git</a>
-        {f.phone && <a href={`tel:${f.phone.replace(/[^\d+]/g, '')}`} className="ops-chip"><Phone className="w-3.5 h-3.5" />{f.phone}</a>}
-        {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(WA_TEXT(f))}`} target="_blank" rel="noreferrer" className="ops-chip !bg-emerald-600 !text-white !ring-emerald-600"><MessageCircle className="w-3.5 h-3.5" />WhatsApp</a>}
-        {f.email && <a href={`mailto:${f.email}`} className="ops-chip"><Mail className="w-3.5 h-3.5" />E-posta</a>}
-        {f.website && <a href={f.website} target="_blank" rel="noreferrer" className="ops-chip"><Globe className="w-3.5 h-3.5" />Web</a>}
-        {archived ? <span className="text-[11px] font-semibold text-emerald-700 self-center">{archived}</span>
-          : <button type="button" onClick={archive} className="ops-chip"><Archive className="w-3.5 h-3.5" />Portföye arşivle</button>}
-      </div>
-    </li>
-  );
-}
+export { waNumber } from './FindingCard';
 
 export function LiveReport({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useQuery(async () => unwrap(await db().from('bot_missions').select('*').eq('id', id).single()) as Mission, null as Mission | null, [id], ['bot_missions']);
@@ -99,7 +59,7 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
             <input className="ops-input !pl-9" placeholder="Kayıtlarda ara (firma, ilçe, iş…)" value={term} onChange={(e) => setTerm(e.target.value)} />
           </div>
           {list.length === 0 ? <StateView kind={live ? 'loading' : 'empty'} title={live ? 'Bot araştırıyor…' : 'Veri bulunamadı'} message={live ? 'Yeni kayıtlar bulundukça bu pencerede anında görünür.' : undefined} compact />
-            : <ul className={cx('space-y-2')}>{list.map(({ f, i }) => <FindingCard key={`${i}-${f.url}`} f={f} i={i} m={m} />)}</ul>}
+            : <ul className={cx('grid grid-cols-1 md:grid-cols-2 gap-3')}>{list.map(({ f, i }) => <FindingCard key={`${i}-${f.url}`} f={f} i={i} m={m} />)}</ul>}
           <p className="text-[10px] text-ink-500">Kayıtlar yalnızca herkese açık, kurumların kendi yayınladığı bilgilerden oluşur (KVKK). İletişim, onaylı ve ret seçeneği sunan mesajlarla yapılır.</p>
         </div>
       )}

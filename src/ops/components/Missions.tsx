@@ -7,6 +7,7 @@ import { fmtDateTime, relTime, type Tone } from '../lib/format';
 import type { Bot, Mission, MissionStep } from '../lib/types';
 import { useRouter, useSession } from '../session';
 import { LiveReport } from './LiveReport';
+import { FindingCard } from './FindingCard';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
 
 export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: Tone }> = {
@@ -211,13 +212,6 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
     const text = lines.join('\n').slice(0, 3800);
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   };
-  const [archived, setArchived] = useState<Record<number, string>>({});
-  const archive = async (i: number) => {
-    const f = m!.findings[i];
-    const { data, error } = await db().rpc('portfolio_upsert_company', { p: { firm_name: f.title.slice(0, 160), source_url: f.url, ai_notes: `${f.detail}${f.evidence ? ` — “${f.evidence}”` : ''}`.slice(0, 1500), source: 'bot_mission', need: m!.search_for ?? null }, p_bot_id: m!.bot_id, p_run_id: null, p_finding_id: null });
-    setArchived((a) => ({ ...a, [i]: error ? `Hata: ${error.message}` : (data as { action: string }).action === 'merged' ? 'Mevcut kayıtla birleştirildi' : 'Portföye eklendi' }));
-  };
-
   return (<>
     <Modal open wide onClose={onClose} title={m ? <span className="inline-flex items-center gap-2"><FileText className="w-4 h-4 text-brand-green" />{m.title}</span> : 'Görev'}
       footer={m && <>
@@ -265,20 +259,7 @@ export function MissionDetail({ id, bots, onClose }: { id: string; bots: Bot[]; 
             </ol>))}
 
           {tab === 'findings' && (m.findings.length === 0 ? <StateView kind="empty" title={live ? 'Henüz bulgu yok' : 'Veri bulunamadı'} message="Kaynağı gösterilebilen bulgular burada listelenir." compact /> : (
-            <div className="space-y-2">{m.findings.map((f, i) => (
-              <div key={i} className="rounded-xl ring-1 ring-ink-700 p-3">
-                <div className="text-sm font-semibold text-ink-100">{f.title}{f.verdict && <span className={cx('ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold', f.verdict === 'verified' ? 'bg-emerald-100 text-emerald-800' : f.verdict === 'suspicious' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')}>{f.verdict === 'verified' ? '✅ Doğrulandı' : f.verdict === 'suspicious' ? '⚠️ Şüpheli' : '❌ Elendi'}</span>}</div>
-                {f.summary && <div className="text-xs text-ink-200 mt-1 rounded-lg bg-ink-850 border-l-2 border-brand-green px-2 py-1">📝 {f.summary}</div>}
-                {f.fit && <div className="text-[11px] text-emerald-800 mt-0.5">🎯 {f.fit}</div>}
-                {f.verdict_reason && <div className="text-[11px] text-ink-400 mt-0.5">Denetim: {f.verdict_reason}</div>}
-                <div className="text-xs text-ink-300 mt-0.5 whitespace-pre-line">{f.detail}</div>
-                {f.evidence && <div className="text-[11px] italic text-ink-400 mt-1">“{f.evidence}”</div>}
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-brand-green break-all"><ExternalLink className="w-3 h-3" />{f.url}</a>
-                  {archived[i] ? <span className="text-[11px] text-emerald-700 font-semibold">{archived[i]}</span>
-                    : <button onClick={() => archive(i)} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-ink-700 px-2 py-0.5 text-[11px] text-ink-300 hover:bg-ink-800"><Archive className="w-3 h-3" /> Firma portföyüne arşivle</button>}
-                </div>
-              </div>))}</div>))}
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">{m.findings.map((f, i) => <FindingCard key={`${i}-${f.url}`} f={f} i={i} m={m} />)}</ul>))}
 
           {tab === 'report' && (m.report_html
             ? <iframe title="Rapor" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={m.report_html} className="w-full h-[60vh] rounded-xl ring-1 ring-ink-700 bg-white" />
