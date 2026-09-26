@@ -5,7 +5,7 @@ import { callMissions, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
 import type { Bot, Mission, MissionStep } from '../lib/types';
-import { useSession } from '../session';
+import { useRouter, useSession } from '../session';
 import { LiveReport } from './LiveReport';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
 
@@ -125,7 +125,9 @@ export function MissionList({ bots, botId, compact = false, review }: { bots: Bo
     if (review === 'pending') r = r.eq('review_status', 'pending').in('status', ['completed', 'stopped', 'failed']);
     return unwrap(await r) as Mission[];
   }, [] as Mission[], [botId, review], ['bot_missions']);
-  const [open, setOpen] = useState<string | null>(null);
+  const router = useRouter();
+  // ?ops=reports&id=<görev> bağlantısı doğrudan o raporu açar
+  const [open, setOpen] = useState<string | null>(router.state.route === 'reports' ? router.state.id ?? null : null);
   const [launch, setLaunch] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => { const i = setInterval(() => tick((x) => x + 1), 15_000); return () => clearInterval(i); }, []);
