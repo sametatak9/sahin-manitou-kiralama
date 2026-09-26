@@ -6,6 +6,7 @@ import { approvalLabel, approvalTone, connectionLabel, connectionTone, dayKey, f
 import type { Approval, Bot as BotRow, Draft, OpsStatus, Publication, Run, Task } from '../lib/types';
 import { useRouter, useSession } from '../session';
 import { Button, cx, DynIcon, ErrorState, Panel, Pill, PlatformBadge, Stat, StateView } from '../ui';
+import { AutopilotCard } from '../components/AutopilotCard';
 
 interface HomeData {
   bots: BotRow[]; tasks: Task[]; runs: Run[]; approvals: Approval[]; pendingCount: number; drafts: Draft[]; pubs: Publication[];
@@ -128,6 +129,8 @@ export function HomeScreen() {
           <FileText className="w-3.5 h-3.5 text-indigo-500" /> Raporlar
         </button>
       </div>
+
+      <AutopilotCard />
 
       {/* Başlık şeridi */}
       <section className="ops-panel p-5 sm:p-6 relative overflow-hidden">

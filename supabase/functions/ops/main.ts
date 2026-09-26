@@ -57,11 +57,14 @@ async function runWorker(db: Db, workerId: string) {
     catch (e) { taskResults.push({ task_id: t.id, error: String(e) }); await db.from('automation_tasks').update({ status: 'scheduled', locked_by: null, locked_until: null, last_error: String(e).slice(0, 500) }).eq('id', t.id); }
   }
   const approvals = await processDueApprovals(db, workerId, 5);
-  const content = await publishDueContent(db, workerId);
+  // Otopilot: kapalıysa yayın ve içerik üretimi durur; açıkken yayınlar yalnızca mesai penceresinde (ör. 08:00–18:00) çıkar.
+  const { data: ap } = await db.rpc('autopilot_state');
+  const autopilot = (ap ?? { enabled: true, active: true }) as { enabled: boolean; active: boolean };
+  const content = autopilot.active ? await publishDueContent(db, workerId) : { skipped: autopilot.enabled ? 'mesai dışı' : 'otopilot kapalı' };
   const metrics = await syncMetrics(db, 3);
-  const factory = await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
+  const factory = autopilot.enabled ? await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) })) : { skipped: 'otopilot kapalı' };
   const drive = await driveTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive };
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
