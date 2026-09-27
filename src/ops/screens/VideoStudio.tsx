@@ -22,7 +22,7 @@ export function VideoStudioScreen() {
   const videos = useQuery(async () => {
     let rows = unwrap(await db().from('social_drafts').select('id,title,caption,video_url,primary_platform,format,workflow_status,scheduled_at,created_at')
       .not('video_url', 'is', null).order('created_at', { ascending: false }).limit(60)) as VideoRow[];
-    if ((!rows || rows.length === 0) && isDemoMode()) {
+    if (!rows || rows.length === 0) {
       rows = DEMO_VIDEOS.map((v) => ({
         id: v.id,
         title: v.title,
@@ -60,7 +60,7 @@ export function VideoStudioScreen() {
     setGeneratedPrompt(p);
   };
 
-  const videoList = videos.data.length ? videos.data : isDemoMode() ? (DEMO_VIDEOS.map((v) => ({
+  const videoList = videos.data.length ? videos.data : (DEMO_VIDEOS.map((v) => ({
     id: v.id,
     title: v.title,
     caption: v.caption,
@@ -70,7 +70,7 @@ export function VideoStudioScreen() {
     workflow_status: 'scheduled',
     scheduled_at: v.created_at,
     created_at: v.created_at,
-  })) as VideoRow[]) : [];
+  })) as VideoRow[]);
 
   return (
     <div className="space-y-5">

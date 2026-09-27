@@ -44,9 +44,14 @@ export const COMPLIANCE_RULES = [
 
 /** Tüm botlar için alaka kuralları: yalnızca görevin amacına doğrudan hizmet eden, üzerine iş yapılabilecek kayıtlar. */
 export const RELEVANCE_RULES = [
-  'ALAKA VE HEDEF KİTLE KURALLARI (tüm iş bulucu botlar için zorunlu ve bağlayıcıdır):',
-  '- KESİNLİKLE RAKİP FİRMALARI BULGU YAPMA! (Diğer müteahhitlik şirketleri, inşaat taahhüt firmaları, vinç kiralama firmaları veya onların tanıtım/portföy sayfaları kesinlikle BULGU DEĞİLDİR). Bize rakip değil, doğrudan BİZE İŞ VERECEK MÜŞTERİ ve İŞ FIRSATI bul.',
-  '- GENEL İNŞAAT ALANINDA ARANACAK ŞEYLER: Götürü işler, anahtar teslim müteahhitlik işleri, yap-sat projeleri için arsa sahipleri / kat karşılığı talepler, temelden çatıya kaba inşaat, kalıp demir işleri, taşeron ve usta kalıpçı ekibi arayan ana yükleniciler, kentsel dönüşüm için müteahhit arayan bina/site yönetimleri ve villa/konut yaptırmak isteyen şahıslar.',
+  'ALAKA VE HEDEF KİTLE KURALLARI (tüm iş bulucu ve müşteri avcısı botlar için zorunlu ve bağlayıcıdır):',
+  '- KESİNLİKLE RAKİP FİRMALARI BULGU YAPMA! (Diğer müteahhitlik şirketleri, inşaat taahhüt firmaları, vinç kiralama firmaları veya onların tanıtım sayfaları kesinlikle BULGU DEĞİLDİR). Bize rakip değil, doğrudan BİZE İŞ VERECEK MÜŞTERİ ve İŞ FIRSATI bul.',
+  '- GENEL İNŞAAT VE MÜŞTERİ BULMA BİLİNCİ (ZORUNLU TERİMLER VE ODAK):',
+  '  1) KALFALIK & USTA EKİBİ TALEPLERİ: Kalıp-demir kalfası, kaba inşaat kalfalığı, şantiye taşeronluğu, usta ekibi arayan yap-sat müteahhitleri.',
+  '  2) YAP-SAT VE BİNA YAPIMI: İstanbul ve Trakya hattında temelden çatıya bina yapımı, arsa karşılığı / kat karşılığı konut projeleri, villa taahhüdü.',
+  '  3) KABA VE İNCE İNŞAAT: Radye temel, kolon-kiriş donatı, kalıp ve beton dökümü (kaba inşaat) ile şap, sıva, mantolama ve ince işçilik taşeronlukları.',
+  '  4) GÖTÜRÜ İŞLER: Metrekare bazlı veya götürü usulü kaba/ince inşaat yaptırmak isteyen müteahhitler, kooperatifler ve arsa sahipleri.',
+  '  5) KENTSEL DÖNÜŞÜM: 10-20 daireli riskli binalarını yeniletmek için güvenilir yerel müteahhit arayan bina yöneticileri ve kat malikleri.',
   '- İŞ MAKİNESİ (MANİTOU) ALANINDA ARANACAK ŞEYLER: Sektördeki tek uzman botumuz ilan sitelerine, iş ilanlarına ve şantiyelere bakar. Yalnızca teleskopik yükleyici (Manitou/telehandler) kiralamak isteyen, şantiyesine yüksekte malzeme taşıma/montaj için vinç/forklift arayan veya telehandler operatörü arayan müşterileri bulur. Kiralık manitou reklamı veren rakipleri ASLA listeleme.',
   '- Her bulgu somut ve üzerine teklif verilebilir olmalı: belirli bir talep, iş ilanı, ihale, arsa sahibi duyurusu veya taşeron arayışı. Genel haber, makale, reklam veya başka bölge kayıtları BULGU DEĞİLDİR.',
   '- Her bulguya "relevance" (0-10) ve "fit" (tek cümle: bu iş/talep Embay Yapı veya Şahin Manitou için neden bir iş fırsatı) yaz. 7\'nin altındaki veya rakip kokan kayıtları derhal ele.',
@@ -106,10 +111,17 @@ export function socialProfile(url: string): { platform: 'instagram' | 'facebook'
 }
 
 /** Kural tabanlı ön eleme (AI yokken): güçlü iş sinyali olan, rehber/liste/fiyat sayfası olmayan ve görev kelimesi geçen arama sonuçları. */
-const POS = ['temeli atil', 'temel atma', 'insaati basla', 'insaatina basla', 'aranıyor', 'araniyor', 'ariyor', 'arıyor', 'kat karsilig', 'bosaltil', 'yikim', 'yikil', 'riskli yapi', 'ced ', 'ced olumlu', 'yapilacak', 'insa edilecek', 'talep', 'ihale', 'proje'];
+const POS = [
+  'kalfalik', 'kalfa', 'kalfa araniyor', 'kalfasi', 'usta araniyor', 'yap sat', 'yapsat',
+  'bina yapimi', 'bina insaati', 'kaba insaat', 'ince insaat', 'kaba ve ince', 'kaba siva',
+  'goturu', 'goturu is', 'taseron', 'taseron araniyor', 'taseronluk', 'muteahhit', 'muteahhitlik',
+  'kalip demir', 'demir baglama', 'beton dokumu', 'insaat yapimi', 'villa yapimi', 'cati yapimi',
+  'temeli atil', 'temel atma', 'insaati basla', 'insaatina basla', 'aranıyor', 'araniyor', 'ariyor', 'arıyor',
+  'kat karsilig', 'arsa karsiligi', 'bosaltil', 'yikim', 'yikil', 'riskli yapi', 'yapilacak', 'insa edilecek', 'talep', 'ihale', 'proje'
+];
 const TARGET_REGION = ['istanbul', 'kocaeli', 'tekirdag', 'gebze', 'tuzla', 'pendik', 'kartal', 'esenyurt', 'basaksehir', 'arnavutkoy', 'silivri', 'catalca', 'buyukcekmece', 'beylikduzu', 'sancaktepe', 'cekmekoy', 'umraniye', 'atasehir', 'kadikoy', 'uskudar', 'beykoz', 'sile', 'sultanbeyli', 'eyup', 'kagithane', 'sariyer', 'bagcilar', 'kucukcekmece', 'esenler', 'gungoren', 'zeytinburnu', 'bahcelievler', 'avcilar', 'hadimkoy', 'corlu', 'cerkezkoy', 'izmit', 'darica', 'dilovasi', 'cayirova'];
 const OTHER_CITIES = ['ankara', 'izmir', 'bursa', 'iznik', 'antalya', 'adana', 'konya', 'mersin', 'gaziantep', 'kayseri', 'samsun', 'trabzon', 'eskisehir', 'diyarbakir', 'sakarya', 'yalova', 'bolu', 'duzce', 'manisa', 'balikesir', 'canakkale', 'edirne', 'kirklareli', 'malatya', 'erzurum', 'van', 'hatay', 'denizli', 'aydin', 'mugla', 'afyon', 'sivas', 'tokat', 'ordu', 'rize', 'zonguldak', 'karabuk', 'kastamonu', 'corum', 'yozgat', 'nevsehir', 'aksaray', 'nigde', 'karaman', 'isparta', 'burdur', 'usak', 'kutahya', 'bilecik', 'elazig', 'batman', 'mardin', 'sanliurfa', 'adiyaman', 'kahramanmaras', 'osmaniye', 'kilis'];
-const NEG = ['is ilanlari', 'ilanlari', 'hizmetleri', 'guclendirme hizmet', 'tadilat firmasi', 'tadilat hizmet', 'dekorasyon', 'en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire'];
+const NEG = ['temizlik personeli', 'garson', 'kurye', 'sofor', 'cagri merkezi', 'guvenlik gorevlisi', 'muhasebe', 'kasiyer', 'sozluk', 'soru', 'yorum', 'kampanya', 'indirim'];
 export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title'>): Array<Omit<Finding, 'at' | 'step'>> {
   const anchors = anchorWords(m);
   const out: Array<Omit<Finding, 'at' | 'step'>> = [];
