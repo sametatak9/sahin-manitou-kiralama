@@ -147,8 +147,9 @@ export function MissionList({ bots, botId, compact = false, review }: { bots: Bo
           {q.data.map((m) => {
             const st = MISSION_STATUS[m.status]; const live = m.status === 'running' || m.status === 'finalizing';
             return (
-              <button key={m.id} onClick={() => setOpen(m.id)} className="w-full text-left ops-panel !rounded-2xl p-3.5 hover:ring-1 hover:ring-brand-green/40 transition">
+              <button key={m.id} onClick={() => setOpen(m.id)} className={cx('w-full text-left bg-white rounded-2xl p-3.5 ring-1 ring-ink-700/70 shadow-sm hover:ring-brand-green/50 hover:shadow-md transition border-l-4', live ? 'border-l-sky-400' : m.status === 'failed' ? 'border-l-rose-400' : (m.findings?.length ?? 0) > 0 ? 'border-l-emerald-400' : 'border-l-slate-300')}>
                 <div className="flex flex-wrap items-center gap-2">
+                  {!botId && <span className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-[#262A6B] to-[#1E3FA0] text-white grid place-items-center text-[11px] font-bold">{botName(m.bot_id).replace(/^[^\p{L}]+/u, '').slice(0, 2).toLocaleUpperCase('tr-TR')}</span>}
                   <span className="font-semibold text-sm text-ink-100 flex-1 min-w-[180px] truncate">{m.title}</span>
                   <Pill tone={st.tone}>{st.label}</Pill>
                   {m.finish_reason && <span className="text-[10px] text-ink-500">{m.status === 'failed' ? ERROR_KIND[m.error_kind ?? ''] ?? 'Hata' : FINISH_REASON[m.finish_reason] ?? m.finish_reason}</span>}

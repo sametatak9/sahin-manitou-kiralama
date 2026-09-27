@@ -76,10 +76,12 @@ function background(p: Promise<unknown>) {
 
 /** Onaylı + zamanı gelmiş içerikleri, hesabı gerçekten bağlı platformlarda yayınlar. Bağlı değilse dokunmaz. */
 async function publishDueContent(db: Db, workerId: string) {
-  const { data: drafts } = await db.from('social_drafts').select('id,primary_platform,platform_targets,approved_by,created_by,scheduled_at')
-    .in('workflow_status', ['approved', 'scheduled']).lte('scheduled_at', new Date().toISOString()).limit(5);
+  const { data: drafts } = await db.from('social_drafts').select('id,primary_platform,platform_targets,approved_by,created_by,scheduled_at,format,design_provider,video_url')
+    .in('workflow_status', ['approved', 'scheduled']).lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(10);
   const out = [];
   for (const d of drafts || []) {
+    // Ham (editsiz) Reels yayınlanmaz: otomatik montaj bağlanana kadar bekler
+    if ((d.format === 'reel' || d.format === 'short') && d.video_url && d.design_provider !== 'embay_montage') continue;
     const platform = d.primary_platform || d.platform_targets?.[0];
     const def = connectorByKey(platform);
     if (!def?.publish) continue;
@@ -642,6 +644,33 @@ async function api(db: Db, req: Request) {
   }
 }
 
+// ── Otomatik Reels montajı ───────────────────────────────────────────────────
+const REEL_HOST = 'https://embay-panel.vercel.app';
+async function reelQueue(db: Db) {
+  const from = new Date(Date.now() - 24 * 3600_000).toISOString(); const to = new Date(Date.now() + 72 * 3600_000).toISOString();
+  const { data } = await db.from('social_drafts').select('id,video_url,headline,content_pillar,primary_platform,design_provider,format')
+    .is('archived_at', null).in('workflow_status', ['pending_approval', 'scheduled', 'approved']).not('video_url', 'is', null)
+    .gte('scheduled_at', from).lte('scheduled_at', to).order('scheduled_at').limit(12);
+  const rows = (data || []).filter((d) => d.design_provider !== 'embay_montage' && /\/storage\/v1\/object\/public\//.test(d.video_url || ''));
+  const { data: pool } = await db.from('media_library').select('url,edit').eq('kind', 'video').is('archived_at', null).neq('source', 'montage').limit(300);
+  const ok = (pool || []).filter((v) => (v.edit as { codec?: string } | null)?.codec !== 'hevc' && /\/storage\/v1\/object\/public\//.test(v.url || '')).map((v) => v.url as string);
+  const pick = (not: string) => ok.filter((u) => u !== not).sort(() => Math.random() - 0.5).slice(0, 3);
+  return { items: rows.map((d) => ({ id: d.id, video: d.video_url, extras: pick(d.video_url!), headline: d.headline ?? '', pillar: d.content_pillar ?? '', platform: d.primary_platform ?? '' })) };
+}
+async function reelAttach(db: Db, body: { id?: string }) {
+  const id = String(body.id || '');
+  if (!/^[0-9a-f-]{36}$/.test(id)) throw new HttpError(400, 'Geçersiz id');
+  const { data: d } = await db.from('social_drafts').select('id,design_provider,design_url').eq('id', id).maybeSingle();
+  if (!d) throw new HttpError(404, 'Taslak yok');
+  if (d.design_provider === 'embay_montage') return { id, attached: false, reason: 'zaten editli' };
+  const url = `${REEL_HOST}/reels/${id}.mp4`; const cover = `${REEL_HOST}/reels/${id}.jpg`;
+  const head = await fetch(url, { method: 'HEAD' }).catch(() => null);
+  if (!head?.ok || !/video\/mp4/.test(head.headers.get('content-type') || '')) return { id, attached: false, reason: `video henüz yayında değil (${head?.status ?? 'bağlantı yok'})` };
+  const ch = await fetch(cover, { method: 'HEAD' }).catch(() => null);
+  await db.from('social_drafts').update({ video_url: url, media_urls: [url], design_url: ch?.ok ? cover : d.design_url, design_provider: 'embay_montage' }).eq('id', id);
+  return { id, attached: true, url };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const url = new URL(req.url);
@@ -673,6 +702,10 @@ Deno.serve(async (req) => {
       }
       return json(out);
     }
+    // Otomatik Reels montajı (GitHub Actions): montaj bekleyen Reels kuyruğu ve üretilen videoyu taslağa bağlama.
+    // Gizli anahtar gerekmez: kuyruk yalnızca zaten herkese açık video adreslerini verir; bağlama yalnızca kendi panel alan adımızdaki dosyayı kabul eder.
+    if (path.startsWith('/reels/queue') && req.method === 'GET') return json(await reelQueue(db));
+    if (path.startsWith('/reels/attach') && req.method === 'POST') return json(await reelAttach(db, await req.json().catch(() => ({}))));
     // Meta (Facebook/Instagram) gelen olaylar: yorum, mesaj, bahsetme. Doğrulama belirteci Vault'ta; imza uygulama gizli anahtarıyla kontrol edilir.
     if (path.startsWith('/webhook/meta')) return await metaWebhook(db, req, url);
     if (path.startsWith('/api') && req.method === 'POST') return json(await api(db, req));

@@ -7,7 +7,7 @@ import { dayKey, fmtTime } from '../lib/format';
 import { useRouter, useSession } from '../session';
 import { Button, cx, Notice, Pill } from '../ui';
 
-interface State { enabled: boolean; active: boolean; start_hour: number; end_hour: number; weekdays: number[] }
+interface State { enabled: boolean; active: boolean; auto_publish?: boolean; start_hour: number; end_hour: number; weekdays: number[] }
 interface PlanRow { key: string; hour: string; who: string; what: string; done: boolean }
 interface Data { state: State | null; plan: PlanRow[]; pendingDrafts: number; todayPosts: Array<{ at: string; platform: string; status: string }>; factory: { created: number; finished: boolean } | null }
 
@@ -79,7 +79,7 @@ export function AutopilotCard() {
   const hourNow = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(new Date()));
   const nextDay = (() => { for (let k = hourNow < st.start_hour ? 0 : 1; k <= 7; k++) { const d = ((dowNow - 1 + k) % 7) + 1; if (st.weekdays.includes(d)) return k === 0 ? 'bugün' : k === 1 ? 'yarın' : DAYS[d - 1]; } return ''; })();
   const label = !st.enabled ? 'Durduruldu' : st.active ? 'Çalışıyor' : `Mesai dışı · ${nextDay} ${hh(st.start_hour)}’de başlar`;
-  const days = st.weekdays.length === 6 && !st.weekdays.includes(7) ? 'Pzt–Cmt' : st.weekdays.length === 5 && !st.weekdays.includes(6) ? 'Pzt–Cum' : st.weekdays.map((d) => DAYS[d - 1]).join(', ');
+  const days = st.weekdays.length === 7 ? 'her gün' : st.weekdays.length === 6 && !st.weekdays.includes(7) ? 'Pzt–Cmt' : st.weekdays.length === 5 && !st.weekdays.includes(6) ? 'Pzt–Cum' : st.weekdays.map((d) => DAYS[d - 1]).join(', ');
   const posts = q.data.todayPosts.filter((p) => p.status !== 'pending_approval');
 
   return (
@@ -91,7 +91,7 @@ export function AutopilotCard() {
             <Pill tone={tone}>{label}</Pill>
           </div>
           <p className="text-sm text-ink-300 mt-1 max-w-2xl">
-            Tek düğme: botlar her gün <b className="text-ink-100">{hh(st.start_hour)}–{hh(st.end_hour)}</b> ({days}) kendiliğinden çalışır — iş/müşteri arar, içerik hazırlar, <b className="text-ink-100">sizin onayladığınız</b> içerikleri yayın saatinde paylaşır.
+            Tek düğme: botlar <b className="text-ink-100">{hh(st.start_hour)}–{hh(st.end_hour)}</b> ({days}) kendiliğinden çalışır — iş/müşteri arar, içerik hazırlar, Reels’leri Embay tarzında editler ve {st.auto_publish ? <b className="text-ink-100">onay beklemeden</b> : <b className="text-ink-100">sizin onayladığınız</b>} içerikleri yayın saatinde paylaşır.
           </p>
         </div>
         {isAdmin && (
@@ -99,6 +99,10 @@ export function AutopilotCard() {
             {st.enabled
               ? <><Button variant="primary" loading={busy} onClick={runNow} icon={<CirclePlay className="w-5 h-5" />}>Tüm botları şimdi çalıştır</Button><Button variant="danger" loading={busy} onClick={() => toggle(false)} icon={<CirclePause className="w-5 h-5" />}>Botları durdur</Button></>
               : <Button variant="primary" loading={busy} onClick={runNow} icon={<CirclePlay className="w-5 h-5" />}>Botları başlat</Button>}
+            <button type="button" disabled={busy} onClick={async () => { setBusy(true); setErr(null); const { error } = await db().rpc('set_auto_publish', { p_on: !st.auto_publish }); if (error) setErr(error.message); await q.reload(); setBusy(false); }}
+              className={cx('rounded-xl px-3 py-2 text-xs font-semibold ring-1', st.auto_publish ? 'bg-emerald-50 text-emerald-800 ring-emerald-300' : 'bg-white text-ink-300 ring-ink-700')}>
+              {st.auto_publish ? '✓ Onaysız yayın açık' : 'Onaysız yayın kapalı'}
+            </button>
             <label className="inline-flex items-center gap-1 text-xs text-ink-400"><Clock className="w-3.5 h-3.5" />
               <select className="ops-input !py-1 !px-2 !w-auto" value={st.start_hour} disabled={busy} onChange={(e) => toggle(st.enabled, { start_hour: Number(e.target.value) })}>
                 {Array.from({ length: 12 }, (_, i) => i + 5).filter((h) => h < st.end_hour).map((h) => <option key={h} value={h}>{hh(h)}</option>)}

@@ -286,11 +286,15 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const brand = await defaultBrand(db);
   const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
   const { data: admin } = await db.from('team_members').select('user_id').eq('role', 'admin').order('created_at').limit(1).maybeSingle();
+  // Otopilot 'onaysız yayın' açıksa taslaklar doğrudan zamanlanır (Reels otomatik montaj bağlanana kadar yayınlanmaz)
+  const { data: ap } = await db.from('ops_autopilot').select('auto_publish').eq('id', 1).maybeSingle();
+  const autoPublish = (ap as { auto_publish?: boolean } | null)?.auto_publish === true;
   // Gerçek medya: en az kullanılan video/fotoğraf önce (Drive'dan gelenler dahil) → her gün farklı kareler
   const { data: vids } = await db.from('media_library').select('id,url,cover_url,title,use_count,source,edit').eq('kind', 'video').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(40);
   // Önce hazır montajlar (logolu, adım yazılı Reels), sonra ham videolar; HEVC en sona (bazı tarayıcılarda önizlenmez)
-  const rank = (v: { source?: string | null; edit?: { codec?: string } | null }) => (v.source === 'montage' ? 0 : v.edit?.codec === 'hevc' ? 2 : 1);
+  // Ham şantiye videoları önce (otomatik montaj yeni Embay tarzında editler); eski tarz montajlar ve HEVC en sona
+  const rank = (v: { source?: string | null; edit?: { codec?: string } | null }) => (v.source === 'montage' ? 3 : v.edit?.codec === 'hevc' ? 2 : 1);
   const videos = (vids || []).map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
   const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(60);
@@ -354,9 +358,10 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
           brand: it.brand, title: `${q.platform.toUpperCase()} · ${it.format === 'reel' ? 'Kısa video' : 'Banner'} · ${it.headline}`.slice(0, 200), body,
           caption: it.caption, headline: it.headline, hashtags: it.hashtags, cta: it.cta, format: it.format, networks: [q.platform], platform_targets: [q.platform], primary_platform: q.platform,
           media_urls: media, video_url, design_url: it.format === 'banner' ? media[0] : reelCover, design_brief: it.video_script ? `Çekim senaryosu: ${it.video_script}` : null,
-          image_brief: note || null, scheduled_at: slotIso(day, slot), status: 'onay_bekliyor', workflow_status: 'pending_approval', archive_status: 'active',
+          image_brief: note || null, scheduled_at: slotIso(day, slot), status: autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
+          ...(autoPublish ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
           bot_id: bot?.id ?? null, content_pillar: it.badge, campaign_name: `Günlük içerik ${day}`, created_by: admin?.user_id ?? null,
-          kvkk_basis: 'İçerik Fabrikası taslağı; yayın öncesi insan onayı zorunlu.',
+          kvkk_basis: autoPublish ? 'İçerik Fabrikası; yönetici otomatik yayını açtı (otopilot).' : 'İçerik Fabrikası taslağı; yayın öncesi insan onayı zorunlu.',
         });
         if (error) throw error;
         await db.from('post_templates').insert({ title: it.headline.slice(0, 200), platform: q.platform, brand: it.brand, pillar: it.badge, headline: it.headline, caption: it.caption,
