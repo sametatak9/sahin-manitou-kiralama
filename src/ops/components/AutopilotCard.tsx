@@ -61,7 +61,10 @@ export function AutopilotCard() {
 
   if (!st) return null;
   const tone = !st.enabled ? 'stop' : st.active ? 'go' : 'wait';
-  const label = !st.enabled ? 'Durduruldu' : st.active ? 'Çalışıyor' : `Mesai dışı · ${hh(st.start_hour)}’de başlar`;
+  const dowNow = ((new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Istanbul' })).getDay() + 6) % 7) + 1;
+  const hourNow = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(new Date()));
+  const nextDay = (() => { for (let k = hourNow < st.start_hour ? 0 : 1; k <= 7; k++) { const d = ((dowNow - 1 + k) % 7) + 1; if (st.weekdays.includes(d)) return k === 0 ? 'bugün' : k === 1 ? 'yarın' : DAYS[d - 1]; } return ''; })();
+  const label = !st.enabled ? 'Durduruldu' : st.active ? 'Çalışıyor' : `Mesai dışı · ${nextDay} ${hh(st.start_hour)}’de başlar`;
   const days = st.weekdays.length === 6 && !st.weekdays.includes(7) ? 'Pzt–Cmt' : st.weekdays.length === 5 && !st.weekdays.includes(6) ? 'Pzt–Cum' : st.weekdays.map((d) => DAYS[d - 1]).join(', ');
   const posts = q.data.todayPosts.filter((p) => p.status !== 'pending_approval');
 
