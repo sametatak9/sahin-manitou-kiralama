@@ -12,11 +12,11 @@ interface Quota { platform: Platform; enabled: boolean; video_per_day: number; i
 interface Item { format: 'reel' | 'banner'; title: string; headline: string; subtitle: string; badge: string; caption: string; hashtags: string[]; cta: string; video_script?: string; brand: 'Embay Yapı' | 'Şahin Manitou' }
 
 const PLATFORM_RULES: Record<Platform, string> = {
-  instagram: 'Instagram: açıklama 80-150 kelime, ilk satır kanca, 8-12 hashtag (yerel: #çatalca #silivri #istanbul + sektör), konum ve WhatsApp çağrısı. Reels 15-30 sn.',
-  tiktok: 'TikTok: açıklama en fazla 150 karakter, 3-5 hashtag (#inşaat #manitou #şantiye gibi), eğlenceli ama profesyonel; video 15-30 sn, ilk 2 saniye güçlü kanca.',
-  youtube: 'YouTube Shorts: başlık en fazla 70 karakter + açıklama 2-3 cümle, 3 hashtag ve #shorts. Banner içerikleri Topluluk gönderisi olarak.',
-  facebook: 'Facebook: 40-90 kelime, yerel ve güven veren dil, 2-4 hashtag, telefon ve WhatsApp çağrısı.',
-  x: 'X (Twitter): toplam en fazla 260 karakter, 1-2 hashtag, net teklif/haber dili.',
+  instagram: 'Instagram: açıklama 80-150 kelime, ilk satır kanca, 20-25 hashtag (yerel: #çatalca #silivri #istanbul + sektör + konu), konum ve WhatsApp çağrısı. Reels 15-30 sn.',
+  tiktok: 'TikTok: açıklama en fazla 150 karakter, 20 hashtag (#inşaat #şantiye #tadilat gibi), eğlenceli ama profesyonel; video 15-30 sn, ilk 2 saniye güçlü kanca.',
+  youtube: 'YouTube Shorts: başlık en fazla 70 karakter + açıklama 2-3 cümle, 15 hashtag (#shorts dahil; 15 üstüne çıkma). Banner içerikleri Topluluk gönderisi olarak.',
+  facebook: 'Facebook: 40-90 kelime, yerel ve güven veren dil, 20 hashtag, telefon ve WhatsApp çağrısı.',
+  x: 'X (Twitter): toplam en fazla 260 karakter, 2-3 hashtag, net teklif/haber dili.',
 };
 
 // İçerik direkleri — YALNIZCA Embay Yapı inşaat işleri (yönetici kararı 2026-09-27: Manitou için sosyal medya içeriği/reklamı YOK).
@@ -252,35 +252,37 @@ ${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.0
 function slotIso(day: string, hhmm: string) { return new Date(`${day}T${hhmm}:00+03:00`).toISOString(); }
 function dayIndex(day: string) { return Math.floor(new Date(`${day}T00:00:00Z`).getTime() / 86400000); }
 
-// ── Etiket stratejisi: her gönderide yerel + konu + marka karışımı (keşfet için geniş, müşteri için yerel) ──
-// Yerel etiketler nitelikli (bölgede ev/iş yaptıracak) kitleyi getirir; geniş etiketler görünürlük sağlar; marka etiketi arşiv oluşturur.
+// ── Etiket stratejisi (yönetici kararı: gönderi başı EN AZ 20 etiket) ──
+// Instagram/Facebook/TikTok: 25 etiket (Instagram üst sınırı 30). YouTube 15'i geçerse TÜM etiketleri yok sayar → 15.
+// X (Twitter) 280 karakter sınırı yüzünden 3 etiket. Karışım: marka + konu + yerel + geniş inşaat etiketleri.
 const TAGS = {
-  yerel: ['#çatalca', '#silivri', '#büyükçekmece', '#istanbul', '#arnavutköy', '#beylikdüzü'],
+  yerel: ['#çatalca', '#silivri', '#büyükçekmece', '#istanbul', '#arnavutköy', '#beylikdüzü', '#hadımköy', '#esenyurt', '#avcılar', '#başakşehir', '#güngören', '#istanbulinşaat'],
   konu: {
-    ev: ['#evyapımı', '#müstakilev', '#anahtarteslim', '#evyaptırmak', '#yapı'],
-    bina: ['#binayapımı', '#kentseldönüşüm', '#depremedayanıklı', '#betonarme', '#müteahhit'],
-    tamirat: ['#tamirat', '#onarım', '#çatıtamiri', '#suyalıtımı', '#mantolama'],
-    villa: ['#villa', '#villainşaatı', '#müstakilev', '#evyapımı', '#anahtarteslim', '#mimari'],
-    donusum: ['#kentseldönüşüm', '#katkarşılığı', '#depremedayanıklı', '#müteahhit', '#yenibina'],
-    tadilat: ['#tadilat', '#dışcephe', '#mantolama', '#çatıtamiri', '#renovasyon'],
-    santiye: ['#şantiye', '#inşaat', '#betonarme', '#kabainşaat', '#yapı'],
-    ipucu: ['#evyaptırmak', '#inşaatipuçları', '#müstakilev', '#zeminetüdü'],
+    ev: ['#evyapımı', '#müstakilev', '#anahtarteslim', '#evyaptırmak', '#yapı', '#bahçeliev', '#evinşaatı', '#yeniev', '#hayalimdekiev'],
+    bina: ['#binayapımı', '#kentseldönüşüm', '#depremedayanıklı', '#betonarme', '#müteahhit', '#apartman', '#katkarşılığı', '#yenibina', '#depremgüvenliği'],
+    tamirat: ['#tamirat', '#onarım', '#çatıtamiri', '#suyalıtımı', '#mantolama', '#çatıaktarma', '#rutubet', '#dışcephe', '#bakımonarım'],
+    villa: ['#villa', '#villainşaatı', '#villaprojesi', '#müstakilev', '#evyapımı', '#anahtarteslim', '#mimari', '#bahçelivilla', '#lüksev'],
+    donusum: ['#kentseldönüşüm', '#katkarşılığı', '#depremedayanıklı', '#müteahhit', '#yenibina', '#riskliyapı', '#binayapımı'],
+    tadilat: ['#tadilat', '#renovasyon', '#evtadilatı', '#mutfaktadilatı', '#banyotadilatı', '#dekorasyon', '#içmimari', '#tadilatöncesisonrası', '#evyenileme'],
+    santiye: ['#şantiye', '#şantiyehayatı', '#betonarme', '#kabainşaat', '#kalıp', '#demir', '#betondökümü', '#usta', '#inşaatmühendisi'],
+    ipucu: ['#evyaptırmak', '#inşaatipuçları', '#müstakilev', '#zeminetüdü', '#bilgi', '#ipucu', '#evsahibi', '#müteahhitseçimi', '#yapıdenetim'],
   } as Record<string, string[]>,
-  genis: ['#inşaat', '#construction', '#insaat'],
+  genis: ['#inşaat', '#insaat', '#construction', '#yapı', '#müteahhitlik', '#inşaatsektörü', '#mimarlık', '#architecture', '#building', '#renovation', '#homedesign', '#evdekorasyonu', '#türkiye', '#ev', '#emlak'],
   marka: { manitou: '#şahinmanitou', diger: '#embayyapı' },
 };
 function tagMix(p: Platform, pillar: string, ai: string[]) {
-  const max = p === 'x' ? 2 : p === 'tiktok' ? 5 : p === 'youtube' ? 3 : p === 'facebook' ? 4 : 12;
+  const max = p === 'x' ? 3 : p === 'youtube' ? 15 : 25;
   const brand = TAGS.marka.diger;
   const topic = (TAGS.konu[pillar] ?? TAGS.konu.santiye).filter((t) => !/[^\p{L}#]/u.test(t));
-  const plan = p === 'instagram'
-    ? [brand, ...TAGS.yerel.slice(0, 4), ...topic.slice(0, 5), ...TAGS.genis.slice(0, 2)]
-    : p === 'facebook' ? [TAGS.yerel[0], TAGS.yerel[3], topic[0], brand]
-    : p === 'x' ? [topic[0], TAGS.yerel[3]]
-    : p === 'youtube' ? [topic[0], TAGS.yerel[3], '#shorts']
-    : [topic[0], topic[1], TAGS.yerel[0], TAGS.yerel[3], '#fyp'];
+  const extra = p === 'youtube' ? ['#shorts'] : p === 'tiktok' ? ['#fyp', '#keşfet'] : p === 'instagram' ? ['#keşfet', '#reels'] : [];
+  const plan = p === 'x' ? [topic[0], TAGS.yerel[3], brand]
+    : [brand, ...extra, ...topic, ...TAGS.yerel.slice(0, 6), ...TAGS.genis.slice(0, 7), ...TAGS.yerel.slice(6), ...TAGS.genis.slice(7), '#embay'];
   const out: string[] = [];
-  for (const t of [...plan, ...ai]) { const k = t.toLocaleLowerCase('tr-TR'); if (t.startsWith('#') && !out.some((o) => o.toLocaleLowerCase('tr-TR') === k)) out.push(t); }
+  // önce kendi planımız (en az 20 garanti), sonra AI'ın önerdikleri araya karışır
+  for (const t of [...plan.slice(0, 12), ...ai, ...plan.slice(12)]) {
+    const k = t.toLocaleLowerCase('tr-TR');
+    if (t.startsWith('#') && !/manitou|kiralama/i.test(t) && !out.some((o) => o.toLocaleLowerCase('tr-TR') === k)) out.push(t);
+  }
   return out.slice(0, max);
 }
 
@@ -351,7 +353,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
       ].join('\n'), CONTENT_SCHEMA);
       // deno-lint-ignore no-explicit-any
       items = ((json?.items ?? []) as any[]).slice(0, 3).filter((it) => !/manitou|kiralama|150 g[üu]n/i.test(`${it.headline} ${it.caption}`) && !usedHeads.has(String(it.headline ?? '').toLocaleLowerCase('tr-TR'))).map((it, i) => ({ ...it, format: i === 0 ? 'reel' : 'banner', badge: pillars[i].badge, brand: 'Embay Yapı' as Item['brand'],
-        hashtags: (Array.isArray(it.hashtags) ? it.hashtags : []).map((t: string) => (String(t).startsWith('#') ? String(t) : `#${t}`)).slice(0, q.platform === 'x' ? 2 : q.platform === 'tiktok' ? 5 : 12) }));
+        hashtags: (Array.isArray(it.hashtags) ? it.hashtags : []).map((t: string) => (String(t).startsWith('#') ? String(t) : `#${t}`)).slice(0, 30) }));
     } catch (e) { errors.push(`${q.platform}: AI — ${String((e as Error).message).slice(0, 120)} (hazır metin kullanıldı)`); }
     if (items.length < 3) items = fallbackItems(q.platform, pillars, di, usedHeads);
     for (const it of items) usedHeads.add(it.headline.toLocaleLowerCase('tr-TR'));
