@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Layers } from 'lucide-react';
 import { BannerPool, PostPool } from '../components/Pools';
 import { DriveSources } from '../components/DriveSources';
+import { VideoPool } from '../components/VideoPool';
 import { Tabs } from '../ui';
-import { VideoStudioScreen } from './VideoStudio';
 
 export function PoolsScreen() {
   const [tab, setTab] = useState<'banner' | 'video' | 'photo' | 'post'>('banner');
@@ -15,7 +15,7 @@ export function PoolsScreen() {
         <p className="text-sm text-ink-400">Hazır içerik depoları. Banner’lar şablondan üretilir; başlığını/rengini değiştirip yeniden çizebilir, kopyalayabilir veya arşive kaldırabilirsiniz. Yayın Kuyruğu’nda “Havuzdan seç” ile gönderiye eklenir.</p>
       </div>
       <Tabs value={tab} onChange={setTab} items={[{ id: 'banner', label: 'Banner havuzu' }, { id: 'video', label: 'Video havuzu' }, { id: 'photo', label: 'Fotoğraf & Drive' }, { id: 'post', label: 'Gönderi metinleri' }]} />
-      {tab === 'banner' ? <BannerPool /> : tab === 'photo' ? <DriveSources /> : tab === 'post' ? <PostPool /> : <VideoStudioScreen />}
+      {tab === 'banner' ? <BannerPool /> : tab === 'photo' ? <DriveSources /> : tab === 'post' ? <PostPool /> : <VideoPool />}
     </div>
   );
 }
