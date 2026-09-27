@@ -14,6 +14,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 W, H, FPS = 1080, 1920, 30
 NAVY, ROYAL, SKY, INK, SKYL = (38, 42, 107), (30, 63, 160), (143, 198, 242), (27, 31, 82), (220, 233, 251)
+# Lüks kurumsal palet (banner'larla aynı): lacivert + altın
+LNAVY, LNAVY2, GOLD, GOLD2, CREAM = (15, 26, 51), (10, 18, 38), (201, 164, 92), (226, 201, 143), (239, 233, 221)
 PHONE, WEB, HANDLE = '0531 436 29 04', 'embayyapi.com.tr', '@embayyapi'
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_DIRS = ['/usr/share/fonts/truetype/dejavu', os.path.join(HERE, 'fonts')]
@@ -35,6 +37,15 @@ STYLES = [
     {'tr': ['smoothup', 'hlslice', 'diagtl', 'slideright', 'fadeblack'], 'pill': 'İŞİN MUTFAĞI', 'sub': 'Şantiyeden gerçek görüntüler'},
     {'tr': ['zoomin', 'wipeleft', 'vuslice', 'smoothdown', 'fade'], 'pill': 'ÖNCE / SONRA', 'sub': 'Farkı sonunda görün'},
 ]
+
+
+def serif(bold=True, size=60):
+    name = 'DejaVuSerif-Bold.ttf' if bold else 'DejaVuSerif.ttf'
+    for d in FONT_DIRS:
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size)
+    return font(bold, size)
 
 
 def font(bold=True, size=60):
@@ -142,50 +153,71 @@ def logo(d, cx, cy, k, color=(255, 255, 255), text=True):
     d.text((cx - d.textlength('Y  A  P  I', font=f2) / 2, cy + 23 * k), 'Y  A  P  I', font=f2, fill=color)
 
 
-# ── Kartlar ─────────────────────────────────────────────────────────────────
+# ── Kartlar (lacivert + altın lüks tarz) ─────────────────────────────────────
+def lux_logo(d, x0, y0, s, color=GOLD):
+    k = s / 60
+    for p in HOUSE:
+        for poly in path_polys(p):
+            d.line([(x0 + px * k, y0 + py * k) for px, py in poly], fill=color, width=max(2, int(3.2 * k)), joint='curve')
+    f1 = serif(False, int(s * 0.5)); d.text((x0 + s * 1.12, y0 + s * 0.08), 'E M B A Y', font=f1, fill=color)
+    f2 = font(False, int(s * 0.2)); d.text((x0 + s * 1.7, y0 + s * 0.68), 'Y A P I', font=f2, fill=color)
+    d.line([(x0 + s * 1.14, y0 + s * 0.8), (x0 + s * 1.6, y0 + s * 0.8)], fill=color, width=2)
+    d.line([(x0 + s * 2.45, y0 + s * 0.8), (x0 + s * 2.9, y0 + s * 0.8)], fill=color, width=2)
+
+
+def lux_bg():
+    img = gradient(W, H, (22, 36, 70), LNAVY2)
+    return grid(img, alpha=8, step=72)
+
+
 def intro_card(hook, path, st=None):
     st = st or STYLES[0]
-    img = grid(gradient(W, H)); d = ImageDraw.Draw(img)
-    pill(d, W / 2, 600, st['pill'], font(True, 38), SKY, INK)
-    f = font(True, 96); lines = wrap(d, tr_upper(hook), f, W - 150)[:4]
+    img = lux_bg(); d = ImageDraw.Draw(img)
+    lux_logo(d, W / 2 - 150, 260, 104)
+    pill(d, W / 2, 620, st['pill'], font(True, 34), GOLD, LNAVY2)
+    f = serif(True, 96); lines = wrap(d, tr_upper(hook), f, W - 150)[:4]
     y = 760
-    for l in lines: center(d, y, l, f, (255, 255, 255)); y += 124
-    d.rectangle([W / 2 - 110, y + 18, W / 2 + 110, y + 30], fill=SKY)
-    center(d, y + 90, st['sub'], font(False, 42), SKYL)
+    for i, l in enumerate(lines): center(d, y, l, f, GOLD if i == len(lines) - 1 and len(lines) > 1 else (255, 255, 255)); y += 122
+    d.rectangle([W / 2 - 90, y + 24, W / 2 + 90, y + 30], fill=GOLD)
+    center(d, y + 80, st['sub'], font(False, 40), (214, 222, 238))
     footer(d); img.convert('RGB').save(path, quality=95)
 
 
 def footer(d):
-    d.rectangle([0, H - 150, W, H], fill=(27, 31, 82, 235)); d.rectangle([0, H - 150, W, H - 146], fill=SKY)
-    d.text((60, H - 112), HANDLE, font=font(True, 50), fill=(255, 255, 255))
-    f = font(False, 36); d.text((W - 60 - d.textlength(WEB, font=f), H - 104), WEB, font=f, fill=(201, 219, 245))
+    d.rectangle([0, H - 140, W, H], fill=LNAVY2 + (235,)); d.rectangle([0, H - 140, W, H - 137], fill=GOLD)
+    d.text((60, H - 104), HANDLE, font=font(True, 46), fill=(255, 255, 255))
+    f = font(False, 34); d.text((W - 60 - d.textlength(WEB, font=f), H - 96), WEB, font=f, fill=GOLD2)
 
 
 def scene_overlay(label, idx, total, title, path):
     img = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
-    # üst koyulaştırma + marka şeridi
-    for y in range(0, 420):
-        d.line([(0, y), (W, y)], fill=(27, 31, 82, int(200 * (1 - y / 420))))
-    logo(d, 118, 176, 1.5, text=False)
-    d.text((215, 92), 'EMBAY YAPI', font=font(True, 44), fill=(255, 255, 255))
-    d.text((215, 150), title, font=font(False, 34), fill=SKYL)
-    # adım etiketi
-    pill(d, W / 2, H - 330, f'{idx} · {label}', font(True, 62), SKY, INK)
+    for y in range(0, 360):
+        d.line([(0, y), (W, y)], fill=LNAVY + (int(190 * (1 - y / 360)),))
+    lux_logo(d, 60, 90, 78)
+    # alt bant: altın çizgi + serif etiket (lower third)
+    for y in range(H - 560, H - 140):
+        a = int(215 * min(1, (y - (H - 560)) / 220))
+        d.line([(0, y), (W, y)], fill=LNAVY2 + (a,))
+    d.text((70, H - 430), f'0{idx}', font=serif(True, 60), fill=GOLD)
+    d.rectangle([70, H - 350, 170, H - 345], fill=GOLD)
+    d.text((70, H - 325), tr_upper(label), font=serif(True, 66), fill=(255, 255, 255))
+    d.text((70, H - 235), title, font=font(False, 34), fill=GOLD2)
     for j in range(total):
-        x0 = W / 2 - (total * 100) / 2 + j * 100
-        d.rectangle([x0 + 5, H - 232, x0 + 95, H - 222], fill=SKY if j < idx else (255, 255, 255, 90))
+        x0 = W - 70 - (total - j) * 58
+        d.rectangle([x0, H - 250, x0 + 44, H - 244], fill=GOLD if j < idx else (255, 255, 255, 90))
     footer(d); img.save(path)
 
 
 def outro_card(title, path):
-    img = grid(gradient(W, H)); d = ImageDraw.Draw(img)
-    d.ellipse([W / 2 - 210, 420, W / 2 + 210, 840], fill=NAVY, outline=(255, 255, 255), width=8)
-    logo(d, W / 2, 640, 3.4)
-    center(d, 950, title, font(True, 58), (255, 255, 255))
-    center(d, 1030, 'tek muhatap', font(True, 58), SKY)
-    pill(d, W / 2, 1250, f'☎ {PHONE}', font(True, 66), SKY, INK, padx=60, h=170)
-    center(d, 1420, 'Ev · villa · bina · tadilat · tamirat', font(False, 42), SKYL)
-    center(d, 1490, 'İşimiz güvencenizdir.', font(True, 44), (255, 255, 255))
+    img = lux_bg(); d = ImageDraw.Draw(img)
+    lux_logo(d, W / 2 - 190, 470, 132)
+    center(d, 760, tr_upper(title), serif(True, 60), (255, 255, 255))
+    center(d, 840, 'TEK MUHATAP', serif(True, 60), GOLD)
+    d.rectangle([W / 2 - 90, 940, W / 2 + 90, 946], fill=GOLD)
+    pill(d, W / 2, 1130, f'☎ {PHONE}', font(True, 64), GOLD, LNAVY2, padx=60, h=160)
+    center(d, 1300, 'Ev · villa · bina · tadilat · tamirat', font(False, 40), (214, 222, 238))
+    center(d, 1370, 'Ücretsiz keşif · Çatalca / İstanbul', font(False, 40), (214, 222, 238))
+    center(d, 1480, 'İşimiz güvencenizdir.', serif(False, 50), GOLD2)
     footer(d); img.convert('RGB').save(path, quality=95)
 
 
@@ -280,7 +312,10 @@ def main():
     ap.add_argument('--test', nargs='*')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    music = os.path.join(HERE, 'music.m4a'); music = music if os.path.exists(music) else None
+    # Müzik havuzu: scripts/reels/music/ içindeki parçalar sırayla (her videoda farklı parça), yoksa varsayılan music.m4a
+    mdir = os.path.join(HERE, 'music')
+    tracks = sorted(os.path.join(mdir, f) for f in os.listdir(mdir) if f.lower().endswith(('.m4a', '.mp3', '.aac', '.wav'))) if os.path.isdir(mdir) else []
+    if os.path.exists(os.path.join(HERE, 'music.m4a')): tracks.append(os.path.join(HERE, 'music.m4a'))
     if a.test:
         items = [{'id': f'test{k}', 'video': a.test[0], 'extras': a.test[1:], 'headline': h, 'style': k} for k, h in enumerate(['Eski Ev, Yeni Hayat', 'Çatınız Akıtıyorsa İzleyin'])]
     else:
@@ -292,6 +327,7 @@ def main():
             done.append(it['id']); continue
         with tempfile.TemporaryDirectory() as work:
             try:
+                music = tracks[int(re.sub(r'[^0-9a-f]', '', it['id'])[:6] or '0', 16) % len(tracks)] if tracks else None
                 render(it, work, a.out, music); done.append(it['id']); print('✓', it['id'], it.get('headline', ''))
             except Exception as e:
                 print('✗', it['id'], e)

@@ -63,7 +63,7 @@ async function ensureRenderer() {
   await wasmReady;
   if (!fonts) {
     const get = async (f: string) => new Uint8Array(await (await fetch(`https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/${f}`)).arrayBuffer());
-    fonts = await Promise.all([get('DejaVuSans-Bold.ttf'), get('DejaVuSans.ttf'), get('DejaVuSans-ExtraLight.ttf')]);
+    fonts = await Promise.all([get('DejaVuSans-Bold.ttf'), get('DejaVuSans.ttf'), get('DejaVuSans-ExtraLight.ttf'), get('DejaVuSerif-Bold.ttf'), get('DejaVuSerif.ttf'), get('DejaVuSerif-Italic.ttf')]);
   }
 }
 function b64(bytes: Uint8Array) { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
@@ -183,12 +183,109 @@ ${showChips ? chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.0
 </svg>`;
 }
 
+
+// ── LÜKS KURUMSAL TASARIM (varsayılan): lacivert + altın, serif başlık, fotoğraf üstünde sol kolon metin,
+//    sağ üstte asılı rozet, krem slogan bandı, 4 hizmet ikonu, altta iletişim şeridi (yönetici örneği: kamelya afişi tarzı).
+const LUX = { navy: '#0F1A33', navy2: '#0A1226', gold: '#C9A45C', gold2: '#E2C98F', cream: '#EFE9DD', white: '#FFFFFF', mist: '#C8D1E3' };
+function luxLogo(x0: number, y0: number, s: number, color: string) {
+  // çizgi ev amblemi + EMBAY (serif, geniş aralık) + — YAPI —
+  const k = s / 60;
+  return `<g transform="translate(${x0} ${y0}) scale(${k})" fill="none" stroke="${color}" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+<path d="M6 44V26L24 12l18 14v18z"/><path d="M24 12l10-8 24 18v22H42"/><rect x="14" y="28" width="6" height="6"/><rect x="26" y="28" width="6" height="6"/><path d="M19 44v-6h10v6"/><rect x="47" y="26" width="5" height="5"/></g>
+<text x="${x0 + s * 1.12}" y="${y0 + s * 0.52}" font-family="DejaVu Serif" font-size="${s * 0.5}" fill="${color}" letter-spacing="${s * 0.09}">EMBAY</text>
+<line x1="${x0 + s * 1.14}" y1="${y0 + s * 0.7}" x2="${x0 + s * 1.5}" y2="${y0 + s * 0.7}" stroke="${color}" stroke-width="${Math.max(1, s * 0.02)}"/>
+<text x="${x0 + s * 1.62}" y="${y0 + s * 0.78}" font-family="DejaVu Sans" font-size="${s * 0.2}" fill="${color}" letter-spacing="${s * 0.1}">YAPI</text>
+<line x1="${x0 + s * 2.62}" y1="${y0 + s * 0.7}" x2="${x0 + s * 2.98}" y2="${y0 + s * 0.7}" stroke="${color}" stroke-width="${Math.max(1, s * 0.02)}"/>`;
+}
+function renderLuxury(o: BannerOpts) {
+  const { w, h } = o; const wide = w / h > 1.3; const tall = h / w > 1.5; const u = Math.min(w, h);
+  const pad = Math.round(u * 0.06);
+  const barH = Math.round(u * (wide ? 0.13 : 0.12));
+  const svcH = Math.round(u * (wide ? 0.2 : 0.2));
+  const bandH = Math.round(u * 0.06);
+  const photoH = wide ? h - barH : Math.round(h * (tall ? 0.56 : 0.6));
+  const photoX = wide ? Math.round(w * 0.42) : 0;
+  const bandY = wide ? h - barH - bandH : photoH;
+  const svcY = wide ? h - barH - bandH - svcH : bandY + bandH;
+  const phone = o.brand?.phone || '0531 436 29 04';
+  const site = (o.brand?.website && !/vercel\.app/.test(o.brand.website) ? o.brand.website : 'www.embayyapi.com.tr').replace(/^https?:\/\//, '');
+  // başlık: serif, büyük harf, sol kolon; son satır altın
+  const colW = wide ? w * 0.4 : w * (tall ? 0.62 : 0.56);
+  const hSize = Math.round(u * (wide ? 0.066 : tall ? 0.064 : 0.058));
+  const hLines = wrap(o.headline.toLocaleUpperCase('tr-TR'), Math.floor(colW / (hSize * 0.66)), wide ? 3 : 4);
+  const sSize = Math.round(u * 0.027);
+  const sLines = wrap(o.subtitle.toLocaleUpperCase('tr-TR'), Math.floor(colW / (sSize * 0.66)), 3);
+  const logoS = Math.round(u * 0.085);
+  const hTop = pad + logoS + Math.round(u * (tall ? 0.2 : 0.1));
+  const photo = o.photo ? `<image href="data:${o.photoMime || 'image/jpeg'};base64,${b64(o.photo)}" x="${photoX}" y="0" width="${w - photoX}" height="${photoH}" preserveAspectRatio="xMidYMid slice"/>` : `<rect x="${photoX}" y="0" width="${w - photoX}" height="${photoH}" fill="url(#noph)"/>${icon(iconFor(o.badge), photoX + (w - photoX) * 0.52, photoH * 0.3, u * 0.36, LUX.gold, 3, 0.35)}`;
+  // sağ üst asılı rozet (altın çerçeveli lacivert, sivri uçlu)
+  const rw = Math.round(u * 0.19); const rh = Math.round(u * 0.26); const rx = w - pad - rw;
+  const badgeLines = wrap(o.badge.toLocaleUpperCase('tr-TR').replace(/\s*&\s*/g, ' & '), 12, 3);
+  const ribbon = `<path d="M${rx} 0 H${rx + rw} V${rh} L${rx + rw / 2} ${rh + rw * 0.28} L${rx} ${rh} Z" fill="${LUX.navy}" fill-opacity="0.92" stroke="${LUX.gold}" stroke-width="${Math.max(2, u * 0.003)}"/>
+${icon(iconFor(o.badge), rx + rw * 0.28, rh * 0.1, rw * 0.44, LUX.gold, 5)}
+${badgeLines.map((l, i) => `<text x="${rx + rw / 2}" y="${rh * 0.62 + i * u * 0.03}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(u * 0.021)}" fill="${LUX.white}" letter-spacing="${u * 0.001}">${x(l)}</text>`).join('')}`;
+  const hY = (i: number) => hTop + i * hSize * 1.18;
+  const ruleY = hY(hLines.length - 1) + hSize * 0.75;
+  const svcs: Array<[string, string]> = [['ev', 'EV & VİLLA'], ['bina', 'BİNA YAPIMI'], ['alet', 'TADİLAT'], ['baret', 'TAMİRAT']];
+  const svcW = (wide ? photoX - pad : w - pad * 2) / 4;
+  const svcX0 = pad;
+  const svcRow = svcs.map(([ic, label], i) => {
+    const cx = svcX0 + svcW * i + svcW / 2; const is = Math.min(svcH * 0.4, svcW * 0.42);
+    const lf = Math.min(Math.round(u * 0.022), Math.floor(svcW / (11 * 0.78)));
+    return `${i ? `<line x1="${svcX0 + svcW * i}" y1="${svcY + svcH * 0.22}" x2="${svcX0 + svcW * i}" y2="${svcY + svcH * 0.82}" stroke="${LUX.gold}" stroke-opacity="0.35" stroke-width="1.5"/>` : ''}
+${icon(ic, cx - is / 2, svcY + svcH * 0.14, is, LUX.gold, 5)}
+<text x="${cx}" y="${svcY + svcH * 0.8}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${lf}" fill="${LUX.white}" letter-spacing="${u * 0.0015}">${x(label)}</text>`;
+  }).join('');
+  const bandText = 'KALİTE  |  GÜVEN  |  ESTETİK  |  DAYANIKLILIK';
+  const bandW = wide ? photoX : w;
+  const bs = Math.min(Math.round(u * 0.025), Math.floor((bandW - pad * 2 - u * 0.1) / (bandText.length * 0.66)));
+  const tw = bandText.length * bs * 0.66;
+  const band = `<rect x="0" y="${bandY}" width="${bandW}" height="${bandH}" fill="${LUX.cream}"/>
+<line x1="${pad}" y1="${bandY + bandH / 2}" x2="${bandW / 2 - tw / 2 - u * 0.02}" y2="${bandY + bandH / 2}" stroke="${LUX.gold}" stroke-width="1.5"/>
+<line x1="${bandW / 2 + tw / 2 + u * 0.02}" y1="${bandY + bandH / 2}" x2="${bandW - pad}" y2="${bandY + bandH / 2}" stroke="${LUX.gold}" stroke-width="1.5"/>
+<text x="${bandW / 2}" y="${bandY + bandH / 2 + bs * 0.36}" text-anchor="middle" font-family="DejaVu Serif" font-weight="700" font-size="${bs}" fill="#A8843F">${bandText}</text>`;
+  const by = h - barH; const fs = Math.round(u * 0.027);
+  const bar = `<rect x="0" y="${by}" width="${w}" height="${barH}" fill="${LUX.navy2}"/><rect x="0" y="${by}" width="${w}" height="${Math.max(2, u * 0.003)}" fill="${LUX.gold}"/>
+${luxLogo(pad, by + barH * 0.2, barH * 0.5, LUX.gold)}
+<text x="${w * (wide ? 0.4 : 0.47)}" y="${by + barH / 2 + fs * 0.36}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${fs}" fill="${LUX.white}"><tspan fill="${LUX.gold}">☎ </tspan>${x(phone)}</text>
+<text x="${w * (wide ? 0.62 : 0.76)}" y="${by + barH / 2 + fs * 0.36}" text-anchor="middle" font-family="DejaVu Sans" font-size="${Math.round(fs * 0.85)}" fill="${LUX.mist}">${x(site)}</text>
+${wide ? `<text x="${w - pad}" y="${by + barH / 2 + fs * 0.4}" text-anchor="end" font-family="DejaVu Serif" font-style="italic" font-size="${Math.round(fs * 1.05)}" fill="${LUX.gold2}">İşimiz güvencenizdir.</text>` : ''}`;
+  const exTop = svcY + svcH; const exH = by - exTop;
+  const ctaTxt = (o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').replace(/^WhatsApp$/i, '').trim() || 'Ücretsiz keşif için arayın').toLocaleUpperCase('tr-TR');
+  const cf = Math.round(u * 0.028); const cw = Math.min(w - pad * 2, ctaTxt.length * cf * 0.72 + cf * 3);
+  const pillY = exH > u * 0.2 ? exTop + exH * 0.18 : exTop + (exH - cf * 2.4) / 2 - u * 0.01;
+  const filler = !wide && exH > u * 0.08 ? `<rect x="${w / 2 - cw / 2}" y="${pillY}" width="${cw}" height="${cf * 2.4}" rx="${cf * 1.2}" fill="${LUX.gold}"/>
+<text x="${w / 2}" y="${pillY + cf * 1.56}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${cf}" fill="${LUX.navy2}" letter-spacing="${u * 0.0015}">${x(ctaTxt)}</text>
+${exH > u * 0.2 ? `<text x="${w / 2}" y="${exTop + exH * 0.18 + cf * 2.4 + u * 0.075}" text-anchor="middle" font-family="DejaVu Serif" font-style="italic" font-size="${Math.round(u * 0.036)}" fill="${LUX.gold2}">İşimiz güvencenizdir.</text>` : ''}` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+<defs>
+<linearGradient id="lx" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${LUX.navy}" stop-opacity="0.96"/><stop offset="${wide ? 0.25 : 0.42}" stop-color="${LUX.navy}" stop-opacity="0.8"/><stop offset="${wide ? 0.5 : 0.75}" stop-color="${LUX.navy}" stop-opacity="0.1"/><stop offset="1" stop-color="${LUX.navy}" stop-opacity="0"/></linearGradient>
+<linearGradient id="lb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${LUX.navy}" stop-opacity="0.55"/><stop offset="0.25" stop-color="${LUX.navy}" stop-opacity="0"/><stop offset="0.8" stop-color="${LUX.navy}" stop-opacity="0"/><stop offset="1" stop-color="${LUX.navy}" stop-opacity="0.85"/></linearGradient>
+<linearGradient id="noph" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1B2B55"/><stop offset="1" stop-color="${LUX.navy}"/></linearGradient>
+</defs>
+<rect width="${w}" height="${h}" fill="${LUX.navy}"/>
+${photo}
+<rect x="${photoX}" y="0" width="${w - photoX}" height="${photoH}" fill="url(#lb)"/>
+${wide ? '' : `<rect x="0" y="0" width="${w}" height="${photoH}" fill="url(#lx)"/>`}
+${luxLogo(pad, pad, logoS, LUX.gold)}
+${ribbon}
+${hLines.map((l, i) => `<text x="${pad}" y="${hY(i)}" font-family="DejaVu Serif" font-weight="700" font-size="${hSize}" fill="${i === hLines.length - 1 && hLines.length > 1 ? LUX.gold : LUX.white}">${x(l)}</text>`).join('')}
+<rect x="${pad}" y="${ruleY}" width="${u * 0.12}" height="${Math.max(2, u * 0.004)}" fill="${LUX.gold}"/>
+${sLines.map((l, i) => `<text x="${pad}" y="${ruleY + sSize * 2.2 + i * sSize * 1.5}" font-family="DejaVu Sans" font-size="${sSize}" fill="${LUX.white}" fill-opacity="0.92" letter-spacing="${u * 0.001}">${x(l)}</text>`).join('')}
+${band}
+${svcRow}
+${filler}
+${bar}
+</svg>`;
+}
+
 const LEGACY_SAHIN_DESIGN = false as boolean;
+const LUXURY_DESIGN = true as boolean; // lacivert+altın lüks tasarım (false → önceki mavi Embay tasarımı)
 export async function renderBanner(o: BannerOpts) {
   await ensureRenderer();
   // Tüm banner'lar Embay Yapı kimliğiyle (Manitou kiralama da Embay çatısı altında; eski sarı Şahin Manitou tasarımı yedekte duruyor)
   if (!LEGACY_SAHIN_DESIGN) {
-    const r = new Resvg(renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
+    const r = new Resvg(LUXURY_DESIGN ? renderLuxury(o) : renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
     const img = r.render();
     const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;
     img.free?.(); r.free?.();
