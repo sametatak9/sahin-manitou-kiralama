@@ -6,6 +6,7 @@ import jpeg from 'npm:jpeg-js@0.4.4';
 import { aiComplete, defaultBrand, istanbulDayRange, type Db } from './context.ts';
 import { telegramSend } from './connectors/messaging.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
+import { getAiKey } from './ai/keys.ts';
 
 type Platform = 'instagram' | 'facebook' | 'tiktok' | 'youtube' | 'x';
 interface Quota { platform: Platform; enabled: boolean; video_per_day: number; image_per_day: number; slot_times: string[]; width: number; height: number }
@@ -280,7 +281,7 @@ ${bar}
 }
 
 
-// ── Yapay zekâ görseli (ücretsiz, anahtarsız: Pollinations / FLUX). Temsili konsept görsel üretir; gönderide "temsilidir" notu düşülür.
+// ── Yapay zekâ görseli (Google Gemini görsel modeli). Temsili konsept görsel üretir; gönderide "temsilidir" notu düşülür.
 const AI_SCENES: Record<string, string[]> = {
   ev: ['modern two-storey detached family house with garden, warm evening light, stone and white plaster facade, wooden details', 'newly built detached house in Istanbul countryside, landscaped yard, golden hour, architectural photography'],
   villa: ['luxury modern villa with infinity pool at dusk, warm interior lights, natural stone walls, olive trees', 'contemporary villa with large glass windows and wooden pergola, sunset, Mediterranean landscape'],
@@ -294,19 +295,29 @@ function aiPrompt(pillar: string, di: number) {
   const list = AI_SCENES[pillar] ?? AI_SCENES.ev;
   return `${list[di % list.length]}, photorealistic, high detail, professional real estate photography, 35mm, no text, no watermark, no logo, no people faces`;
 }
-export async function aiImage(prompt: string, w: number, h: number, seed: number): Promise<Uint8Array | null> {
-  // FLUX en iyi 1024 civarında çalışır: oranı koru, banner çiziminde ölçeklenir
-  const k = 1024 / Math.max(w, h); const iw = Math.round((w * k) / 8) * 8; const ih = Math.round((h * k) / 8) * 8;
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${iw}&height=${ih}&model=flux&nologo=true&enhance=false&seed=${seed}`;
-  for (let tries = 0; tries < 2; tries++) {
+export async function aiImage(prompt: string, w: number, h: number, _seed: number): Promise<Uint8Array | null> {
+  // Google Gemini görsel modeli (panelde kayıtlı Gemini anahtarı; Google AI Studio'da faturalandırma açık olmalı).
+  // Başarısızsa null → banner gerçek fotoğrafımızla çizilir (filigranlı / düşük kaliteli ücretsiz servis KULLANILMAZ).
+  const key = await getAiKey('gemini');
+  if (!key) return null;
+  const r0 = w / h; const ratios: Array<[string, number]> = [['1:1', 1], ['4:5', 0.8], ['9:16', 0.5625], ['16:9', 1.778], ['3:4', 0.75], ['4:3', 1.333]];
+  const aspectRatio = ratios.reduce((best, cur) => (Math.abs(cur[1] - r0) < Math.abs(best[1] - r0) ? cur : best))[0];
+  for (const model of ['gemini-3.1-flash-image', 'gemini-2.5-flash-image']) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-      const ct = r.headers.get('content-type') || '';
-      if (r.ok && /image\/(jpeg|png|webp)/.test(ct)) {
-        const b = new Uint8Array(await r.arrayBuffer());
-        if (b.length > 20_000) return b;
-      }
-    } catch { /* tekrar dene */ }
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST', signal: AbortSignal.timeout(90_000),
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio } } }),
+      });
+      if (!r.ok) continue;
+      const j = await r.json();
+      // deno-lint-ignore no-explicit-any
+      const part = (j?.candidates?.[0]?.content?.parts ?? []).find((p: any) => p?.inlineData?.data);
+      if (!part) continue;
+      const bin = atob(part.inlineData.data); const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      if (out.length > 20_000) return out;
+    } catch { /* sonraki model */ }
   }
   return null;
 }
@@ -499,7 +510,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
           // 1. banner: kendi fotoğrafımız; 2. banner: yapay zekâ konsept görseli (temsilî — açıklamaya not düşülür)
           const pillarKey = PILLARS.find((pp) => pp.badge === it.badge)?.key ?? 'ev';
           let photo: Uint8Array | null = null; let photoMime: string | undefined; let ph: { id: string; url: string; mime?: string | null } | null = null;
-          if (i === plan.length - 1) { photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = 'image/jpeg'; aiUsed = true; } }
+          if (i === plan.length - 1) { photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = photo[0] === 0x89 ? 'image/png' : 'image/jpeg'; aiUsed = true; } }
           if (!photo) {
             ph = photos?.length ? photos[pIdx++ % photos.length] : null;
             photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null; photoMime = ph?.mime ?? undefined;

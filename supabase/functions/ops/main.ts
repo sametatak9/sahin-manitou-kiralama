@@ -719,7 +719,7 @@ Deno.serve(async (req) => {
       const b = await req.json().catch(() => ({})) as { prompt?: string; headline?: string; subtitle?: string; badge?: string; w?: number; h?: number; seed?: number };
       const w = b.w ?? 1080; const h = b.h ?? 1350;
       const photo = await aiImage(String(b.prompt || 'modern detached house, photorealistic, no text'), w, h, b.seed ?? 1);
-      const jpg = await renderBanner({ w, h, brand: { phone: '0531 436 29 04', website: 'www.embayyapi.com.tr' }, brandName: 'Embay Yapı', badge: b.badge || 'EV YAPIMI', headline: b.headline || 'Hayalinizdeki Ev', subtitle: b.subtitle || '', cta: 'Ücretsiz keşif', photo, photoMime: 'image/jpeg' });
+      const jpg = await renderBanner({ w, h, brand: { phone: '0531 436 29 04', website: 'www.embayyapi.com.tr' }, brandName: 'Embay Yapı', badge: b.badge || 'EV YAPIMI', headline: b.headline || 'Hayalinizdeki Ev', subtitle: b.subtitle || '', cta: 'Ücretsiz keşif', photo, photoMime: photo && photo[0] === 0x89 ? 'image/png' : 'image/jpeg' });
       let bin = ''; for (let i = 0; i < jpg.length; i += 0x8000) bin += String.fromCharCode(...jpg.subarray(i, i + 0x8000));
       return json({ ai: Boolean(photo), bytes: jpg.length, b64: btoa(bin) });
     }
