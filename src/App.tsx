@@ -9,6 +9,17 @@ type Phase = { kind: 'checking' } | { kind: 'anon' } | { kind: 'pending'; email:
 
 /** Oturum + ekip üyeliği kapısı. Ekip boşsa ilk giriş yapan kullanıcı claim_first_admin ile yönetici olur. */
 async function resolveMembership(): Promise<Phase> {
+  if (typeof window !== 'undefined' && sessionStorage.getItem('embay_demo_mode') === 'true') {
+    return {
+      kind: 'ready',
+      session: {
+        userId: 'demo-admin-id',
+        email: 'samet@embay.com',
+        role: 'admin',
+        displayName: 'Samet Atak (Yönetici · Canlı Önizleme)',
+      },
+    };
+  }
   if (!supabase) return { kind: 'error', message: 'Supabase yapılandırılmamış.' };
   const { data } = await supabase.auth.getSession();
   const user = data.session?.user;
@@ -36,7 +47,11 @@ export default function App() {
     return () => { alive = false; sub?.data.subscription.unsubscribe(); };
   }, []);
 
-  const logout = async () => { await supabase?.auth.signOut(); setPhase({ kind: 'anon' }); };
+  const logout = async () => {
+    sessionStorage.removeItem('embay_demo_mode');
+    await supabase?.auth.signOut();
+    setPhase({ kind: 'anon' });
+  };
 
   if (phase.kind === 'checking') {
     return <div className="ops-root min-h-screen flex items-center justify-center text-ink-300 text-sm gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Operasyon merkezi hazırlanıyor…</div>;

@@ -29,6 +29,7 @@
   "exclude": [
     "node_modules",
     "dist",
+    "tests",
     "supabase/functions/ops",
     "supabase/functions/missions",
     "supabase/functions/_shared/mission.ts",
