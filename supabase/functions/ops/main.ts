@@ -723,6 +723,24 @@ Deno.serve(async (req) => {
       let bin = ''; for (let i = 0; i < jpg.length; i += 0x8000) bin += String.fromCharCode(...jpg.subarray(i, i + 0x8000));
       return json({ ai: Boolean(photo), bytes: jpg.length, b64: btoa(bin) });
     }
+    // Dış görseli (ör. Canva'da üretilen yapay zekâ görseli dışa aktarımı) havuza alır — yalnızca iç gizli anahtarla; yalnızca Canva indirme alan adları
+    if (path.startsWith('/media/import-url') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { url?: string; title?: string; pillar?: string; tags?: string[] };
+      const u = new URL(String(b.url || ''));
+      if (!/(^|\.)canva\.com$|(^|\.)canva-export\.com$|(^|\.)canva\.cn$/.test(u.hostname) && !/amazonaws\.com$/.test(u.hostname)) throw new HttpError(400, 'izin verilmeyen alan adı');
+      const r = await fetch(u.toString()); const ct = r.headers.get('content-type') || '';
+      if (!r.ok || !/image\/(jpeg|png)/.test(ct)) throw new HttpError(400, `görsel alınamadı (${r.status} ${ct})`);
+      const bytes = new Uint8Array(await r.arrayBuffer()); const ext = ct.includes('png') ? 'png' : 'jpg';
+      const path2 = `ai/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const up = await db.storage.from('media-uploads').upload(path2, bytes, { contentType: ct, upsert: false });
+      if (up.error) throw up.error;
+      const pub = db.storage.from('media-uploads').getPublicUrl(path2).data.publicUrl;
+      const { data: row, error } = await db.from('media_library').insert({ kind: 'image', source: 'ai', title: (b.title || 'Yapay zekâ konsept görseli').slice(0, 120), url: pub, mime: ct, pillar: b.pillar ?? null, status: 'pool', notes: 'Yapay zekâ ile üretildi (Canva) — temsilî görsel' }).select('id,url').single();
+      if (error) throw error;
+      return json(row);
+    }
     if (path.startsWith('/reels/queue') && req.method === 'GET') return json(await reelQueue(db));
     if (path.startsWith('/reels/attach') && req.method === 'POST') return json(await reelAttach(db, await req.json().catch(() => ({}))));
     // Meta (Facebook/Instagram) gelen olaylar: yorum, mesaj, bahsetme. Doğrulama belirteci Vault'ta; imza uygulama gizli anahtarıyla kontrol edilir.

@@ -457,7 +457,9 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   // Ham şantiye videoları önce (otomatik montaj yeni Embay tarzında editler); eski tarz montajlar ve HEVC en sona
   const rank = (v: { source?: string | null; edit?: { codec?: string } | null }) => (v.source === 'montage' ? 3 : v.edit?.codec === 'hevc' ? 2 : 1);
   const videos = (vids || []).map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
-  const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').is('archived_at', null)
+  const { data: aiPool } = await db.from('media_library').select('id,url,mime,use_count,pillar').eq('kind', 'image').eq('source', 'ai').is('archived_at', null)
+    .order('use_count', { ascending: true, nullsFirst: true }).order('last_used_at', { ascending: true, nullsFirst: true }).limit(200);
+  const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').neq('source', 'ai').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(60);
   let pIdx = 0;
   // Tekrar yasağı: son 30 günün başlıkları (yayınlanmış/planlanmış) ve daha önce bir gönderide kullanılmış videolar yeniden kullanılmaz
@@ -510,7 +512,13 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
           // 1. banner: kendi fotoğrafımız; 2. banner: yapay zekâ konsept görseli (temsilî — açıklamaya not düşülür)
           const pillarKey = PILLARS.find((pp) => pp.badge === it.badge)?.key ?? 'ev';
           let photo: Uint8Array | null = null; let photoMime: string | undefined; let ph: { id: string; url: string; mime?: string | null } | null = null;
-          if (i === plan.length - 1) { photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = photo[0] === 0x89 ? 'image/png' : 'image/jpeg'; aiUsed = true; } }
+          if (i === plan.length - 1) { photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = photo[0] === 0x89 ? 'image/png' : 'image/jpeg'; aiUsed = true; }
+            else {
+              // Gemini yoksa: önceden üretilmiş yapay zekâ görsel havuzundan (Canva) bu konuya en az kullanılanı
+              const cand = (aiPool || []).filter((a) => a.pillar === pillarKey).concat((aiPool || []).filter((a) => a.pillar !== pillarKey));
+              const pick = cand.sort((a, b) => (a.use_count ?? 0) - (b.use_count ?? 0))[0];
+              if (pick) { const rr = await fetch(pick.url).catch(() => null); if (rr?.ok) { photo = new Uint8Array(await rr.arrayBuffer()); photoMime = pick.mime ?? 'image/jpeg'; aiUsed = true; await markUsed(pick); } }
+            } }
           if (!photo) {
             ph = photos?.length ? photos[pIdx++ % photos.length] : null;
             photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null; photoMime = ph?.mime ?? undefined;
