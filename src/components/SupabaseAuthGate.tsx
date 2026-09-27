@@ -88,24 +88,6 @@ export function SupabaseAuthGate({ onAuthenticated }: AuthGateProps) {
           <label className="block"><span className="text-slate-700 font-semibold block mb-1.5">Şifre</span><input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm focus:outline-none focus:border-emerald-500" /></label>
           {errorMsg && <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0 text-rose-700" /><span>{errorMsg}</span></div>}
           <button type="submit" disabled={isLoading} className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition disabled:opacity-50"><ShieldCheck className="w-4 h-4" /><span>Güvenli Giriş Yap</span><ArrowRight className="w-3.5 h-3.5" /></button>
-          
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-mono tracking-wider"><span className="bg-white px-2 text-slate-400">Veya Hızlı Test</span></div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              sessionStorage.setItem('embay_demo_mode', 'true');
-              onAuthenticated();
-            }}
-            className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center justify-center gap-2 transition active:scale-98"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Hızlı Demo ile Giriş Yap (Tüm Paneli Canlı Gör)</span>
-          </button>
-
           <button type="button" onClick={handlePasswordReset} className="w-full text-xs text-slate-500 hover:text-emerald-700 transition">Şifremi sıfırlama bağlantısı gönder</button>
           {resetSent && <p className="text-center text-xs text-emerald-700">Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.</p>}
         </form>

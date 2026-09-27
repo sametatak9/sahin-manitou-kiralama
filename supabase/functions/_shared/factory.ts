@@ -19,15 +19,32 @@ const PLATFORM_RULES: Record<Platform, string> = {
   x: 'X (Twitter): toplam en fazla 260 karakter, 1-2 hashtag, net teklif/haber dili.',
 };
 
-// İçerik direkleri (Sabitlenmiş Bot Matrisi: Genel İnşaat Reels + Genel İnşaat Post + Manitou Post + Şantiye Story)
+// İçerik direkleri — YALNIZCA Embay Yapı inşaat işleri (yönetici kararı 2026-09-27: Manitou için sosyal medya içeriği/reklamı YOK).
+// "150 günde villa" konsepti bir kez yayınlandı; tekrar etmemek için hiçbir direkte bu kalıp kullanılmaz.
 const PILLARS = [
-  { key: 'insaat_reels', brand: 'Embay Yapı', topic: 'Genel İnşaat kurgulu Reels videosu: 150 günde villa yapımı, Güngören kentsel dönüşüm, temelden kalıp-demir şantiye aşamaları, fon müziği ile kurgulu video', badge: 'VİLLA & İNŞAAT REELS' },
-  { key: 'insaat_post', brand: 'Embay Yapı', topic: 'Genel İnşaat taahhüt gönderisi: Götürü kaba inşaat, müteahhitlik, yap-sat projeleri, temelden kalıp demir işleri, anahtar teslim güvence', badge: 'GENEL İNŞAAT & TAAHHÜT' },
-  { key: 'manitou', brand: 'Şahin Manitou', topic: 'Operatörlü Manitou (teleskopik yükleyici) kiralama: 14m ve 18m telehandler, şantiyede yüksekte malzeme taşıma, çelik montaj, günlük/aylık kiralama', badge: 'KİRALIK MANİTOU' },
-  { key: 'santiye_story', brand: 'İkisi', topic: 'Şantiye hikayesi (Story): Günlük şantiye mesaisi, donatı kontrolü, beton dökümü anı, perde kalıp imalatı ve şeffaf ilerleme', badge: 'ŞANTİYE GÜNLÜĞÜ' },
-  { key: 'donusum', brand: 'Embay Yapı', topic: 'Kentsel dönüşüm ve kat karşılığı: Güngören Tozkoparan yerinde dönüşüm, deprem yönetmeliği, kat malikleri sözleşmesi', badge: 'KENTSEL DÖNÜŞÜM' },
-  { key: 'villa', brand: 'Embay Yapı', topic: 'Çatalca ve Silivri villa yapımı: 150 günde temelden çatıya anahtar teslim villa taahhüdü, radye temel ve C35 beton', badge: '150 GÜNDE VİLLA' },
+  { key: 'ev', brand: 'Embay Yapı', topic: 'Müstakil ev yapımı: arsadan anahtar teslime ev yaptırma süreci, zemin etüdü, proje ve ruhsat, doğru malzeme seçimi', badge: 'EV YAPIMI' },
+  { key: 'tadilat', brand: 'Embay Yapı', topic: 'Komple tadilat ve renovasyon: mutfak, banyo, zemin, iç mekân yenileme; eski evi yeni gibi yapmak', badge: 'TADİLAT & RENOVASYON' },
+  { key: 'bina', brand: 'Embay Yapı', topic: 'Bina yapımı ve kentsel dönüşüm: depreme dayanıklı betonarme, kat karşılığı, apartman inşaatı', badge: 'BİNA YAPIMI' },
+  { key: 'tamirat', brand: 'Embay Yapı', topic: 'Tamirat ve onarım: çatı aktarma, su yalıtımı, dış cephe mantolama, çatlak ve rutubet onarımı', badge: 'TAMİRAT & ONARIM' },
+  { key: 'villa', brand: 'Embay Yapı', topic: 'Villa yapımı: Çatalca ve Silivri’de bahçeli villa, mimari detaylar, kaliteli işçilik (süre/gün vaadi verme)', badge: 'VİLLA YAPIMI' },
+  { key: 'santiye', brand: 'Embay Yapı', topic: 'Şantiyeden gerçek iş: kalıp, demir, beton dökümü, duvar örme, sıva — işin mutfağı ve ekibin emeği', badge: 'ŞANTİYE GÜNLÜĞÜ' },
+  { key: 'ipucu', brand: 'Embay Yapı', topic: 'İnşaat ve tadilat ipuçları: ev yaptırırken/tadilatta yapılan hatalar, dikkat edilmesi gerekenler, bilinçli müşteri rehberi', badge: 'USTADAN İPUCU' },
 ] as const;
+// Her direk için birbirinden farklı yedek başlıklar (AI yoksa bile aynı başlık tekrar tekrar çıkmasın)
+const HEADLINES: Record<string, string[]> = {
+  ev: ['Hayalinizdeki Ev, Temelden', 'Ev Yaptırmadan Önce Bunu İzleyin', 'Arsadan Anahtara Tek Muhatap', 'Sağlam Ev Zeminden Başlar', 'Müstakil Ev Yaptırmak İstiyorum'],
+  tadilat: ['Eski Ev, Yeni Hayat', 'Tadilatta En Çok Yapılan 3 Hata', 'Mutfak Yenileme Nasıl Yapılır?', 'Banyo Tadilatı Adım Adım', 'Önce / Sonra: Farkı Görün'],
+  bina: ['Depreme Dayanıklı Bina Nasıl Yapılır?', 'Kentsel Dönüşümde Doğru Adım', 'Betonarmede Gözden Kaçanlar', 'Apartman İnşaatı Aşamaları', 'Kat Karşılığında Nelere Dikkat?'],
+  tamirat: ['Çatınız Akıtıyorsa İzleyin', 'Rutubetin Kökünü Kazıyoruz', 'Mantolama Neden Önemli?', 'Çatlak Duvar Tehlikeli mi?', 'Su Yalıtımı Doğru Yapılırsa'],
+  villa: ['Bahçeli Villa Hayali', 'Villada İşçilik Detayda Gizli', 'Çatalca’da Villa Yapımı', 'Villa Projesinde Doğru Planlama', 'Villanın Kaba İnşaatı'],
+  santiye: ['Şantiyede Bir Sabah', 'Beton Dökümü Günü', 'Ustalarımızın Emeği', 'Kalıptan Duvara', 'İşin Mutfağından Kareler'],
+  ipucu: ['Ev Yaptıracaklara 5 İpucu', 'Tadilattan Önce Sorun', 'Müteahhit Seçerken Dikkat', 'Zemin Etüdü Neden Şart?', 'Malzeme Seçiminde Püf Noktalar'],
+};
+function pickHeadline(key: string, di: number, used: Set<string>) {
+  const list = HEADLINES[key] ?? HEADLINES.santiye;
+  for (let k = 0; k < list.length; k++) { const h = list[(di + k) % list.length]; if (!used.has(h.toLocaleLowerCase('tr-TR'))) return h; }
+  return list[di % list.length];
+}
 
 const CONTENT_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['items'], properties: {
@@ -72,7 +89,7 @@ const ICONS: Record<string, string> = {
   manitou: '<path d="M12 74h44V54H40l-6-12H20v12h-8z"/><path d="M48 60l34-30"/><path d="M52 66l34-30"/><path d="M84 26v16h12"/><circle cx="24" cy="80" r="9"/><circle cx="50" cy="80" r="9"/>',
   alet: '<path d="M22 84l36-36"/><path d="M58 48a14 14 0 1 0 12-22l-8 8-6-2-2-6 8-8a14 14 0 0 0-4 30"/><path d="M34 22l22 22M28 28l12-12 10 10-12 12z"/><path d="M50 44l30 30-6 6-30-30"/>',
 };
-const PILLAR_ICON: Record<string, string> = { manitou: 'manitou', kampanya: 'manitou', villa: 'ev', donusum: 'bina', tadilat: 'alet', santiye: 'vinc', ipucu: 'baret' };
+const PILLAR_ICON: Record<string, string> = { manitou: 'manitou', kampanya: 'manitou', ev: 'ev', bina: 'bina', tamirat: 'alet', villa: 'ev', donusum: 'bina', tadilat: 'alet', santiye: 'vinc', ipucu: 'baret' };
 export function iconFor(badge: string) {
   const t = badge.toLocaleLowerCase('tr-TR');
   if (/manitou|kiralık|kiralama|kampanya/.test(t)) return 'manitou';
@@ -240,8 +257,9 @@ function dayIndex(day: string) { return Math.floor(new Date(`${day}T00:00:00Z`).
 const TAGS = {
   yerel: ['#çatalca', '#silivri', '#büyükçekmece', '#istanbul', '#arnavutköy', '#beylikdüzü'],
   konu: {
-    manitou: ['#manitou', '#telehandler', '#manitoukiralama', '#vinçkiralama', '#iskele', '#şantiye'],
-    kampanya: ['#manitoukiralama', '#manitou', '#şantiye', '#işmakinesi'],
+    ev: ['#evyapımı', '#müstakilev', '#anahtarteslim', '#evyaptırmak', '#yapı'],
+    bina: ['#binayapımı', '#kentseldönüşüm', '#depremedayanıklı', '#betonarme', '#müteahhit'],
+    tamirat: ['#tamirat', '#onarım', '#çatıtamiri', '#suyalıtımı', '#mantolama'],
     villa: ['#villa', '#villainşaatı', '#müstakilev', '#evyapımı', '#anahtarteslim', '#mimari'],
     donusum: ['#kentseldönüşüm', '#katkarşılığı', '#depremedayanıklı', '#müteahhit', '#yenibina'],
     tadilat: ['#tadilat', '#dışcephe', '#mantolama', '#çatıtamiri', '#renovasyon'],
@@ -253,7 +271,7 @@ const TAGS = {
 };
 function tagMix(p: Platform, pillar: string, ai: string[]) {
   const max = p === 'x' ? 2 : p === 'tiktok' ? 5 : p === 'youtube' ? 3 : p === 'facebook' ? 4 : 12;
-  const brand = pillar === 'manitou' || pillar === 'kampanya' ? TAGS.marka.manitou : TAGS.marka.diger;
+  const brand = TAGS.marka.diger;
   const topic = (TAGS.konu[pillar] ?? TAGS.konu.santiye).filter((t) => !/[^\p{L}#]/u.test(t));
   const plan = p === 'instagram'
     ? [brand, ...TAGS.yerel.slice(0, 4), ...topic.slice(0, 5), ...TAGS.genis.slice(0, 2)]
@@ -266,15 +284,17 @@ function tagMix(p: Platform, pillar: string, ai: string[]) {
   return out.slice(0, max);
 }
 
-function fallbackItems(p: Platform, pillars: typeof PILLARS[number][]): Item[] {
-  // AI yoksa: marka bilgisiyle hazır, uydurma içermeyen kısa metinler (yine onaya düşer)
-  return pillars.map((pl, i) => ({
-    format: i === 0 ? 'reel' : 'banner', brand: pl.brand as Item['brand'], title: `${pl.badge} · ${p}`, badge: pl.badge,
-    headline: pl.key === 'manitou' ? 'Operatörlü Manitou Kiralama' : pl.key === 'villa' ? 'Çatalca’da Villa & Müstakil Ev' : pl.key === 'donusum' ? 'Kentsel Dönüşümde Güvenilir Çözüm' : pl.key === 'tadilat' ? 'Tadilat · Çatı · Dış Cephe' : pl.key === 'kampanya' ? 'Ücretsiz Keşif · Hızlı Teklif' : pl.key === 'ipucu' ? 'Ev Yaptıracaklara 5 İpucu' : 'Şantiyeden Gerçek İş',
-    subtitle: pl.topic, caption: `${pl.topic}. Keşif ve teklif için bize yazın: 0531 436 29 04`,
-    hashtags: p === 'x' ? ['#inşaat', '#istanbul'] : ['#inşaat', '#istanbul', '#çatalca', '#manitou', '#şantiye'].slice(0, p === 'tiktok' ? 4 : 5),
-    cta: 'WhatsApp: 0531 436 29 04', video_script: i === 0 ? '0-2 sn: şantiyeden güçlü görüntü (manitou kaldırırken) · 3-10 sn: işin yapılışı · 11-20 sn: bitmiş iş/önce-sonra · son 3 sn: logo + telefon' : undefined,
-  }));
+function fallbackItems(p: Platform, pillars: typeof PILLARS[number][], di: number, used: Set<string>): Item[] {
+  // AI yoksa: marka bilgisiyle hazır, uydurma içermeyen kısa metinler; başlıklar son 30 günde kullanılmamış olanlardan seçilir
+  return pillars.map((pl, i) => {
+    const headline = pickHeadline(pl.key, di + i, used); used.add(headline.toLocaleLowerCase('tr-TR'));
+    return {
+      format: i === 0 ? 'reel' : 'banner', brand: 'Embay Yapı', title: `${pl.badge} · ${p}`, badge: pl.badge, headline,
+      subtitle: pl.topic.split(':')[0], caption: `${headline} — ${pl.topic}. Ev, villa, bina, tadilat ve tamirat: inşaata dair tüm işleriniz yapılır. Keşif ve teklif için bize yazın: 0531 436 29 04`,
+      hashtags: p === 'x' ? ['#inşaat', '#istanbul'] : ['#inşaat', '#istanbul', '#çatalca', '#tadilat', '#evyapımı'].slice(0, p === 'tiktok' ? 4 : 5),
+      cta: 'WhatsApp: 0531 436 29 04', video_script: i === 0 ? '0-2 sn: güçlü kanca · 3-10 sn: işin yapılışı · 11-20 sn: bitmiş iş/önce-sonra · son 3 sn: logo + telefon' : undefined,
+    } as Item;
+  });
 }
 
 // Sunucu CPU sınırı (istek başına ~2 sn): fotoğraflı banner çizimi ağır → her çağrıda en fazla 1 banner çizilir; worker dakikada bir kaldığı yerden sürdürür.
@@ -290,7 +310,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const autoPublish = (ap as { auto_publish?: boolean } | null)?.auto_publish === true;
   // Gerçek medya: en az kullanılan video/fotoğraf önce (Drive'dan gelenler dahil) → her gün farklı kareler
   const { data: vids } = await db.from('media_library').select('id,url,cover_url,title,use_count,source,edit').eq('kind', 'video').is('archived_at', null)
-    .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(40);
+    .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(300);
   // Önce hazır montajlar (logolu, adım yazılı Reels), sonra ham videolar; HEVC en sona (bazı tarayıcılarda önizlenmez)
   // Ham şantiye videoları önce (otomatik montaj yeni Embay tarzında editler); eski tarz montajlar ve HEVC en sona
   const rank = (v: { source?: string | null; edit?: { codec?: string } | null }) => (v.source === 'montage' ? 3 : v.edit?.codec === 'hevc' ? 2 : 1);
@@ -298,6 +318,12 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(60);
   let pIdx = 0;
+  // Tekrar yasağı: son 30 günün başlıkları (yayınlanmış/planlanmış) ve daha önce bir gönderide kullanılmış videolar yeniden kullanılmaz
+  const { data: recent } = await db.from('social_drafts').select('headline,video_url').gte('created_at', new Date(Date.now() - 30 * 86400_000).toISOString()).limit(1000);
+  const usedHeads = new Set<string>((recent || []).map((r) => String(r.headline ?? '').toLocaleLowerCase('tr-TR')).filter(Boolean));
+  usedHeads.add('150 günde bir villa nasıl yükselir?');
+  const usedVideos = new Set<string>((recent || []).map((r) => r.video_url as string).filter(Boolean));
+  const freshVideos = videos.filter((v) => (v.use_count ?? 0) === 0 && v.source !== 'montage' && v.edit?.codec !== 'hevc' && !usedVideos.has(v.url) && !/manitou|telehandler/i.test(v.title ?? ''));
   const markUsed = async (m: { id: string; use_count?: number | null }) => {
     m.use_count = (m.use_count ?? 0) + 1;
     await db.from('media_library').update({ use_count: m.use_count, last_used_at: new Date().toISOString() }).eq('id', m.id);
@@ -307,7 +333,8 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const di = dayIndex(day); let created = 0; const errors: string[] = []; let vIdx = 0;
   const actx = { db, runId: null, actorId: admin?.user_id ?? null, tokens: { in: 0, out: 0 }, agent: null } as unknown as Parameters<typeof aiComplete>[0];
 
-  for (const q of (quotas || []) as Quota[]) {
+  const ORDER = ['instagram', 'facebook', 'youtube', 'tiktok', 'x'];
+  for (const q of ((quotas || []) as Quota[]).sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform))) {
     if (partial) break;
     const h = have.get(q.platform); const needV = Math.max(0, q.video_per_day - (h?.videos ?? 0)); const needB = Math.max(0, q.image_per_day - (h?.banners ?? 0));
     if (!needV && !needB && !opts.force) continue;
@@ -315,17 +342,19 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
     let items: Item[] = [];
     try {
       const { json } = await aiComplete(actx, 'content_factory', [
-        `Embay Yapı (villa, müstakil ev, kentsel dönüşüm, tadilat — Çatalca/İstanbul) ve Şahin Manitou (operatörlü teleskopik yükleyici kiralama) için ${q.platform.toUpperCase()} platformunda BUGÜN paylaşılacak 3 içerik yaz.`,
+        `Embay Yapı (Çatalca/İstanbul) için ${q.platform.toUpperCase()} platformunda BUGÜN paylaşılacak 3 içerik yaz. Ana mesaj: ev yapımı, villa yapımı, bina yapımı, tadilat, tamirat — inşaata dair tüm işleriniz yapılır.`,
+        `YASAK: Manitou, iş makinesi, kiralama konusu YAZMA. "150 günde villa" kalıbını ve aşağıdaki son kullanılan başlıkları TEKRAR ETME; her içerik özgün bir açı/konsept olsun (ipucu, önce-sonra, hata-doğru, soru-cevap, işin mutfağı, müşteri sorusu vb.). Son kullanılan başlıklar: ${[...usedHeads].slice(0, 40).join(' | ') || '—'}`,
         `1. içerik format=reel (kısa dikey video: kanca + çekim senaryosu video_script'e), 2. ve 3. içerik format=banner (görsel üzerinde büyük başlık "headline" en fazla 5 kelime, "subtitle" en fazla 14 kelime).`,
         `Konular sırasıyla: ${pillars.map((p, i) => `${i + 1}) ${p.topic} [marka: ${p.brand}]`).join(' · ')}`,
         PLATFORM_RULES[q.platform],
         `"cta" en fazla 24 karakter. İletişim: ${brand?.phone ?? '0531 436 29 04'} · WhatsApp · ${brand?.website ?? ''}. Uydurma müşteri adı, rakam, fiyat, proje YAZMA. Türkçe, doğal, satış baskısı olmayan ama harekete geçiren dil. Hashtag'ler # ile.`,
       ].join('\n'), CONTENT_SCHEMA);
       // deno-lint-ignore no-explicit-any
-      items = ((json?.items ?? []) as any[]).slice(0, 3).map((it, i) => ({ ...it, format: i === 0 ? 'reel' : 'banner', badge: pillars[i].badge, brand: pillars[i].brand as Item['brand'],
+      items = ((json?.items ?? []) as any[]).slice(0, 3).filter((it) => !/manitou|kiralama|150 g[üu]n/i.test(`${it.headline} ${it.caption}`) && !usedHeads.has(String(it.headline ?? '').toLocaleLowerCase('tr-TR'))).map((it, i) => ({ ...it, format: i === 0 ? 'reel' : 'banner', badge: pillars[i].badge, brand: 'Embay Yapı' as Item['brand'],
         hashtags: (Array.isArray(it.hashtags) ? it.hashtags : []).map((t: string) => (String(t).startsWith('#') ? String(t) : `#${t}`)).slice(0, q.platform === 'x' ? 2 : q.platform === 'tiktok' ? 5 : 12) }));
     } catch (e) { errors.push(`${q.platform}: AI — ${String((e as Error).message).slice(0, 120)} (hazır metin kullanıldı)`); }
-    if (items.length < 3) items = fallbackItems(q.platform, pillars);
+    if (items.length < 3) items = fallbackItems(q.platform, pillars, di, usedHeads);
+    for (const it of items) usedHeads.add(it.headline.toLocaleLowerCase('tr-TR'));
     items = items.map((it, i) => ({ ...it, hashtags: tagMix(q.platform, pillars[i].key, it.hashtags) }));
 
     const plan = [...(needV ? [items[0]] : []), ...items.slice(1 + Math.max(0, q.image_per_day - needB)).slice(0, needB)]; // yarım kalan günde kalan konudan devam
@@ -348,9 +377,10 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
             caption: it.caption, hashtags: it.hashtags, status: 'queued', platform: q.platform, pillar: it.badge, source: 'factory', created_by: admin?.user_id ?? null,
             template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null } });
         } else {
-          const v = videos?.[vIdx++ % Math.max(1, videos?.length ?? 0)];
-          if (v) { video_url = v.url; media = [v.url]; reelCover = v.cover_url ?? null; await markUsed(v); }
-          else note = 'VİDEO GEREKLİ: Video Havuzu’na şantiye/manitou videosu yükleyin; aşağıdaki senaryoya göre çekin.';
+          // Her Reels için DAHA ÖNCE HİÇ KULLANILMAMIŞ bir video; kalmadıysa aynı videoyu tekrar atmak yerine Reels üretilmez
+          const v = freshVideos[vIdx++];
+          if (!v) { errors.push(`${q.platform}: yeni (kullanılmamış) video kalmadı — Video Havuzu’na yeni şantiye/tadilat videosu yükleyin`); continue; }
+          video_url = v.url; media = [v.url]; reelCover = v.cover_url ?? null; usedVideos.add(v.url); await markUsed(v);
         }
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
         const { error } = await db.from('social_drafts').insert({

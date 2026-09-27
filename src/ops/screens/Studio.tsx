@@ -14,65 +14,6 @@ const NETWORKS = ['instagram', 'facebook', 'tiktok', 'youtube', 'google_business
 const TONES = ['Kurumsal ve güven veren', 'Samimi ve yerel', 'Teknik ve bilgilendirici', 'Kampanya / aciliyet', 'Esprili şantiye dili'];
 const OBJECTIVES = ['Teklif talebi (lead)', 'Marka bilinirliği', 'Saha/proje gösterimi', 'Kentsel dönüşüm bilgilendirme', 'Özel gün / topluluk'];
 
-const REALISTIC_PRESETS = [
-  {
-    label: '🏗️ 18m Manitou Kiralama',
-    brief: { topic: 'Operatörlü 18 Metre Manitou MT-X 1840 Teleskopik Yükleyici Kiralama', objective: 'Teklif talebi (lead)', platform: 'instagram', format: 'instagram_post', cta: '0531 436 29 04', audience: 'Avrupa Yakası şantiyeleri ve müteahhitler' },
-    content: {
-      title: 'Şahin Manitou: 18m Operatörlü Teleskopik Yükleyici',
-      headline: '18 METRE MANİTOU SAHADA',
-      caption: 'İstanbul Avrupa ve Anadolu yakası şantiyelerine uzman sertifikalı operatörüyle aynı gün teslim Manitou MT-X 1840. Malzeme paleti, tuğla ve cam montaj sepeti ataşmanlarıyla hızlı indirme. Günlük ve aylık kiralama teklifi için hemen arayın.',
-      hashtags: '#şahinmanitou #manitoukiralama #şantiyelojistik #yükseklik #inşaat',
-      cta: '0531 436 29 04',
-      image_idea: 'Şantiye zemininde uzanmış Manitou teleskopik bomu ve baretli operatör',
-      design_brief: 'Sarı-siyah endüstriyel kontrast, kalın başlık, belirgin telefon numarası'
-    },
-    image: '/reels/82d879bd-1f6c-4cb4-844f-8667ac972bfb.jpg'
-  },
-  {
-    label: '🏢 Güngören Kentsel Dönüşüm',
-    brief: { topic: 'Güngören Tozkoparan Depreme Dayanıklı Kentsel Dönüşüm Projesi', objective: 'Kentsel dönüşüm bilgilendirme', platform: 'instagram', format: 'instagram_post', cta: 'Ücretsiz Keşif: 0531 436 29 04', audience: 'Güngören bina malikleri ve site yönetimleri' },
-    content: {
-      title: 'Embay Yapı: Güngören Kentsel Dönüşüm Projeleri',
-      headline: 'DEPREME GÜVENLİ YAŞAM ALANLARI',
-      caption: 'Güngören Tozkoparan merkezli Embay Yapı olarak riskli binalarınızı deprem yönetmeliğine tam uyumlu, radye temel ve C35 beton kalitesiyle dönüştürüyoruz. Kat malikleriyle şeffaf sözleşme, kira yardımı takibi ve zamanında teslim garantisi.',
-      hashtags: '#kentseldönüşüm #güngören #tozkoparan #depremyönetmeliği #embayyapı',
-      cta: '0531 436 29 04',
-      image_idea: 'Modern mimari bina cephesi ve tamamlanan kentsel dönüşüm konutları',
-      design_brief: 'Kurumsal koyu yeşil-beyaz tema, güven veren mimari yerleşim'
-    },
-    image: '/brand/embay-kapak.jpg'
-  },
-  {
-    label: '🏡 150 Günde Villa İnşaatı',
-    brief: { topic: 'Çatalca & Silivri 150 Günde Anahtar Teslim Villa Taahhüdü', objective: 'Saha/proje gösterimi', platform: 'instagram', format: 'instagram_reel', cta: 'Projenizi Konuşalım: 0531 436 29 04', audience: 'Müstakil arsa sahipleri ve villa yatırımcıları' },
-    content: {
-      title: 'Embay Yapı: 150 Günde Anahtar Teslim Villa',
-      headline: '150 GÜNDE HAYALİNİZDEKİ VİLLA',
-      caption: 'Çatalca ve Silivri hattında müstakil villa projelerimizi 150 günde anahtar teslim tamamlıyoruz. Temelden çatıya, su yalıtımından ince işçiliğe kadar birinci sınıf malzeme ve mühendislik denetimi.',
-      hashtags: '#villainşaatı #çatalca #anahtarteslim #müstakilev #embayyapı',
-      cta: '0531 436 29 04',
-      image_idea: 'Yükselen lüks villa karkası ve tamamlanmış örnek villa bahçesi',
-      design_brief: 'Premium koyu lacivert veya yeşil şablon, fotoğraf odaklı'
-    },
-    image: '/brand/video/embay-150-gunde-villa-kapak.jpg'
-  },
-  {
-    label: '🔨 Götürü Kaba İnşaat & Kalıp Demir',
-    brief: { topic: 'Fabrika & Depo Götürü Kaba İnşaat Kalıp Demir Ekip Taahhüdü', objective: 'Teklif talebi (lead)', platform: 'linkedin', format: 'linkedin_post', cta: 'Teklif İsteyin: 0531 436 29 04', audience: 'Müteahhitler, sanayi yatırımcıları ve şantiye şefleri' },
-    content: {
-      title: 'Kalıp & Demir İmalatında Profesyonel Ekip Taahhüdü',
-      headline: 'GÖTÜRÜ KABA İNŞAAT VE KALIP DEMİR',
-      caption: 'Hadımköy, İkitelli ve Çorlu sanayi bölgelerinde fabrika, depo ve çok katlı binalarınız için usta kalıp ve demir ekiplerimizle metraj ve götürü taahhüt veriyoruz. Kendi Manitou yükleyicilerimizle hızlı malzeme tahliyesi.',
-      hashtags: '#kabainşaat #kalıpdemir #müteahhitlik #şantiye #taşeron',
-      cta: '0531 436 29 04',
-      image_idea: 'Şantiyede demir donatı bağlayan işçiler ve beton dökümü',
-      design_brief: 'Teknik ve güvenilir kurgu'
-    },
-    image: '/reels/7e80a3ff-ef45-4e4d-925c-c8f8c78222a7.jpg'
-  },
-];
-
 interface Brief { platform: string; format: string; topic: string; objective: string; audience: string; tone: string; cta: string; date: string; time: string; brandKitId: string }
 interface Content { title: string; headline: string; caption: string; hashtags: string; cta: string; image_idea: string; design_brief: string; ai_generation_id?: string }
 
@@ -267,29 +208,6 @@ export function StudioScreen() {
 
       {step === 0 && (
         <Panel kicker="01 · Brief" title="Ne paylaşmak istiyoruz?">
-          <div className="mb-4 p-3 rounded-xl bg-ink-850 border border-ink-700/80 space-y-2">
-            <span className="text-[11px] font-mono uppercase font-bold text-brand-green tracking-wider block">
-              ⚡ Hazır Gerçekçi Sektör Şablonları (1-Tıkla Doldur)
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {REALISTIC_PRESETS.map((p, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setBrief((b) => ({ ...b, ...p.brief }));
-                    setContent(p.content);
-                    setLayers((l) => ({ ...l, headline: p.content.headline, subtitle: p.content.caption.slice(0, 110), cta: p.content.cta, image_url: p.image }));
-                    setMsg({ tone: 'ok', text: `"${p.label}" şablonu uygulandı. Adımları kontrol ederek yayına hazırlayabilirsiniz.` });
-                  }}
-                  className="ops-chip !py-1.5 !px-3 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-300 font-semibold"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Platform">
               <div className="flex flex-wrap gap-1.5">
@@ -354,18 +272,6 @@ export function StudioScreen() {
                   {busy === 'upload' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />} Görsel yükle
                   <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
                 </label>
-                <select
-                  className="ops-input !w-auto text-xs font-semibold"
-                  onChange={(e) => e.target.value && setLayers({ ...layers, image_url: e.target.value })}
-                  defaultValue=""
-                >
-                  <option value="" disabled>Havuzdan Görsel Seç...</option>
-                  <option value="/brand/video/embay-150-gunde-villa-kapak.jpg">150 Günde Villa</option>
-                  <option value="/reels/82d879bd-1f6c-4cb4-844f-8667ac972bfb.jpg">Manitou Sahada</option>
-                  <option value="/brand/embay-kapak.jpg">Embay Kurumsal</option>
-                  <option value="/reels/7e80a3ff-ef45-4e4d-925c-c8f8c78222a7.jpg">Kalıp & Demir</option>
-                  <option value="/reels/25457fa7-5b80-41fd-b9be-24054d0b11a3.jpg">Tozkoparan Şantiye</option>
-                </select>
                 {layers.image_url && <Button variant="subtle" onClick={() => setLayers({ ...layers, image_url: null })}>Görseli kaldır</Button>}
               </div>
               <div className="flex gap-4 text-xs text-ink-300">
@@ -378,22 +284,14 @@ export function StudioScreen() {
                 <Button variant="subtle" className="w-full" loading={busy === 'design-ai'} onClick={suggestDesign}>Yerleşim + başlık öner</Button>
               </div>
               <div className="rounded-xl bg-ink-900 ring-1 ring-ink-700 p-3 space-y-2">
-                <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-ink-300">Canva Entegrasyonu</span>{canvaStatus && <Pill tone={canvaStatus.status === 'connected' ? 'go' : 'wait'}>{canvaStatus.status === 'connected' ? 'BAĞLI' : 'CANVA BAĞLA'}</Pill>}</div>
-                <div className="flex flex-wrap gap-2">
-                  <a href="https://www.canva.com/create/social-media-graphics/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 text-xs font-semibold hover:bg-purple-100">
-                    <ExternalLink className="w-3.5 h-3.5" /> Canva’da Doğrudan Düzenle
-                  </a>
-                  {canvaStatus?.status === 'connected' && (
-                    <>
-                      <Button variant="subtle" loading={busy === 'canva'} onClick={canvaCreate}>Canva’da oluştur</Button>
-                      {canva.editUrl && <a href={canva.editUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-xl ring-1 ring-ink-600 px-3 py-1.5 text-xs text-ink-200"><ExternalLink className="w-3.5 h-3.5" /> Tasarımı aç</a>}
-                      {canva.designId && <Button variant="subtle" loading={busy === 'canva-export'} onClick={canvaImport}>Canva’dan içe al</Button>}
-                    </>
-                  )}
-                </div>
-                {canvaStatus?.status !== 'connected' && (
-                  <p className="text-[10px] text-ink-400">Canva hesabınızda şablonu özelleştirmek için "Canva'da Doğrudan Düzenle" butonunu kullanabilir veya Platform Duvarı'ndan Canva OAuth bağlayabilirsiniz.</p>
-                )}
+                <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-ink-300">Canva Connect</span>{canvaStatus && <Pill tone={canvaStatus.status === 'connected' ? 'go' : 'wait'}>{canvaStatus.status === 'connected' ? 'BAĞLI' : 'CANVA BAĞLA'}</Pill>}</div>
+                {canvaStatus?.status === 'connected' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="subtle" loading={busy === 'canva'} onClick={canvaCreate}>Canva’da oluştur</Button>
+                    {canva.editUrl && <a href={canva.editUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-xl ring-1 ring-ink-600 px-3 py-2 text-xs text-ink-200"><ExternalLink className="w-3.5 h-3.5" /> Canva’da düzenle</a>}
+                    {canva.designId && <Button variant="subtle" loading={busy === 'canva-export'} onClick={canvaImport}>Canva’dan içe al</Button>}
+                  </div>
+                ) : <p className="text-[11px] text-ink-400">Canva hesabı bağlı değil. Platform Duvarı’ndan “Canva bağla” ile OAuth yapın; bağlanınca tasarım Canva’da açılıp PNG geri alınabilir.</p>}
               </div>
             </div>
           </Panel>

@@ -1,7 +1,7 @@
 // Video Havuzu: telefondan video yükle → havuza kaydolur → uygulama/format seç → düzenle (kırp, kapak, ses) → kaydet →
 // istenirse Yayın Kuyruğu'na tarih/saat ile gönder. Her kayıt veritabanına tarihli yazılır (media_library).
 import { useEffect, useRef, useState } from 'react';
-import { Archive, CalendarClock, Clapperboard, ExternalLink, Eye, Image as ImageIcon, Music, Scissors, Send, Share2, Sparkles, Upload, Volume2, VolumeX, X, Save } from 'lucide-react';
+import { Archive, CalendarClock, Clapperboard, Image as ImageIcon, Scissors, Send, Share2, Upload, VolumeX, Save } from 'lucide-react';
 import { MontageStudio } from './MontageStudio';
 import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
@@ -11,14 +11,12 @@ import type { OpsStatus } from '../lib/types';
 import { useSession } from '../session';
 import { shareToPhone } from '../lib/share';
 import { Button, cx, Field, Modal, Notice, Panel, Pill, SavedStamp, StateView } from '../ui';
-import { DEMO_VIDEOS, isDemoMode } from '../lib/demoData';
 
 export interface MediaItem {
   id: string; kind: 'video' | 'image'; title: string; url: string; original_url: string | null; cover_url: string | null;
   mime: string | null; size_bytes: number | null; duration_sec: number | null; width: number | null; height: number | null;
-  targets: string[]; caption: string | null; hashtags: string[]; edit: { trim_start?: number; trim_end?: number; muted?: boolean; cover_time?: number; montage?: { template?: string; hook?: string } };
+  targets: string[]; caption: string | null; hashtags: string[]; edit: { trim_start?: number; trim_end?: number; muted?: boolean; cover_time?: number };
   notes: string | null; status: 'pool' | 'queued' | 'published' | 'archived'; draft_ids: string[]; queued_at: string | null; created_at: string; updated_at: string;
-  source?: string; is_edited?: boolean; hook_text?: string; music_track?: string; music_url?: string;
 }
 const STATUS: Record<MediaItem['status'], { label: string; tone: 'idle' | 'info' | 'go' | 'wait' }> = {
   pool: { label: 'HAVUZDA', tone: 'idle' }, queued: { label: 'KUYRUKTA', tone: 'info' }, published: { label: 'PAYLAŞILDI', tone: 'go' }, archived: { label: 'ARŞİV', tone: 'wait' },
@@ -31,19 +29,12 @@ export function VideoPool() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [open, setOpen] = useState<MediaItem | null>(null);
-  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
-  const [tabFilter, setTabFilter] = useState<'all' | 'montage' | 'raw'>('all');
   const [showArchived, setShowArchived] = useState(false);
   const [montage, setMontage] = useState(false);
-
   const items = useQuery(async () => {
     let q = db().from('media_library').select('*').eq('kind', 'video').order('created_at', { ascending: false }).limit(100);
     q = showArchived ? q.not('archived_at', 'is', null) : q.is('archived_at', null);
-    let rows = unwrap(await q) as MediaItem[];
-    if ((!rows || rows.length === 0) && !showArchived) {
-      rows = DEMO_VIDEOS as unknown as MediaItem[];
-    }
-    return rows;
+    return unwrap(await q) as MediaItem[];
   }, [] as MediaItem[], [showArchived], ['media_library']);
 
   const upload = async (list: FileList | null) => {
@@ -77,151 +68,47 @@ export function VideoPool() {
     items.reload();
   };
 
-  const allItems = items.data.length ? items.data : (!showArchived ? (DEMO_VIDEOS as unknown as MediaItem[]) : []);
-  const montageItems = allItems.filter((m) => m.source === 'montage' || m.is_edited || m.title.includes('[KURGULU'));
-  const rawItems = allItems.filter((m) => m.source !== 'montage' && !m.is_edited && !m.title.includes('[KURGULU'));
-  const filteredItems = tabFilter === 'montage' ? montageItems : tabFilter === 'raw' ? rawItems : allItems;
-
   return (
     <div className="space-y-4">
-      <Panel title="Video yükle & Reels Montajı">
+      <Panel title="Video yükle">
         <input ref={fileRef} type="file" accept="video/*" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="primary" loading={Boolean(busy)} onClick={() => fileRef.current?.click()} icon={<Upload className="w-4 h-4" />}>Telefondan video seç</Button>
-          <Button variant="subtle" onClick={() => setMontage(true)} icon={<Clapperboard className="w-4 h-4 text-brand-green" />}>Reels montajı yap</Button>
-          <a
-            href="https://www.canva.com/create/instagram-reels/"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 text-xs font-semibold shadow-xs"
-          >
-            <ExternalLink className="w-3.5 h-3.5" /> Canva Video Editörü
-          </a>
-          <span className="text-xs text-ink-400">{busy ?? 'mp4 / mov · dosya başına en fazla 50 MB'}</span>
+          <Button variant="subtle" onClick={() => setMontage(true)} icon={<Clapperboard className="w-4 h-4" />}>Reels montajı yap</Button>
+          <span className="text-xs text-ink-400">{busy ?? 'mp4 / mov · dosya başına en fazla 50 MB · aynı anda 10 video'}</span>
         </div>
-        <p className="text-[11px] text-ink-400 mt-2">
-          Seçtiğiniz videolar havuza kaydedilir; şantiye fon müziği ve kanca sorusu eklenerek Reels montajına dönüştürülür veya tek tıkla Yayın Kuyruğu’na zamanlanır.
-        </p>
+        <p className="text-[11px] text-ink-400 mt-2">Seçtiğiniz video önce havuza kaydedilir (hiçbir yerde paylaşılmaz). Sonra uygulamayı seçip düzenleyebilir, istediğiniz gün ve saatte paylaşılması için kuyruğa gönderebilirsiniz.</p>
       </Panel>
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : 'error'}>{msg.text}</Notice>}
 
-      {/* Filtre Sekmeleri */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-ink-800 pb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setTabFilter('all')}
-            className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold transition', tabFilter === 'all' ? 'bg-ink-100 text-ink-900 shadow-xs' : 'bg-ink-900 text-ink-300 hover:text-ink-100 ring-1 ring-ink-750')}
-          >
-            Tüm Videolar ({allItems.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTabFilter('montage')}
-            className={cx('inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition', tabFilter === 'montage' ? 'bg-brand-green text-white shadow-xs' : 'bg-ink-900 text-emerald-600 hover:text-brand-green ring-1 ring-ink-750')}
-          >
-            <Clapperboard className="w-3.5 h-3.5" /> Kurgulanmış Reels (Müzikli) ({montageItems.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTabFilter('raw')}
-            className={cx('px-3 py-1.5 rounded-xl text-xs font-semibold transition', tabFilter === 'raw' ? 'bg-ink-100 text-ink-900 shadow-xs' : 'bg-ink-900 text-ink-300 hover:text-ink-100 ring-1 ring-ink-750')}
-          >
-            Ham Şantiye Çekimleri ({rawItems.length})
-          </button>
-        </div>
-
-        <button type="button" onClick={() => setShowArchived((v) => !v)} className="text-xs font-semibold text-brand-green underline self-end sm:self-auto">
-          {showArchived ? 'Havuza dön' : 'Arşivi göster'}
-        </button>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-ink-100">{showArchived ? 'Arşivlenen videolar' : `Havuzdaki videolar (${items.data.length})`}</h3>
+        <button type="button" onClick={() => setShowArchived((v) => !v)} className="text-xs font-semibold text-brand-green underline">{showArchived ? 'Havuza dön' : 'Arşivi göster'}</button>
       </div>
-
-      {filteredItems.length === 0 ? (
-        <StateView kind="empty" title="Video bulunamadı" message={showArchived ? 'Arşivde video yok.' : 'Bu filtrede henüz video yok.'} compact />
+      {items.error ? <StateView kind="error" message={items.error} compact /> : items.loading && !items.data.length ? <StateView kind="loading" compact /> : !items.data.length ? (
+        <StateView kind="empty" title="Veri bulunamadı" message={showArchived ? 'Arşivde video yok.' : 'Havuzda henüz video yok. Yukarıdaki “Telefondan video seç” ile ilk videonuzu yükleyin.'} compact />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {filteredItems.map((m) => {
-            const isMontage = m.source === 'montage' || m.is_edited || m.title.includes('[KURGULU');
-            return (
-              <div key={m.id} className="text-left rounded-2xl bg-white ring-1 ring-ink-700 overflow-hidden hover:ring-brand-green/60 transition flex flex-col justify-between">
-                <div
-                  className="relative aspect-[9/16] max-h-64 w-full bg-ink-900 cursor-pointer group"
-                  onClick={() => setPreviewItem(m)}
-                >
-                  {m.cover_url ? (
-                    <img src={m.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-                  ) : (
-                    <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                  )}
-                  <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-mono text-white">
-                    {fmtSec(m.duration_sec)}
-                  </span>
-                  {isMontage && (
-                    <span className="absolute bottom-1 left-1 rounded bg-brand-green px-1.5 py-0.5 text-[9px] font-bold text-white flex items-center gap-1 shadow-xs">
-                      <Music className="w-2.5 h-2.5" /> EDİTLENDİ
-                    </span>
-                  )}
-                  {m.hook_text && (
-                    <div className="absolute top-2 inset-x-2 p-1 rounded bg-black/70 backdrop-blur-xs text-[9px] font-bold text-center text-white line-clamp-1">
-                      {m.hook_text}
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                    <span className="p-2.5 rounded-full bg-brand-green text-white shadow-md">
-                      <Eye className="w-4 h-4" />
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-2 space-y-1.5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="text-xs font-semibold text-ink-100 line-clamp-2 leading-snug">{m.title}</div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <Pill tone={STATUS[m.status]?.tone ?? 'idle'}>{STATUS[m.status]?.label ?? 'HAVUZDA'}</Pill>
-                      {isMontage && (
-                        <span className="text-[9px] font-mono font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-                          MÜZİKLİ
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-ink-800 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewItem(m)}
-                      className="flex-1 py-1 px-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold text-center hover:bg-emerald-100 transition"
-                    >
-                      Canlı İzle
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOpen(m)}
-                      className="py-1 px-1.5 rounded-lg bg-ink-850 text-ink-300 text-[11px] font-medium hover:text-ink-100 transition"
-                    >
-                      Düzenle
-                    </button>
-                  </div>
-                </div>
+          {items.data.map((m) => (
+            <button key={m.id} type="button" onClick={() => setOpen(m)} className="text-left rounded-2xl bg-white ring-1 ring-ink-700 overflow-hidden hover:ring-brand-green/60 transition">
+              <div className="relative aspect-[9/16] max-h-64 w-full bg-ink-900">
+                {m.cover_url ? <img src={m.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
+                <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-mono text-white">{fmtSec(m.duration_sec)}</span>
+                {(m as { source?: string }).source === 'montage' && <span className="absolute bottom-1 left-1 rounded bg-brand-green px-1.5 py-0.5 text-[9px] font-bold text-white">MONTAJ</span>}
+                {(m.edit as { codec?: string } | null)?.codec === 'hevc' && <span className="absolute top-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">iPhone</span>}
+                {(m.edit?.trim_start != null || m.edit?.muted) && <span className="absolute top-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">düzenlendi</span>}
               </div>
-            );
-          })}
+              <div className="p-2 space-y-1">
+                <div className="text-xs font-semibold text-ink-100 line-clamp-2">{m.title}</div>
+                <Pill tone={STATUS[m.status].tone}>{STATUS[m.status].label}</Pill>
+                <div className="flex flex-wrap gap-1">{m.targets.map((t) => <span key={t} className="text-[9px] rounded bg-ink-800 px-1 py-0.5 text-ink-300">{TARGETS.find((x) => x.key === t)?.label ?? t}</span>)}</div>
+              </div>
+            </button>
+          ))}
         </div>
       )}
-
       {montage && <MontageStudio onClose={() => setMontage(false)} onDone={() => items.reload()} />}
       {open && <VideoEditor item={open} onClose={() => setOpen(null)} onSaved={(m) => { setOpen(m); items.reload(); }} onGone={() => { setOpen(null); items.reload(); }} />}
-      {previewItem && (
-        <ReelsPreviewModal
-          item={previewItem}
-          onClose={() => setPreviewItem(null)}
-          onEdit={() => {
-            const it = previewItem;
-            setPreviewItem(null);
-            setOpen(it);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -410,132 +297,6 @@ function VideoEditor({ item, onClose, onSaved, onGone }: { item: MediaItem; onCl
           <p className="text-[11px] text-ink-400 -mt-1">Telefonun paylaşım menüsü açılır: Instagram, Facebook, YouTube veya WhatsApp’ı seçin. Açıklama otomatik kopyalanır, uygulamada “yapıştır” deyin.</p>
           {busy && <Notice tone="info">{busy}…</Notice>}
           {err && <Notice tone="error">{err}</Notice>}
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ReelsPreviewModal({ item, onClose, onEdit }: { item: MediaItem; onClose: () => void; onEdit: () => void }) {
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isMontage = item.source === 'montage' || item.is_edited || item.title.includes('[KURGULU');
-  const hook = item.hook_text || (isMontage ? '150 GÜNDE ANAHTAR TESLİM VİLLA TAAHHÜDÜ' : null);
-  const music = item.music_track || (isMontage ? 'Şantiye & Endüstriyel Dinamik Bas' : null);
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={
-        <span className="inline-flex items-center gap-2">
-          <Clapperboard className="w-5 h-5 text-brand-green" />
-          <span>Kurgulu Reels Oynatıcı & Canlı Önizleme</span>
-        </span>
-      }
-      footer={
-        <div className="flex flex-wrap items-center justify-between w-full gap-2">
-          <div className="text-xs text-ink-400">
-            {isMontage ? '✓ Bu video havuzdaki ham görüntülerden fon müziği ve kanca sorusuyla editlenmiştir.' : 'Ham şantiye çekimi.'}
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href="https://www.canva.com/create/instagram-reels/"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold"
-            >
-              <ExternalLink className="w-3.5 h-3.5" /> Canva'da Aç
-            </a>
-            <Button variant="subtle" onClick={onEdit} icon={<Scissors className="w-4 h-4" />}>
-              Kırp & Düzenle
-            </Button>
-            <Button variant="primary" onClick={onClose}>
-              Kapat
-            </Button>
-          </div>
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-          <div className="relative aspect-[9/16] max-h-80 w-full max-w-[220px] mx-auto rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-ink-700">
-            <video
-              src={item.url}
-              controls
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
-            {hook && (
-              <div className="absolute top-3 inset-x-2 p-1.5 rounded-lg bg-black/75 backdrop-blur-xs text-[10px] font-bold text-center text-white border border-white/20 shadow-md">
-                {hook}
-              </div>
-            )}
-            <div className="absolute bottom-3 inset-x-2 p-1.5 rounded-lg bg-brand-green/90 text-[10px] font-bold text-center text-white shadow-md">
-              ☎ 0531 436 29 04 · Embay Yapı & Şahin Manitou
-            </div>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                {isMontage && <Pill tone="go">KURGULU REELS</Pill>}
-                <Pill tone="info">DİKEY 9:16 (1080x1920)</Pill>
-              </div>
-              <h3 className="font-bold text-base text-ink-100">{item.title}</h3>
-              {item.caption && <p className="text-ink-400 mt-1 leading-relaxed">{item.caption}</p>}
-            </div>
-
-            {music && (
-              <div className="p-2.5 rounded-xl bg-ink-850 border border-ink-750 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Music className="w-4 h-4 text-brand-green" />
-                  <div>
-                    <span className="font-semibold text-ink-100 block">{music}</span>
-                    <span className="text-[10px] text-ink-400">Şantiye dinamik fon müziği entegre edildi</span>
-                  </div>
-                </div>
-                <audio ref={audioRef} src="/audio/music.m4a" loop />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!audioRef.current) return;
-                    if (isPlayingAudio) {
-                      audioRef.current.pause();
-                      setIsPlayingAudio(false);
-                    } else {
-                      audioRef.current.play().then(() => setIsPlayingAudio(true)).catch(() => setIsPlayingAudio(false));
-                    }
-                  }}
-                  className="ops-chip !py-1 text-[11px] font-bold"
-                >
-                  {isPlayingAudio ? 'Müziği Durdur' : 'Müziği Dinle'}
-                </button>
-              </div>
-            )}
-
-            <div className="p-2.5 rounded-xl bg-ink-850 border border-ink-750 space-y-1">
-              <span className="text-ink-500 font-mono text-[10px] block">PAYLAŞILACAK KANALLAR</span>
-              <div className="flex flex-wrap gap-1">
-                {(item.targets || ['ig_reel', 'yt_short', 'fb_post']).map((t) => (
-                  <span key={t} className="text-[10px] font-semibold text-ink-300 bg-ink-800 px-2 py-0.5 rounded">
-                    {t.toUpperCase()}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2 flex flex-wrap gap-2">
-              <a
-                href={item.url}
-                download
-                className="ops-chip !py-1.5 text-xs font-semibold"
-              >
-                Videoyu İndir (.mp4)
-              </a>
-            </div>
-          </div>
         </div>
       </div>
     </Modal>

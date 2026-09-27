@@ -4,17 +4,7 @@
 import { recorderFormat } from './media';
 
 export interface MontageClip { url: string; kind: 'video' | 'image'; label: string; start?: number; seconds: number }
-export interface MontageOptions {
-  brand: 'Embay Yapı' | 'Şahin Manitou';
-  title: string;
-  phone: string;
-  website: string;
-  cta: string;
-  emblem: EmblemName;
-  hook?: string;
-  musicUrl?: string;
-  musicVolume?: number;
-}
+export interface MontageOptions { brand: 'Embay Yapı' | 'Şahin Manitou'; title: string; phone: string; website: string; cta: string; emblem: EmblemName; hook?: string }
 export type EmblemName = 'vinc' | 'baret' | 'bina' | 'ev' | 'manitou' | 'alet';
 
 // hook: ilk 1.8 sn ekranı kaplayan merak sorusu (Shorts/Reels'te izleyiciyi tutar). Uydurma rakam/iddia yok.
@@ -81,32 +71,6 @@ export async function renderMontage(clips: MontageClip[], o: MontageOptions, onP
   const g = canvas.getContext('2d')!;
   const pal = PALETTE[o.brand];
   const stream = canvas.captureStream(FPS);
-
-  let audioEl: HTMLAudioElement | null = null;
-  let audioCtx: AudioContext | null = null;
-  if (o.musicUrl) {
-    try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioContextClass) {
-        audioCtx = new AudioContextClass();
-        audioEl = new Audio(o.musicUrl);
-        audioEl.crossOrigin = 'anonymous';
-        audioEl.loop = true;
-        audioEl.volume = o.musicVolume ?? 0.65;
-        const source = audioCtx.createMediaElementSource(audioEl);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        const aTrack = dest.stream.getAudioTracks()[0];
-        if (aTrack) {
-          stream.addTrack(aTrack);
-        }
-        await audioEl.play().catch(() => {});
-      }
-    } catch (err) {
-      console.warn('Montage background audio init:', err);
-    }
-  }
-
   const rec = new MediaRecorder(stream, { mimeType: fmt.mime, videoBitsPerSecond: 6_000_000 });
   const chunks: Blob[] = []; rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
   const stopped = new Promise<void>((r) => { rec.onstop = () => r(); });
@@ -197,8 +161,6 @@ export async function renderMontage(clips: MontageClip[], o: MontageOptions, onP
     });
   } finally {
     rec.stop(); await stopped;
-    if (audioEl) { audioEl.pause(); audioEl.src = ''; }
-    if (audioCtx) { audioCtx.close().catch(() => {}); }
     media.forEach((m) => URL.revokeObjectURL(m.local));
   }
   onProgress?.(1, 'Hazır');

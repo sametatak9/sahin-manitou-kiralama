@@ -26,109 +26,9 @@ export function FollowList() {
   const [kind, setKind] = useState('all');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
-
-  const DEMO_PROSPECTS_FALLBACK: Prospect[] = [
-    {
-      id: 'demo-prosp-1',
-      platform: 'instagram',
-      profile_name: 'Kaya Yap-Sat Müteahhitlik',
-      handle: 'kaya_yapsat_ist',
-      profile_url: 'https://instagram.com/kaya_yapsat_ist',
-      notes: 'Hadımköy ve Güngören’de yap-sat bina yapımı yapan ana yüklenici. Kaba inşaat kalfası arıyor.',
-      account_kind: 'competitor',
-      follow_status: 'to_follow',
-      followers: 14200,
-      avg_engagement: 340,
-      engagement_rate: 2.4,
-      source_url: 'https://instagram.com/p/C7X123456/',
-      metrics: { posts_per_week: 4 },
-      last_benchmarked_at: new Date().toISOString(),
-      relevance_score: 95,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'demo-prosp-2',
-      platform: 'instagram',
-      profile_name: 'Ali Usta Kalıp & Demir Kalfalığı',
-      handle: 'usta_ali_kalip',
-      profile_url: 'https://instagram.com/usta_ali_kalip',
-      notes: 'Çatalca ve Silivri şantiyelerinde kaba inşaat kalıp taşeronu. Projelere götürü iş teklifi veriyor.',
-      account_kind: 'supplier',
-      follow_status: 'to_follow',
-      followers: 8700,
-      avg_engagement: 280,
-      engagement_rate: 3.2,
-      source_url: 'https://instagram.com/p/C8Y987654/',
-      metrics: { posts_per_week: 3 },
-      last_benchmarked_at: new Date().toISOString(),
-      relevance_score: 92,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'demo-prosp-3',
-      platform: 'instagram',
-      profile_name: 'İnş. Müh. Murat Arslan (Şantiye Şefi)',
-      handle: 'muh_murat_santiye',
-      profile_url: 'https://instagram.com/muh_murat_santiye',
-      notes: 'Toplu konut ve bina yapımı şantiye yöneticisi. Manitou ve kalıp taşeronu arayışları paylaşıyor.',
-      account_kind: 'partner',
-      follow_status: 'followed',
-      followers: 19500,
-      avg_engagement: 520,
-      engagement_rate: 2.7,
-      source_url: 'https://instagram.com/p/C9Z112233/',
-      metrics: { posts_per_week: 5 },
-      last_benchmarked_at: new Date().toISOString(),
-      relevance_score: 88,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'demo-prosp-4',
-      platform: 'instagram',
-      profile_name: 'Trakya Çelik & Prefabrik Yapı',
-      handle: 'trakya_celik_yapi',
-      profile_url: 'https://instagram.com/trakya_celik_yapi',
-      notes: 'Çorlu ve Çerkezköy sanayi tesisleri montajcısı. Sepetli telehandler kiralıyor.',
-      account_kind: 'local_business',
-      follow_status: 'to_follow',
-      followers: 6900,
-      avg_engagement: 195,
-      engagement_rate: 2.8,
-      source_url: null,
-      metrics: { posts_per_week: 2 },
-      last_benchmarked_at: new Date().toISOString(),
-      relevance_score: 85,
-      created_at: new Date().toISOString(),
-    },
-  ];
-
-  const q = useQuery(async () => {
-    let rows = unwrap(await db().from('social_prospects').select('*').order('engagement_rate', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(500)) as Prospect[];
-    if (!rows || rows.length === 0) {
-      rows = DEMO_PROSPECTS_FALLBACK;
-    }
-    return rows;
-  }, [] as Prospect[], [], ['social_prospects']);
-
-  const rows = (q.data.length ? q.data : DEMO_PROSPECTS_FALLBACK).filter((r) => kind === 'all' || r.account_kind === kind);
-  const setStatus = async (r: Prospect, s: Prospect['follow_status']) => {
-    try { await db().from('social_prospects').update({ follow_status: s }).eq('id', r.id); } catch { /* demo fallback */ }
-    q.setData((cur) => cur.map((item) => (item.id === r.id ? { ...item, follow_status: s } : item)));
-  };
-
-  const followAllInApp = async () => {
-    setBusy(true);
-    setMsg({ tone: 'ok', text: '🎯 Hedef kitledeki yap-sat müteahhitleri ve kalfalar uygulama içinden takibe alınıyor...' });
-    for (const r of rows) {
-      if (r.follow_status !== 'followed') {
-        await new Promise((res) => setTimeout(res, 400));
-        await setStatus(r, 'followed');
-      }
-    }
-    setBusy(false);
-    setMsg({ tone: 'ok', text: '✓ Hedef kitledeki inşaat hesapları takibe alındı! Organik geri takip (follow-back) ile yeni takipçiler yönlendiriliyor.' });
-    setTimeout(() => setMsg(null), 5000);
-  };
+  const q = useQuery(async () => unwrap(await db().from('social_prospects').select('*').order('engagement_rate', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(500)) as Prospect[], [] as Prospect[], [], ['social_prospects']);
+  const rows = q.data.filter((r) => kind === 'all' || r.account_kind === kind);
+  const setStatus = async (r: Prospect, s: Prospect['follow_status']) => { await db().from('social_prospects').update({ follow_status: s }).eq('id', r.id); q.reload(); };
   const benchmark = async () => {
     setBusy(true); setMsg(null);
     try { const r = await callOps<{ measured: number; failed: string[] }>('ig_benchmark', { limit: 20 }); setMsg({ tone: 'ok', text: `${r.measured} hesap ölçüldü${r.failed.length ? ` · ${r.failed.length} hesap okunamadı` : ''}.` }); q.reload(); }
@@ -152,9 +52,8 @@ export function FollowList() {
       <div className="flex flex-wrap items-center gap-2">
         {['all', ...Object.keys(KIND)].map((k) => <button key={k} onClick={() => setKind(k)} className={`rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${kind === k ? 'ring-brand-green bg-ink-750 text-ink-100' : 'ring-ink-700 text-ink-400'}`}>{k === 'all' ? `Tümü (${q.data.length})` : KIND[k]}</button>)}
         <span className="flex-1" />
-        <Button variant="primary" loading={busy} onClick={followAllInApp} icon={<Users className="w-4 h-4" />}>Hedef Kitleyi Takip Et & Kazan</Button>
-        <Button variant="subtle" onClick={csv} disabled={!rows.length} icon={<Download className="w-4 h-4" />}>Toplu liste (CSV)</Button>
-        {isAdmin && <Button variant="subtle" loading={busy} onClick={benchmark} icon={<BarChart3 className="w-4 h-4" />}>Rakip analizi</Button>}
+        <Button variant="subtle" onClick={csv} disabled={!rows.length} icon={<Download className="w-4 h-4" />}>Toplu takip listesi (CSV)</Button>
+        {isAdmin && <Button variant="subtle" loading={busy} onClick={benchmark} icon={<BarChart3 className="w-4 h-4" />}>Rakip analizi (Meta)</Button>}
       </div>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {q.loading && !q.data.length ? <StateView kind="loading" /> : q.error ? <StateView kind="error" title="Liste okunamadı" message={q.error} /> : !rows.length ? (

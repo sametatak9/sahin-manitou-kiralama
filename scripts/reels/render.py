@@ -2,7 +2,7 @@
 """EMBAY otomatik Reels montajı (GitHub Actions'ta çalışır, gizli anahtar gerektirmez).
 
 Akış: panelin herkese açık kuyruğundan (ops/reels/queue) montaj bekleyen Reels taslaklarını alır →
-her taslak için ham şantiye videosunu + havuzdan 3 sahneyi indirir → Embay tarzında (lacivert/kraliyet mavisi/gök mavisi,
+her taslak için KENDİ ham videosunun 4 farklı bölümünü keser (kısa videoda havuzdan yedek) → Embay tarzında (lacivert/kraliyet mavisi/gök mavisi,
 blueprint ızgara, merak kartı, adım etiketleri, logo, telefon şeridi, kapanış kartı, müzik) 1080×1920 H.264/AAC MP4 üretir →
 public/reels/<id>.mp4 + .jpg olarak depoya yazar. Workflow dosyaları commit'ler; Vercel yayınlayınca ops/reels/attach
 taslağa bağlar (yalnızca kendi alan adımızdaki dosyayı kabul eder).
@@ -20,11 +20,21 @@ FONT_DIRS = ['/usr/share/fonts/truetype/dejavu', os.path.join(HERE, 'fonts')]
 
 TEMPLATES = {
     'asamalar': (['Temel', 'Kaba inşaat', 'Çatı', 'Anahtar teslim'], 'Temelden anahtar teslime'),
-    'villa': (['Proje & ruhsat', 'Karkas', 'İnce işler', 'Teslim'], 'Çatalca’da villa inşaatı'),
-    'manitou': (['Kurulum', 'Yükü alma', 'Yüksekte taşıma', 'Yerine bırakma'], 'Operatörlü Manitou kiralama'),
-    'tadilat': (['Önce', 'Hazırlık', 'Uygulama', 'Sonra'], 'Tadilat ve dış cephe'),
-    'santiye': (['Şantiye', 'Ekibimiz', 'Makinelerimiz', 'İşimiz'], 'Şantiyeden gerçek iş'),
+    'ev': (['Zemin etüdü', 'Temel & karkas', 'Duvar & çatı', 'Anahtar teslim'], 'Müstakil ev yapımı'),
+    'villa': (['Proje & ruhsat', 'Karkas', 'İnce işler', 'Teslim'], 'Villa yapımı'),
+    'bina': (['Temel', 'Betonarme', 'Duvarlar', 'Bina hazır'], 'Bina yapımı'),
+    'tadilat': (['Önce', 'Söküm & hazırlık', 'Uygulama', 'Sonra'], 'Tadilat & renovasyon'),
+    'tamirat': (['Sorun', 'Tespit', 'Onarım', 'Sonuç'], 'Tamirat & onarım'),
+    'santiye': (['Sabah', 'Ekibimiz', 'İşin mutfağı', 'Günün sonu'], 'Şantiyeden gerçek iş'),
+    'ipucu': (['1. ipucu', '2. ipucu', '3. ipucu', 'Özet'], 'Ustadan ipuçları'),
 }
+# Her Reels farklı görünsün: geçiş efekti, üst etiket ve kanca kartı değişir (renkler Embay lacivert/gök mavisi içinde kalır)
+STYLES = [
+    {'tr': ['slideleft', 'circleopen', 'wipeup', 'smoothleft', 'fadeblack'], 'pill': 'KAYDET, LAZIM OLACAK', 'sub': 'Sonuna kadar izleyin'},
+    {'tr': ['radial', 'slideup', 'circlecrop', 'wiperight', 'fade'], 'pill': 'USTADAN İPUCU', 'sub': 'Ev yaptıracaklar için'},
+    {'tr': ['smoothup', 'hlslice', 'diagtl', 'slideright', 'fadeblack'], 'pill': 'İŞİN MUTFAĞI', 'sub': 'Şantiyeden gerçek görüntüler'},
+    {'tr': ['zoomin', 'wipeleft', 'vuslice', 'smoothdown', 'fade'], 'pill': 'ÖNCE / SONRA', 'sub': 'Farkı sonunda görün'},
+]
 
 
 def font(bold=True, size=60):
@@ -38,11 +48,15 @@ def font(bold=True, size=60):
 
 def template_for(text):
     t = (text or '').lower()
-    if re.search(r'manitou|teleskopik|yükleyici', t): return 'manitou'
-    if re.search(r'tadilat|cephe|çatı|mantolama', t): return 'tadilat'
-    if re.search(r'villa|müstakil', t): return 'villa'
-    if re.search(r'şantiye|ekip', t): return 'santiye'
+    if re.search(r'tamir|onar|rutubet|yalıtım|çatlak|akıt', t): return 'tamirat'
+    if re.search(r'tadilat|renovasyon|mutfak|banyo|cephe|mantolama|önce', t): return 'tadilat'
+    if re.search(r'ipucu|hata|dikkat|rehber', t): return 'ipucu'
+    if re.search(r'villa', t): return 'villa'
+    if re.search(r'bina|apartman|dönüşüm|betonarme|deprem', t): return 'bina'
+    if re.search(r'müstakil|ev yap|evi|ev,|\bev\b', t): return 'ev'
+    if re.search(r'şantiye|ekip|beton|kalıp', t): return 'santiye'
     return 'asamalar'
+
 
 
 # ── Çizim yardımcıları ──────────────────────────────────────────────────────
@@ -129,14 +143,15 @@ def logo(d, cx, cy, k, color=(255, 255, 255), text=True):
 
 
 # ── Kartlar ─────────────────────────────────────────────────────────────────
-def intro_card(hook, path):
+def intro_card(hook, path, st=None):
+    st = st or STYLES[0]
     img = grid(gradient(W, H)); d = ImageDraw.Draw(img)
-    pill(d, W / 2, 600, 'KAYDET, LAZIM OLACAK', font(True, 38), SKY, INK)
+    pill(d, W / 2, 600, st['pill'], font(True, 38), SKY, INK)
     f = font(True, 96); lines = wrap(d, tr_upper(hook), f, W - 150)[:4]
     y = 760
     for l in lines: center(d, y, l, f, (255, 255, 255)); y += 124
     d.rectangle([W / 2 - 110, y + 18, W / 2 + 110, y + 30], fill=SKY)
-    center(d, y + 90, 'Sonuna kadar izleyin', font(False, 42), SKYL)
+    center(d, y + 90, st['sub'], font(False, 42), SKYL)
     footer(d); img.convert('RGB').save(path, quality=95)
 
 
@@ -169,7 +184,7 @@ def outro_card(title, path):
     center(d, 950, title, font(True, 58), (255, 255, 255))
     center(d, 1030, 'tek muhatap', font(True, 58), SKY)
     pill(d, W / 2, 1250, f'☎ {PHONE}', font(True, 66), SKY, INK, padx=60, h=170)
-    center(d, 1420, 'Ücretsiz keşif · Çatalca / İstanbul', font(False, 42), SKYL)
+    center(d, 1420, 'Ev · villa · bina · tadilat · tamirat', font(False, 42), SKYL)
     center(d, 1490, 'İşimiz güvencenizdir.', font(True, 44), (255, 255, 255))
     footer(d); img.convert('RGB').save(path, quality=95)
 
@@ -185,49 +200,68 @@ def ffmpeg_bin():
         sys.exit('ffmpeg bulunamadı')
 
 
+def probe_duration(path):
+    r = subprocess.run([ffmpeg_bin(), '-hide_banner', '-i', path], capture_output=True, text=True)
+    m = re.search(r'Duration: (\d+):(\d+):(\d+\.\d+)', r.stderr)
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
+
+
 def render(item, work, out_dir, music):
     tkey = template_for(f"{item.get('headline', '')} {item.get('pillar', '')} {item.get('caption', '')}")
     labels, title = TEMPLATES[tkey]
-    hook = (item.get('headline') or 'Bu ev nasıl yükseldi?').strip()[:80]
-    srcs = [item['video']] + [u for u in item.get('extras', []) if u != item['video']][:3]
-    local = []
-    for n, u in enumerate(srcs):
-        p = os.path.join(work, f'src{n}.mp4')
-        if u.startswith('http'):
-            try:
-                urllib.request.urlretrieve(u, p)
-            except Exception as e:
-                print('indirilemedi', u, e); continue
-        else:
-            shutil.copy(u, p)
-        local.append(p)
-    if not local: raise RuntimeError('video indirilemedi')
-    while len(local) < 4: local.append(local[len(local) % max(1, len(local))])
+    st = STYLES[int(item.get('style', 0)) % len(STYLES)]
+    hook = (item.get('headline') or 'İnşaata dair tüm işleriniz').strip()[:80]
+    main_p = os.path.join(work, 'main.mp4')
+    u = item['video']
+    if u.startswith('http'): urllib.request.urlretrieve(u, main_p)
+    else: shutil.copy(u, main_p)
+    durs = [3.4, 3.0, 3.0, 3.2]
+    T = 0.45  # geçiş süresi
+    main_d = probe_duration(main_p)
+    # Sahneler: kendi videosunun farklı bölümlerinden (aynı görüntü başka gönderide tekrar edilmez); video çok kısaysa havuzdan yedek
+    clips = []
+    if main_d >= 9:
+        span = max(0.1, main_d - durs[-1] - 0.6)
+        clips = [(main_p, round(0.4 + span * k / 3, 2)) for k in range(4)]
+    else:
+        clips = [(main_p, 0.3)]
+        for n, eu in enumerate([x for x in item.get('extras', []) if x != u][:3]):
+            p = os.path.join(work, f'x{n}.mp4')
+            try: urllib.request.urlretrieve(eu, p); clips.append((p, 0.8))
+            except Exception as e: print('indirilemedi', eu, e)
+        while len(clips) < 4: clips.append((main_p, round(0.3 + len(clips) * 1.1, 2)))
     intro, outro = os.path.join(work, 'intro.jpg'), os.path.join(work, 'outro.jpg')
-    intro_card(hook, intro); outro_card(title, outro)
+    intro_card(hook, intro, st); outro_card(title, outro)
     ovs = []
     for i in range(4):
         p = os.path.join(work, f'ov{i}.png'); scene_overlay(labels[i], i + 1, 4, title, p); ovs.append(p)
-    durs = [3.6, 3.0, 3.0, 3.0]
-    INTRO, OUTRO = 2.2, 3.2
-    total = INTRO + sum(durs) + OUTRO
-    args = [ffmpeg_bin(), '-hide_banner', '-loglevel', 'error', '-y', '-loop', '1', '-t', str(INTRO), '-i', intro]
-    for i in range(4): args += ['-stream_loop', '-1', '-ss', '0.8', '-t', str(durs[i]), '-i', local[i]]
+    INTRO, OUTRO = 2.4, 3.4
+    seg = [INTRO] + durs + [OUTRO]
+    total = sum(seg) - T * 5
+    args = [ffmpeg_bin(), '-hide_banner', '-loglevel', os.environ.get('FFLOG', 'error'), '-y', '-loop', '1', '-t', str(INTRO), '-i', intro]
+    for i, (cp, ss) in enumerate(clips): args += ['-stream_loop', '-1', '-ss', str(ss), '-t', str(durs[i] + 0.5), '-i', cp]
     for p in ovs: args += ['-loop', '1', '-t', '4', '-i', p]
     args += ['-loop', '1', '-t', str(OUTRO), '-i', outro]
-    if music: args += ['-stream_loop', '-1', '-i', music]
-    fc = [f'[0:v]scale={W}:{H},fps={FPS},setsar=1,fade=t=out:st={INTRO - 0.3}:d=0.3,format=yuv420p[v0]']
+    moff = (int(item['id'][:4], 16) % 40) if re.match(r'^[0-9a-f]{4}', item.get('id', '')) else 0
+    if music: args += ['-stream_loop', '-1', '-ss', str(moff), '-i', music]
+    Z = 1.12  # hafif yakınlaşma + kaydırma (Ken Burns) → durağan olmayan, akıcı görüntü
+    zw, zh = int(W * Z) // 2 * 2, int(H * Z) // 2 * 2
+    fc = [f'[0:v]scale={zw}:{zh},crop={W}:{H}:x=\'(iw-ow)/2\':y=\'(ih-oh)*(1-t/{INTRO})/2\',fps={FPS},setsar=1,format=yuv420p,settb=AVTB[v0]']
     for i in range(4):
-        d = durs[i]
-        fc.append(f'[{1 + i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},setsar=1,'
-                  f'eq=saturation=1.08:contrast=1.04,trim=duration={d},setpts=PTS-STARTPTS[b{i}]')
+        d = durs[i]; dirx = '(iw-ow)*t/' + str(d) if i % 2 == 0 else '(iw-ow)*(1-t/' + str(d) + ')'
+        fc.append(f'[{1 + i}:v]scale={zw}:{zh}:force_original_aspect_ratio=increase,crop={zw}:{zh},crop={W}:{H}:x=\'{dirx}\':y=\'(ih-oh)/2\','
+                  f'fps={FPS},setsar=1,eq=saturation=1.1:contrast=1.05,trim=duration={d},setpts=PTS-STARTPTS[b{i}]')
         fc.append(f'[{5 + i}:v]format=rgba,trim=duration={d}[o{i}]')
-        fc.append(f'[b{i}][o{i}]overlay=0:0:format=auto,fade=t=in:st=0:d=0.25,fade=t=out:st={d - 0.25}:d=0.25,format=yuv420p[v{1 + i}]')
-    fc.append(f'[9:v]scale={W}:{H},fps={FPS},setsar=1,fade=t=in:st=0:d=0.35,format=yuv420p[v5]')
-    fc.append('[v0][v1][v2][v3][v4][v5]concat=n=6:v=1:a=0[v]')
+        fc.append(f'[b{i}][o{i}]overlay=0:0:format=auto:shortest=1,fps={FPS},format=yuv420p,settb=AVTB[v{1 + i}]')
+    fc.append(f'[9:v]scale={W}:{H},fps={FPS},setsar=1,format=yuv420p,settb=AVTB[v5]')
+    prev, acc = 'v0', seg[0]
+    for k in range(1, 6):
+        out = 'v' if k == 5 else f'x{k}'
+        fc.append(f'[{prev}][v{k}]xfade=transition={st["tr"][k - 1]}:duration={T}:offset={acc - T:.3f}[{out}]')
+        acc = acc - T + seg[k]; prev = out
     maps = ['-map', '[v]']
     if music:
-        fc.append(f'[10:a]atrim=duration={total},asetpts=PTS-STARTPTS,afade=t=in:d=0.4,afade=t=out:st={total - 1.2}:d=1.2,volume=0.9[a]')
+        fc.append(f'[10:a]atrim=duration={total},asetpts=PTS-STARTPTS,afade=t=in:d=0.5,afade=t=out:st={total - 1.4}:d=1.4,volume=0.9[a]')
         maps += ['-map', '[a]']
     out_mp4 = os.path.join(out_dir, f"{item['id']}.mp4")
     args += ['-filter_complex', ';'.join(fc), *maps, '-t', f'{total:.2f}', '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'veryfast',
@@ -248,7 +282,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     music = os.path.join(HERE, 'music.m4a'); music = music if os.path.exists(music) else None
     if a.test:
-        items = [{'id': 'test', 'video': a.test[0], 'extras': a.test[1:], 'headline': '150 günde bir villa nasıl yükselir?'}]
+        items = [{'id': f'test{k}', 'video': a.test[0], 'extras': a.test[1:], 'headline': h, 'style': k} for k, h in enumerate(['Eski Ev, Yeni Hayat', 'Çatınız Akıtıyorsa İzleyin'])]
     else:
         with urllib.request.urlopen(a.queue, timeout=60) as r:
             items = json.load(r).get('items', [])
