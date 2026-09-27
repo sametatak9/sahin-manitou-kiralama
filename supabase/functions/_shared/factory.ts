@@ -478,6 +478,9 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const actx = { db, runId: null, actorId: admin?.user_id ?? null, tokens: { in: 0, out: 0 }, agent: null } as unknown as Parameters<typeof aiComplete>[0];
 
   const ORDER = ['instagram', 'facebook', 'youtube', 'tiktok', 'x'];
+  // Bugün daha önce yapay zekâ görselli banner üretildiyse (yarım kalan üretim) yeniden üretme
+  const { count: aiToday } = await db.from('media_library').select('id', { count: 'exact', head: true }).eq('kind', 'banner').gte('created_at', `${day}T00:00:00+03:00`).eq('template->>ai_image', 'true');
+  let aiBudget = (aiToday ?? 0) > 0 ? 0 : 1;
   for (const q of ((quotas || []) as Quota[]).sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform))) {
     if (partial) break;
     const h = have.get(q.platform); const needV = Math.max(0, q.video_per_day - (h?.videos ?? 0)); const needB = Math.max(0, q.image_per_day - (h?.banners ?? 0));
@@ -509,10 +512,11 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
         const slot = q.slot_times[Math.min(i + (3 - plan.length), q.slot_times.length - 1)] ?? '12:00';
         let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null; let aiUsed = false;
         if (it.format === 'banner') {
-          // 1. banner: kendi fotoğrafımız; 2. banner: yapay zekâ konsept görseli (temsilî — açıklamaya not düşülür)
+          // Banner'lar gerçek fotoğraflarımızla; günde yalnızca 1 tanesi yapay zekâ konsept görseliyle (temsilî — açıklamaya not düşülür)
           const pillarKey = PILLARS.find((pp) => pp.badge === it.badge)?.key ?? 'ev';
           let photo: Uint8Array | null = null; let photoMime: string | undefined; let ph: { id: string; url: string; mime?: string | null } | null = null;
-          if (i === plan.length - 1) { photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = photo[0] === 0x89 ? 'image/png' : 'image/jpeg'; aiUsed = true; }
+          // Gerçek fotoğraf ağırlıklı: tüm platformlarda günde EN FAZLA 1 yapay zekâ görselli banner (yönetici kararı)
+          if (i === plan.length - 1 && aiBudget > 0) { aiBudget--; photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = photo[0] === 0x89 ? 'image/png' : 'image/jpeg'; aiUsed = true; }
             else {
               // Gemini yoksa: önceden üretilmiş yapay zekâ görsel havuzundan (Canva) bu konuya en az kullanılanı
               const cand = (aiPool || []).filter((a) => a.pillar === pillarKey).concat((aiPool || []).filter((a) => a.pillar !== pillarKey));
