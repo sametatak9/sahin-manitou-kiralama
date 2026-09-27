@@ -76,8 +76,12 @@ function background(p: Promise<unknown>) {
 
 /** Onaylı + zamanı gelmiş içerikleri, hesabı gerçekten bağlı platformlarda yayınlar. Bağlı değilse dokunmaz. */
 async function publishDueContent(db: Db, workerId: string) {
+  // Yalnızca hesabı bağlı platformlar ve arşivlenmemiş taslaklar (bağlı olmayan platformların eski taslakları sırayı tıkamasın)
+  const { data: accs } = await db.from('social_accounts').select('connector_key,platform').eq('connection_status', 'connected');
+  const live = [...new Set((accs || []).flatMap((a) => [a.connector_key, a.platform]).filter(Boolean))] as string[];
+  if (!live.length) return [];
   const { data: drafts } = await db.from('social_drafts').select('id,primary_platform,platform_targets,approved_by,created_by,scheduled_at,format,design_provider,video_url')
-    .in('workflow_status', ['approved', 'scheduled']).lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(10);
+    .in('workflow_status', ['approved', 'scheduled']).is('archived_at', null).in('primary_platform', live).lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(10);
   const out = [];
   for (const d of drafts || []) {
     // Ham (editsiz) Reels yayınlanmaz: otomatik montaj bağlanana kadar bekler
