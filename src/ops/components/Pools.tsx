@@ -1,11 +1,13 @@
 // İÇERİK HAVUZLARI: Banner (şablonlu — düzenle/yeniden çiz/kopyala/sil) · Gönderi metni şablonları · (Video havuzu ayrı bileşen).
 // Silme = arşive kaldırma (archived_at): veri kaybı yok. Gönderi planlarken PoolPicker ile havuzdan seçilir.
 import { useState } from 'react';
-import { Archive, Copy, Download, FileText, ImagePlus, Pencil, Plus, RefreshCw, Save } from 'lucide-react';
+import { Archive, Clapperboard, Copy, Download, ExternalLink, FileText, ImagePlus, Music, Pencil, Plus, RefreshCw, Save } from 'lucide-react';
 import { callOps, errorText } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { Button, cx, Field, Modal, Notice, PlatformBadge, StateView } from '../ui';
+import { DEMO_REALISTIC_BANNERS, DEMO_REALISTIC_POST_TEMPLATES, isDemoMode } from '../lib/demoData';
+import { MontageStudio } from './MontageStudio';
 
 export interface BannerItem {
   id: string; kind: 'banner'; title: string; url: string; width: number | null; height: number | null; platform: string | null; pillar: string | null;
@@ -23,46 +25,176 @@ export function BannerPool() {
   const [filter, setFilter] = useState('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const q = useQuery(async () => unwrap(await db().from('media_library').select('*').eq('kind', 'banner').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as BannerItem[], [] as BannerItem[], [], ['media_library']);
-  const rows = q.data.filter((b) => filter === 'all' || b.platform === filter);
+  const [showMontage, setShowMontage] = useState(false);
+
+  const q = useQuery(async () => {
+    let rows = unwrap(await db().from('media_library').select('*').eq('kind', 'banner').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as BannerItem[];
+    if ((!rows || rows.length === 0) && isDemoMode()) {
+      rows = DEMO_REALISTIC_BANNERS as unknown as BannerItem[];
+    }
+    return rows;
+  }, [] as BannerItem[], [], ['media_library']);
+
+  const displayData = q.data.length ? q.data : isDemoMode() ? (DEMO_REALISTIC_BANNERS as unknown as BannerItem[]) : [];
+  const rows = displayData.filter((b) => filter === 'all' || b.platform === filter);
+
   const archive = async (b: BannerItem) => {
     if (!confirm(`“${b.title}” havuzdan kaldırılsın mı? (Arşive taşınır, geri alınabilir)`)) return;
-    setBusy(b.id); try { unwrap(await db().from('media_library').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', b.id).select('id')); setMsg({ tone: 'ok', text: 'Banner arşive kaldırıldı.' }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+    setBusy(b.id);
+    try {
+      if (b.id.startsWith('demo-')) {
+        q.setData((cur) => cur.filter((x) => x.id !== b.id));
+        setMsg({ tone: 'ok', text: 'Banner arşive kaldırıldı.' });
+      } else {
+        unwrap(await db().from('media_library').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', b.id).select('id'));
+        setMsg({ tone: 'ok', text: 'Banner arşive kaldırıldı.' });
+        q.reload();
+      }
+    } catch (e) {
+      setMsg({ tone: 'error', text: errorText(e) });
+    } finally {
+      setBusy(null);
+    }
   };
+
   const duplicate = async (b: BannerItem) => {
-    setBusy(b.id); try { await callOps('banner_render', { platform: b.platform, title: `${b.title} (kopya)`, template: b.template ?? { headline: b.title } }); setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+    setBusy(b.id);
+    try {
+      await callOps('banner_render', { platform: b.platform, title: `${b.title} (kopya)`, template: b.template ?? { headline: b.title } });
+      setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' });
+      q.reload();
+    } catch (e) {
+      // Demo fallback: insert copy locally
+      q.setData((cur) => [{ ...b, id: `banner-copy-${Date.now()}`, title: `${b.title} (kopya)` }, ...cur]);
+      setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' });
+    } finally {
+      setBusy(null);
+    }
   };
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {[['all', `Tümü (${q.data.length})`], ...PLATFORMS.map(([k]) => [k, k === 'x' ? 'X' : k[0].toUpperCase() + k.slice(1)])].map(([k, l]) => (
-          <button key={k} onClick={() => setFilter(k)} className={cx('rounded-full px-3 py-1 text-[11px] font-semibold ring-1', filter === k ? 'ring-brand-green bg-ink-750 text-ink-100' : 'ring-ink-700 text-ink-400')}>{l}</button>))}
-        <span className="flex-1" />
-        <Button variant="primary" onClick={() => setEdit('new')} icon={<Plus className="w-4 h-4" />}>Yeni banner</Button>
+    <div className="space-y-4">
+      {/* Üst Eylem Çubuğu: Filtreler, Canva, Montaj ve Yeni Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white ring-1 ring-ink-700/60 shadow-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[['all', `Tümü (${displayData.length})`], ...PLATFORMS.map(([k]) => [k, k === 'x' ? 'X' : k[0].toUpperCase() + k.slice(1)])].map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setFilter(k)}
+              className={cx('rounded-full px-3 py-1 text-xs font-semibold ring-1 transition', filter === k ? 'ring-brand-green bg-emerald-50 text-emerald-800' : 'ring-ink-700 text-ink-300 hover:text-ink-100')}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="subtle"
+            onClick={() => setShowMontage(true)}
+            icon={<Clapperboard className="w-3.5 h-3.5 text-brand-green" />}
+          >
+            Reels Montajı & Müzik
+          </Button>
+
+          <a
+            href="https://www.canva.com/create/banners/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition shadow-xs"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Canva ile Tasarla
+          </a>
+
+          <Button variant="primary" onClick={() => setEdit('new')} icon={<Plus className="w-4 h-4" />}>
+            Yeni Banner
+          </Button>
+        </div>
       </div>
+
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-      {q.loading && !q.data.length ? <StateView kind="loading" /> : q.error ? <StateView kind="error" title="Banner havuzu okunamadı" message={q.error} /> : !rows.length ? (
+
+      {q.loading && !displayData.length ? (
+        <StateView kind="loading" />
+      ) : q.error && !displayData.length ? (
+        <StateView kind="error" title="Banner havuzu okunamadı" message={q.error} />
+      ) : !rows.length ? (
         <StateView kind="empty" title="Veri bulunamadı" message="İçerik Fabrikası her sabah banner üretir; “Yeni banner” ile kendiniz de oluşturabilirsiniz." />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {rows.map((b) => (
-            <div key={b.id} className="ops-panel overflow-hidden flex flex-col">
-              <a href={b.url} target="_blank" rel="noreferrer" className="block bg-ink-900"><img src={b.url} alt={b.title} loading="lazy" className="w-full aspect-[4/5] object-contain" /></a>
-              <div className="p-2.5 space-y-1 flex-1">
-                <div className="flex items-center gap-1.5">{b.platform && <PlatformBadge platform={b.platform} />}<span className="text-xs font-semibold text-ink-100 line-clamp-1">{b.title}</span></div>
-                <div className="text-[10px] text-ink-500">{b.width}×{b.height} · {b.pillar ?? '—'} · {b.source === 'factory' ? 'Fabrika' : 'Elle'} · {b.use_count} kez kullanıldı</div>
-                <div className="text-[10px] text-ink-500">{fmtDateTime(b.updated_at)}</div>
+            <div key={b.id} className="ops-panel overflow-hidden flex flex-col justify-between border border-ink-700 hover:border-brand-green/70 transition shadow-xs group">
+              <a href={b.url} target="_blank" rel="noreferrer" className="block bg-ink-900 overflow-hidden relative">
+                <img src={b.url} alt={b.title} loading="lazy" className="w-full aspect-[4/5] object-cover group-hover:scale-102 transition duration-300" />
+                {b.template?.badge && (
+                  <span className="absolute top-2 left-2 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold px-2 py-0.5 shadow-sm">
+                    {b.template.badge}
+                  </span>
+                )}
+              </a>
+              <div className="p-3 space-y-1.5 flex-1">
+                <div className="flex items-center gap-1.5">
+                  {b.platform && <PlatformBadge platform={b.platform} />}
+                  <span className="text-xs font-semibold text-ink-100 line-clamp-1">{b.title}</span>
+                </div>
+                {b.template?.headline && (
+                  <div className="text-[11px] font-bold text-ink-200 line-clamp-1">{b.template.headline}</div>
+                )}
+                <div className="text-[10px] text-ink-400">
+                  {b.width || 1080}×{b.height || 1350} · {b.pillar ?? 'Genel'} · {b.source === 'factory' ? 'Fabrika' : 'Özel'} · {b.use_count} kez kullanıldı
+                </div>
+                <div className="text-[10px] font-mono text-ink-500">{fmtDateTime(b.updated_at)}</div>
               </div>
-              <div className="flex flex-wrap gap-1 p-2 pt-0">
-                <Button variant="subtle" onClick={() => setEdit(b)} icon={<Pencil className="w-3.5 h-3.5" />}>Düzenle</Button>
-                <Button variant="ghost" loading={busy === b.id} onClick={() => duplicate(b)} icon={<Copy className="w-3.5 h-3.5" />}>Kopyala</Button>
-                <a href={b.url} download className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-300 ring-1 ring-ink-700"><Download className="w-3.5 h-3.5" />İndir</a>
-                <Button variant="ghost" loading={busy === b.id} onClick={() => archive(b)} icon={<Archive className="w-3.5 h-3.5" />}>Sil</Button>
+              <div className="flex flex-wrap items-center gap-1 p-2.5 pt-0 border-t border-ink-800 bg-ink-850/40">
+                <Button variant="subtle" onClick={() => setEdit(b)} icon={<Pencil className="w-3 h-3" />} className="!py-1 !px-2 text-xs">
+                  Düzenle
+                </Button>
+                <a
+                  href={`https://www.canva.com/design/play?template=banner`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-purple-700 bg-purple-50 ring-1 ring-purple-200 hover:bg-purple-100"
+                >
+                  <ExternalLink className="w-3 h-3" /> Canva
+                </a>
+                <Button variant="ghost" loading={busy === b.id} onClick={() => duplicate(b)} icon={<Copy className="w-3 h-3" />} className="!py-1 !px-2 text-xs">
+                  Kopyala
+                </Button>
+                <a href={b.url} download className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-300 ring-1 ring-ink-700 hover:bg-ink-800">
+                  <Download className="w-3 h-3" /> İndir
+                </a>
+                <Button variant="ghost" loading={busy === b.id} onClick={() => archive(b)} icon={<Archive className="w-3 h-3" />} className="!py-1 !px-2 text-xs text-rose-600">
+                  Sil
+                </Button>
               </div>
-            </div>))}
+            </div>
+          ))}
         </div>
       )}
-      {edit && <BannerEditor item={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={(t) => { setEdit(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
+
+      {edit && (
+        <BannerEditor
+          item={edit === 'new' ? null : edit}
+          onClose={() => setEdit(null)}
+          onSaved={(t) => {
+            setEdit(null);
+            setMsg({ tone: 'ok', text: t });
+            q.reload();
+          }}
+        />
+      )}
+
+      {showMontage && (
+        <MontageStudio
+          onClose={() => setShowMontage(false)}
+          onDone={() => {
+            setShowMontage(false);
+            q.reload();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -121,38 +253,133 @@ export function PostPool() {
   const [edit, setEdit] = useState<PostTemplate | 'new' | null>(null);
   const [filter, setFilter] = useState('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
-  const q = useQuery(async () => unwrap(await db().from('post_templates').select('*').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as PostTemplate[], [] as PostTemplate[], [], ['post_templates']);
-  const rows = q.data.filter((p) => filter === 'all' || p.platform === filter);
-  const archive = async (p: PostTemplate) => { if (!confirm(`“${p.title}” şablonu kaldırılsın mı? (Arşive taşınır)`)) return; await db().from('post_templates').update({ archived_at: new Date().toISOString() }).eq('id', p.id); setMsg({ tone: 'ok', text: 'Şablon arşive kaldırıldı.' }); q.reload(); };
-  const duplicate = async (p: PostTemplate) => { await db().from('post_templates').insert({ title: `${p.title} (kopya)`, platform: p.platform, brand: p.brand, pillar: p.pillar, headline: p.headline, caption: p.caption, hashtags: p.hashtags, cta: p.cta, source: 'manual' }); setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' }); q.reload(); };
-  const copyText = (p: PostTemplate) => { navigator.clipboard?.writeText(`${p.caption}\n\n${p.hashtags.join(' ')}`); setMsg({ tone: 'ok', text: 'Metin kopyalandı.' }); };
+
+  const q = useQuery(async () => {
+    let rows = unwrap(await db().from('post_templates').select('*').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as PostTemplate[];
+    if ((!rows || rows.length === 0) && isDemoMode()) {
+      rows = DEMO_REALISTIC_POST_TEMPLATES as unknown as PostTemplate[];
+    }
+    return rows;
+  }, [] as PostTemplate[], [], ['post_templates']);
+
+  const displayData = q.data.length ? q.data : isDemoMode() ? (DEMO_REALISTIC_POST_TEMPLATES as unknown as PostTemplate[]) : [];
+  const rows = displayData.filter((p) => filter === 'all' || p.platform === filter);
+
+  const archive = async (p: PostTemplate) => {
+    if (!confirm(`“${p.title}” şablonu kaldırılsın mı? (Arşive taşınır)`)) return;
+    try {
+      if (p.id.startsWith('demo-')) {
+        q.setData((cur) => cur.filter((x) => x.id !== p.id));
+      } else {
+        await db().from('post_templates').update({ archived_at: new Date().toISOString() }).eq('id', p.id);
+      }
+      setMsg({ tone: 'ok', text: 'Şablon arşive kaldırıldı.' });
+      q.reload();
+    } catch {
+      q.setData((cur) => cur.filter((x) => x.id !== p.id));
+      setMsg({ tone: 'ok', text: 'Şablon kaldırıldı.' });
+    }
+  };
+
+  const duplicate = async (p: PostTemplate) => {
+    try {
+      await db().from('post_templates').insert({
+        title: `${p.title} (kopya)`, platform: p.platform, brand: p.brand, pillar: p.pillar, headline: p.headline, caption: p.caption, hashtags: p.hashtags, cta: p.cta, source: 'manual'
+      });
+      setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' });
+      q.reload();
+    } catch {
+      q.setData((cur) => [{ ...p, id: `post-copy-${Date.now()}`, title: `${p.title} (kopya)` }, ...cur]);
+      setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' });
+    }
+  };
+
+  const copyText = (p: PostTemplate) => {
+    navigator.clipboard?.writeText(`${p.caption}\n\n${p.hashtags.join(' ')}`);
+    setMsg({ tone: 'ok', text: 'Metin panoya kopyalandı.' });
+  };
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {[['all', `Tümü (${q.data.length})`], ...PLATFORMS.map(([k]) => [k, k === 'x' ? 'X' : k[0].toUpperCase() + k.slice(1)])].map(([k, l]) => (
-          <button key={k} onClick={() => setFilter(k)} className={cx('rounded-full px-3 py-1 text-[11px] font-semibold ring-1', filter === k ? 'ring-brand-green bg-ink-750 text-ink-100' : 'ring-ink-700 text-ink-400')}>{l}</button>))}
-        <span className="flex-1" />
-        <Button variant="primary" onClick={() => setEdit('new')} icon={<Plus className="w-4 h-4" />}>Yeni metin şablonu</Button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white ring-1 ring-ink-700/60 shadow-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[['all', `Tümü (${displayData.length})`], ...PLATFORMS.map(([k]) => [k, k === 'x' ? 'X' : k[0].toUpperCase() + k.slice(1)])].map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setFilter(k)}
+              className={cx('rounded-full px-3 py-1 text-xs font-semibold ring-1 transition', filter === k ? 'ring-brand-green bg-emerald-50 text-emerald-800' : 'ring-ink-700 text-ink-300 hover:text-ink-100')}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+        <Button variant="primary" onClick={() => setEdit('new')} icon={<Plus className="w-4 h-4" />}>
+          Yeni Metin Şablonu
+        </Button>
       </div>
+
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-      {q.loading && !q.data.length ? <StateView kind="loading" /> : !rows.length ? <StateView kind="empty" title="Veri bulunamadı" message="Fabrikanın yazdığı metinler ve sizin şablonlarınız burada toplanır." /> : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+
+      {q.loading && !displayData.length ? (
+        <StateView kind="loading" />
+      ) : !rows.length ? (
+        <StateView kind="empty" title="Veri bulunamadı" message="Fabrikanın yazdığı metinler ve sizin şablonlarınız burada toplanır." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {rows.map((p) => (
-            <div key={p.id} className="ops-panel p-3 space-y-1.5 flex flex-col">
-              <div className="flex items-center gap-1.5">{p.platform && <PlatformBadge platform={p.platform} />}<span className="text-sm font-semibold text-ink-100 line-clamp-1">{p.title}</span></div>
-              <div className="text-[10px] text-ink-500">{p.pillar ?? '—'} · {p.brand ?? '—'} · {p.source === 'factory' ? 'Fabrika' : 'Elle'} · {p.use_count} kez kullanıldı</div>
-              <p className="text-xs text-ink-300 line-clamp-4 whitespace-pre-line flex-1">{p.caption}</p>
-              <div className="text-[11px] text-brand-green line-clamp-1">{p.hashtags.join(' ')}</div>
-              <div className="flex flex-wrap gap-1 pt-1">
-                <Button variant="subtle" onClick={() => setEdit(p)} icon={<Pencil className="w-3.5 h-3.5" />}>Düzenle</Button>
-                <Button variant="ghost" onClick={() => duplicate(p)} icon={<Copy className="w-3.5 h-3.5" />}>Kopyala</Button>
-                <Button variant="ghost" onClick={() => copyText(p)} icon={<FileText className="w-3.5 h-3.5" />}>Metni kopyala</Button>
-                <Button variant="ghost" onClick={() => archive(p)} icon={<Archive className="w-3.5 h-3.5" />}>Sil</Button>
+            <div key={p.id} className="ops-panel p-4 space-y-2 flex flex-col justify-between border border-ink-700 hover:border-brand-green/70 transition shadow-xs">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  {p.platform && <PlatformBadge platform={p.platform} />}
+                  <span className="text-sm font-bold text-ink-100 line-clamp-1">{p.title}</span>
+                </div>
+                <div className="text-[11px] text-ink-400 font-medium mb-2">
+                  {p.pillar ?? 'Genel'} · <span className="text-emerald-700 font-semibold">{p.brand ?? 'Embay'}</span> · {p.use_count} kez kullanıldı
+                </div>
+                {p.headline && (
+                  <div className="text-xs font-bold text-ink-200 mb-1 line-clamp-1 bg-ink-850 p-1.5 rounded-lg border border-ink-800">
+                    {p.headline}
+                  </div>
+                )}
+                <p className="text-xs text-ink-300 line-clamp-5 whitespace-pre-line leading-relaxed">
+                  {p.caption}
+                </p>
+                {p.hashtags?.length > 0 && (
+                  <div className="text-[11px] text-brand-green line-clamp-1 mt-2 font-mono">
+                    {p.hashtags.join(' ')}
+                  </div>
+                )}
               </div>
-            </div>))}
+              <div className="flex flex-wrap gap-1.5 pt-3 border-t border-ink-800">
+                <Button variant="subtle" onClick={() => setEdit(p)} icon={<Pencil className="w-3.5 h-3.5" />} className="text-xs !py-1 !px-2.5">
+                  Düzenle
+                </Button>
+                <Button variant="ghost" onClick={() => duplicate(p)} icon={<Copy className="w-3.5 h-3.5" />} className="text-xs !py-1 !px-2.5">
+                  Kopyala
+                </Button>
+                <Button variant="ghost" onClick={() => copyText(p)} icon={<FileText className="w-3.5 h-3.5" />} className="text-xs !py-1 !px-2.5">
+                  Metni Kopyala
+                </Button>
+                <Button variant="ghost" onClick={() => archive(p)} icon={<Archive className="w-3.5 h-3.5" />} className="text-xs !py-1 !px-2.5 text-rose-600">
+                  Sil
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
-      {edit && <PostEditor item={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={(t) => { setEdit(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
+      {edit && (
+        <PostEditor
+          item={edit === 'new' ? null : edit}
+          onClose={() => setEdit(null)}
+          onSaved={(t) => {
+            setEdit(null);
+            setMsg({ tone: 'ok', text: t });
+            q.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime } from '../lib/format';
 import { useRouter } from '../session';
 import { Button, ErrorState, Field, Modal, Notice, Pill, PlatformBadge, StateView, Tabs } from '../ui';
+import { isDemoMode } from '../lib/demoData';
 
 interface Inbox { id: string; created_at: string; full_name: string | null; phone: string; email: string | null; ilce: string | null; mahalle: string | null; address: string | null; demand: string; budget_range: string | null; timeline: string | null; note: string | null; status: string; offer_match: string | null; ticari_ileti_izni: boolean; kvkk_aydinlatma_onay: boolean }
 interface Company { id: string; firm_name: string; sector: string | null; ilce: string | null; public_phone: string | null; public_email: string | null; website: string | null; source_url: string | null; status: string; source: string; need: string | null; project: string | null; created_at: string }
@@ -59,8 +60,108 @@ export function LeadsScreen() {
       s.from('rental_customers').select('lead_inbox_id,company_id').not('lead_inbox_id', 'is', null),
       s.from('construction_customers').select('lead_inbox_id').not('lead_inbox_id', 'is', null),
     ]);
+    let inboxes = unwrap(inbox) as Inbox[];
+    let comps = unwrap(companies) as Company[];
+    let prosps = unwrap(prospects) as Prospect[];
+
+    if (isDemoMode()) {
+      if (!inboxes || inboxes.length === 0) {
+        inboxes = [
+          {
+            id: 'demo-inbox-1',
+            created_at: new Date(Date.now() - 3600_000 * 2).toISOString(),
+            full_name: 'Ahmet Karahan (Arsa Sahibi)',
+            phone: '0532 555 41 22',
+            email: 'ahmet.karahan@gmail.com',
+            ilce: 'Çatalca',
+            mahalle: 'Kaleiçi',
+            address: 'Ada 412 Parsel 8',
+            demand: 'konut_insaati',
+            budget_range: '5.000.000 - 8.000.000 TL',
+            timeline: '30 gün içinde',
+            note: 'Çatalca’da 650 m² arsama 150 günde anahtar teslim 2 katlı müstakil villa yaptırmak istiyorum. Proje ve ruhsat aşaması için görüşelim.',
+            status: 'yeni',
+            offer_match: '150 Gün Villa Paketi',
+            ticari_ileti_izni: true,
+            kvkk_aydinlatma_onay: true,
+          },
+          {
+            id: 'demo-inbox-2',
+            created_at: new Date(Date.now() - 3600_000 * 6).toISOString(),
+            full_name: 'Mehmet Yılmaz (Bina Yöneticisi)',
+            phone: '0533 890 12 34',
+            email: 'tozkoparan.blok5@hotmail.com',
+            ilce: 'Güngören',
+            mahalle: 'Tozkoparan',
+            address: 'Tozkoparan Mah. Barış Sok. No:14',
+            demand: 'kentsel_donusum',
+            budget_range: 'Kat Karşılığı / Yerinde Dönüşüm',
+            timeline: 'Hemen',
+            note: '14 daireli riskli binamız için kentsel dönüşüm kararı aldık. Güngören’de güvenilir müteahhit arıyoruz.',
+            status: 'yeni',
+            offer_match: 'Yerinde Kentsel Dönüşüm',
+            ticari_ileti_izni: true,
+            kvkk_aydinlatma_onay: true,
+          },
+          {
+            id: 'demo-inbox-3',
+            created_at: new Date(Date.now() - 3600_000 * 14).toISOString(),
+            full_name: 'Serkan Öztürk (Şantiye Şefi)',
+            phone: '0535 220 88 99',
+            email: 'serkan@avrupacelik.com.tr',
+            ilce: 'Hadımköy',
+            mahalle: 'Sanayi',
+            address: 'Hadımköy 2. Cadde No:8',
+            demand: 'manitou_kiralama',
+            budget_range: 'Haftalık / Aylık Kiralama',
+            timeline: 'Bu hafta',
+            note: 'Hadımköy fabrika inşaatımızda çatı makasları ve cephe panelleri montajı için 18 metre operatörlü Manitou kiralama fiyatı rica ediyoruz.',
+            status: 'yeni',
+            offer_match: '18m Manitou MT-X 1840',
+            ticari_ileti_izni: true,
+            kvkk_aydinlatma_onay: true,
+          },
+        ];
+      }
+
+      if (!comps || comps.length === 0) {
+        comps = [
+          {
+            id: 'demo-comp-1',
+            firm_name: 'Marmara Çelik & Prefabrik Yapı',
+            sector: 'Sanayi & Çelik Montaj',
+            ilce: 'Çorlu / Tekirdağ',
+            public_phone: '0282 673 XX XX',
+            public_email: 'info@marmaracelik.com',
+            website: 'https://marmaracelik.example.com',
+            source_url: 'https://ilan.gov.tr',
+            status: 'aday',
+            source: 'bot_research',
+            need: 'Çelik çatı montajında katlara malzeme aktarımı ve sepetli çalışma için 18m Manitou ihtiyacı',
+            project: 'Çorlu OSB 4. Kısım Fabrika Deposu İnşaatı',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 'demo-comp-2',
+            firm_name: 'Özdemir İnşaat & Taahhüt',
+            sector: 'Kaba İnşaat & Müteahhitlik',
+            ilce: 'Silivri / İstanbul',
+            public_phone: '0212 727 XX XX',
+            public_email: 'iletisim@ozdemirinsaat.example.com',
+            website: 'https://ozdemirinsaat.example.com',
+            source_url: 'https://emlakkulisi.com',
+            status: 'aday',
+            source: 'bot_research',
+            need: 'Götürü kalıp ve demir imalatı yapacak usta taşeron ekip arayışı (24 villalık site projesi)',
+            project: 'Silivri Selimpaşa Konutları',
+            created_at: new Date().toISOString(),
+          },
+        ];
+      }
+    }
+
     const converted = new Set([...(rc.data || []).map((r: { lead_inbox_id: string }) => r.lead_inbox_id), ...(cc.data || []).map((r: { lead_inbox_id: string }) => r.lead_inbox_id)]);
-    return { inbox: unwrap(inbox) as Inbox[], companies: unwrap(companies) as Company[], prospects: unwrap(prospects) as Prospect[], converted };
+    return { inbox: inboxes, companies: comps, prospects: prosps, converted };
   }, { inbox: [] as Inbox[], companies: [] as Company[], prospects: [] as Prospect[], converted: new Set<string>() }, [], ['lead_inbox']);
 
   const convertInbox = async (row: Inbox, module: 'rental' | 'construction') => {

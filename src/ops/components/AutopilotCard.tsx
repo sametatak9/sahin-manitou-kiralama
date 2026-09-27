@@ -154,6 +154,37 @@ export function AutopilotCard() {
           )}
         </div>
       </div>
+
+      {/* Sabitlenmiş Bot Yayın Emri & Tekrar Önleme Koruması */}
+      <div className="mt-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/20 via-slate-900/40 to-sky-950/20 border border-brand-green/30 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-bold text-ink-100 flex items-center gap-1.5 font-mono">
+            <span className="w-2 h-2 rounded-full bg-brand-green animate-pulse" />
+            SABİTLENMİŞ BOT YAYIN EMRİ & İÇERİK MATRİSİ
+          </span>
+          <span className="text-[10px] font-mono text-brand-green bg-brand-green/10 px-2 py-0.5 rounded border border-brand-green/30">
+            ✓ Anti-Duplicate (Tekrar Önleme) Aktif
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          <div className="p-2.5 rounded-lg bg-ink-900/80 border border-ink-800">
+            <div className="font-semibold text-emerald-600">1. Reels Video (Kurgulu)</div>
+            <div className="text-[11px] text-ink-300 mt-0.5">Genel İnşaat (Villa & Kentsel Dönüşüm) · Havuz klipleri + Dinamik fon müziği</div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-ink-900/80 border border-ink-800">
+            <div className="font-semibold text-emerald-600">2. Genel İnşaat Gönderisi</div>
+            <div className="text-[11px] text-ink-300 mt-0.5">Müteahhitlik, yap-sat, götürü temelden kalıp-demir işleri ve taahhüt</div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-ink-900/80 border border-ink-800">
+            <div className="font-semibold text-emerald-600">3. Manitou Kiralama Gönderisi</div>
+            <div className="text-[11px] text-ink-300 mt-0.5">Şahin Manitou operatörlü 14m/18m telehandler kiralama ve şantiye yükleme</div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-ink-900/80 border border-ink-800">
+            <div className="font-semibold text-emerald-600">4. Şantiye Hikayesi (Story)</div>
+            <div className="text-[11px] text-ink-300 mt-0.5">Şantiyede bugünün mesaisi, donatı/statik kontrolü ve şeffaf ilerleme</div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

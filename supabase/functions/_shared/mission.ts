@@ -44,11 +44,12 @@ export const COMPLIANCE_RULES = [
 
 /** Tüm botlar için alaka kuralları: yalnızca görevin amacına doğrudan hizmet eden, üzerine iş yapılabilecek kayıtlar. */
 export const RELEVANCE_RULES = [
-  'ALAKA KURALLARI (tüm botlar için zorunlu):',
-  '- Yalnızca GÖREVİN AMACINA DOĞRUDAN hizmet eden kayıtları bulgu yap. Konu, sektör ve bölge görevdekiyle birebir örtüşmeli.',
-  '- Her bulgu somut ve üzerine iş yapılabilir olmalı: belirli bir proje, ihale, ilan, talep, firma veya duyuru. Genel haber, yorum, köşe yazısı, istatistik, fiyat endeksi, borsa/ekonomi haberi, siyaset, magazin, reklam, başka sektör veya görev bölgesi dışı kayıt BULGU DEĞİLDİR.',
-  '- Her bulguya "relevance" (0-10) ve "fit" (tek cümle: bu kayıt görevdeki hangi ihtiyaca neden uyuyor) yaz. Emin değilsen veya 7\'nin altındaysa o kaydı hiç yazma.',
-  '- Aynı olayın farklı haberlerini tek bulgu say. Az ama doğru bulgu, çok ama alakasız bulgudan iyidir; uygun kayıt yoksa boş liste döndür.',
+  'ALAKA VE HEDEF KİTLE KURALLARI (tüm iş bulucu botlar için zorunlu ve bağlayıcıdır):',
+  '- KESİNLİKLE RAKİP FİRMALARI BULGU YAPMA! (Diğer müteahhitlik şirketleri, inşaat taahhüt firmaları, vinç kiralama firmaları veya onların tanıtım/portföy sayfaları kesinlikle BULGU DEĞİLDİR). Bize rakip değil, doğrudan BİZE İŞ VERECEK MÜŞTERİ ve İŞ FIRSATI bul.',
+  '- GENEL İNŞAAT ALANINDA ARANACAK ŞEYLER: Götürü işler, anahtar teslim müteahhitlik işleri, yap-sat projeleri için arsa sahipleri / kat karşılığı talepler, temelden çatıya kaba inşaat, kalıp demir işleri, taşeron ve usta kalıpçı ekibi arayan ana yükleniciler, kentsel dönüşüm için müteahhit arayan bina/site yönetimleri ve villa/konut yaptırmak isteyen şahıslar.',
+  '- İŞ MAKİNESİ (MANİTOU) ALANINDA ARANACAK ŞEYLER: Sektördeki tek uzman botumuz ilan sitelerine, iş ilanlarına ve şantiyelere bakar. Yalnızca teleskopik yükleyici (Manitou/telehandler) kiralamak isteyen, şantiyesine yüksekte malzeme taşıma/montaj için vinç/forklift arayan veya telehandler operatörü arayan müşterileri bulur. Kiralık manitou reklamı veren rakipleri ASLA listeleme.',
+  '- Her bulgu somut ve üzerine teklif verilebilir olmalı: belirli bir talep, iş ilanı, ihale, arsa sahibi duyurusu veya taşeron arayışı. Genel haber, makale, reklam veya başka bölge kayıtları BULGU DEĞİLDİR.',
+  '- Her bulguya "relevance" (0-10) ve "fit" (tek cümle: bu iş/talep Embay Yapı veya Şahin Manitou için neden bir iş fırsatı) yaz. 7\'nin altındaki veya rakip kokan kayıtları derhal ele.',
 ].join('\n');
 const MIN_RELEVANCE = 7;
 const STOP = new Set(['icin', 'veya', 'olan', 'gibi', 'daha', 'kadar', 'yeni', 'ilan', 'ilani', 'proje', 'projesi', 'istanbul', 'turkiye']);

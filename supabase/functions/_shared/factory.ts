@@ -19,15 +19,14 @@ const PLATFORM_RULES: Record<Platform, string> = {
   x: 'X (Twitter): toplam en fazla 260 karakter, 1-2 hashtag, net teklif/haber dili.',
 };
 
-// İçerik direkleri (her gün kaydırılır → tekrar yok)
+// İçerik direkleri (Sabitlenmiş Bot Matrisi: Genel İnşaat Reels + Genel İnşaat Post + Manitou Post + Şantiye Story)
 const PILLARS = [
-  { key: 'manitou', brand: 'Şahin Manitou', topic: 'Operatörlü Manitou (teleskopik yükleyici) kiralama: şantiyede yüksekte malzeme taşıma, montaj, günlük/aylık kiralama', badge: 'KİRALIK MANİTOU' },
-  { key: 'villa', brand: 'Embay Yapı', topic: 'Çatalca ve çevresinde villa / müstakil ev yapımı: projelendirme, ruhsat, anahtar teslim', badge: 'VİLLA İNŞAATI' },
-  { key: 'donusum', brand: 'Embay Yapı', topic: 'Kentsel dönüşüm ve kat karşılığı: süreç, haklar, güvenli müteahhit seçimi', badge: 'KENTSEL DÖNÜŞÜM' },
-  { key: 'tadilat', brand: 'Embay Yapı', topic: 'Tadilat, çatı, dış cephe mantolama, güçlendirme ve ek kat işleri', badge: 'TADİLAT & TAMİRAT' },
-  { key: 'santiye', brand: 'İkisi', topic: 'Şantiyeden gerçek iş: kaba inşaat, temel, çelik montaj ve manitou ile malzeme taşıma anları', badge: 'ŞANTİYEDEN' },
-  { key: 'ipucu', brand: 'Embay Yapı', topic: 'Ev/villa yaptıracaklara bilgi: maliyeti etkileyen 5 kalem, betonarme mi prefabrik mi, zemin etüdü', badge: 'BİLGİ' },
-  { key: 'kampanya', brand: 'Şahin Manitou', topic: 'Kampanya/hatırlatma: bu ay manitou kiralamada ücretsiz keşif, hızlı teklif, 7/24 destek', badge: 'KAMPANYA' },
+  { key: 'insaat_reels', brand: 'Embay Yapı', topic: 'Genel İnşaat kurgulu Reels videosu: 150 günde villa yapımı, Güngören kentsel dönüşüm, temelden kalıp-demir şantiye aşamaları, fon müziği ile kurgulu video', badge: 'VİLLA & İNŞAAT REELS' },
+  { key: 'insaat_post', brand: 'Embay Yapı', topic: 'Genel İnşaat taahhüt gönderisi: Götürü kaba inşaat, müteahhitlik, yap-sat projeleri, temelden kalıp demir işleri, anahtar teslim güvence', badge: 'GENEL İNŞAAT & TAAHHÜT' },
+  { key: 'manitou', brand: 'Şahin Manitou', topic: 'Operatörlü Manitou (teleskopik yükleyici) kiralama: 14m ve 18m telehandler, şantiyede yüksekte malzeme taşıma, çelik montaj, günlük/aylık kiralama', badge: 'KİRALIK MANİTOU' },
+  { key: 'santiye_story', brand: 'İkisi', topic: 'Şantiye hikayesi (Story): Günlük şantiye mesaisi, donatı kontrolü, beton dökümü anı, perde kalıp imalatı ve şeffaf ilerleme', badge: 'ŞANTİYE GÜNLÜĞÜ' },
+  { key: 'donusum', brand: 'Embay Yapı', topic: 'Kentsel dönüşüm ve kat karşılığı: Güngören Tozkoparan yerinde dönüşüm, deprem yönetmeliği, kat malikleri sözleşmesi', badge: 'KENTSEL DÖNÜŞÜM' },
+  { key: 'villa', brand: 'Embay Yapı', topic: 'Çatalca ve Silivri villa yapımı: 150 günde temelden çatıya anahtar teslim villa taahhüdü, radye temel ve C35 beton', badge: '150 GÜNDE VİLLA' },
 ] as const;
 
 const CONTENT_SCHEMA = {
