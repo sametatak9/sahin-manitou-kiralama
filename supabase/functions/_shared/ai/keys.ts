@@ -15,7 +15,7 @@ export const COMPAT: Record<CompatProvider, { url: string; testModel: string; ag
   openrouter: { url: OPENROUTER_URL, testModel: 'meta-llama/llama-3.3-70b-instruct:free', agentModel: 'meta-llama/llama-3.3-70b-instruct:free', free: true },
   github: { url: GITHUB_MODELS_URL, testModel: 'openai/gpt-4.1-mini', agentModel: 'openai/gpt-4.1-mini', free: true },
   // Cerebras: ücretsiz katman (kart gerekmez, günlük ~1M token). Mistral: ücretsiz "Experiment" planı (telefon doğrulaması).
-  cerebras: { url: 'https://api.cerebras.ai/v1/chat/completions', testModel: 'llama3.1-8b', agentModel: 'llama-3.3-70b', free: true },
+  cerebras: { url: 'https://api.cerebras.ai/v1/chat/completions', testModel: 'gpt-oss-120b', agentModel: 'gpt-oss-120b', free: true },
   mistral: { url: 'https://api.mistral.ai/v1/chat/completions', testModel: 'mistral-small-latest', agentModel: 'mistral-small-latest', free: true },
 };
 let db: SupabaseClient | null = null;

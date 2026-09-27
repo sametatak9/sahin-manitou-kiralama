@@ -26,9 +26,11 @@ function openAiCompatible(name: CompatProvider, url: string, envName: string): A
       messages: [{ role: 'system', content: input.system }, { role: 'user', content: input.prompt }],
     };
     // Groq her modelde json_schema desteklemiyor: orada JSON metinden ayrıştırılır
+    // Cerebras gpt-oss akıl yürütme modeli: düşük akıl yürütme → token bütçesi metne kalsın
+    if (name === 'cerebras') body.reasoning_effort = 'low';
     if (input.schema && name === 'openai') body.response_format = { type: 'json_schema', json_schema: { name: 'output', schema: input.schema, strict: false } };
     const data = await postJson(url, { authorization: `Bearer ${await openaiKey()}` }, body);
-    const text = data.choices?.[0]?.message?.content ?? '';
+    const text = String(data.choices?.[0]?.message?.content ?? '').trim();
     return { text, json: input.schema ? extractJson(text) : null, usage: { tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }, stopReason: data.choices?.[0]?.finish_reason ?? '' };
   },
   async runAgent(agent: AgentConfig, input: AgentRunInput): Promise<AgentRunResult> {
@@ -40,7 +42,7 @@ function openAiCompatible(name: CompatProvider, url: string, envName: string): A
     let turns = 0; let toolCalls = 0; let finalText = ''; let stopReason = '';
     while (turns < input.maxTurns) {
       turns++;
-      const data = await postJson(url, { authorization: `Bearer ${key}` }, { model: agent.model, max_completion_tokens: agent.max_tokens, messages, tools });
+      const data = await postJson(url, { authorization: `Bearer ${key}` }, { model: agent.model, max_completion_tokens: agent.max_tokens, messages, tools, ...(name === 'cerebras' ? { reasoning_effort: 'low' } : {}) });
       usage.tokensIn += data.usage?.prompt_tokens ?? 0; usage.tokensOut += data.usage?.completion_tokens ?? 0;
       const msg = data.choices?.[0]?.message; stopReason = data.choices?.[0]?.finish_reason ?? '';
       messages.push(msg);
