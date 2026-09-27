@@ -86,7 +86,7 @@ async function publishDueContent(db: Db, workerId: string) {
   for (const d of drafts || []) {
     // Ham (editsiz) Reels yayınlanmaz: otomatik montaj bağlanana kadar bekler
     // Editsiz video ASLA yayınlanmaz (Reels, kısa video veya videolu gönderi): önce otomatik montaj (müzik + geçiş + logo) bağlanmalı
-      if (d.video_url && d.design_provider !== 'embay_montage') continue;
+      if ((d.video_url || d.format === 'reel' || d.format === 'short') && d.design_provider !== 'embay_montage') continue;
     const platform = d.primary_platform || d.platform_targets?.[0];
     const def = connectorByKey(platform);
     if (!def?.publish) continue;
@@ -653,15 +653,17 @@ async function api(db: Db, req: Request) {
 const REEL_HOST = 'https://embay-panel.vercel.app';
 async function reelQueue(db: Db) {
   const from = new Date(Date.now() - 24 * 3600_000).toISOString(); const to = new Date(Date.now() + 72 * 3600_000).toISOString();
-  const { data } = await db.from('social_drafts').select('id,video_url,headline,content_pillar,primary_platform,design_provider,format')
-    .is('archived_at', null).in('workflow_status', ['pending_approval', 'scheduled', 'approved']).not('video_url', 'is', null)
+  const { data } = await db.from('social_drafts').select('id,video_url,media_urls,headline,content_pillar,primary_platform,design_provider,format')
+    .is('archived_at', null).in('workflow_status', ['pending_approval', 'scheduled', 'approved']).or('video_url.not.is.null,format.eq.reel')
     .gte('scheduled_at', from).lte('scheduled_at', to).order('scheduled_at').limit(12);
-  const rows = (data || []).filter((d) => d.design_provider !== 'embay_montage' && /\/storage\/v1\/object\/public\//.test(d.video_url || '') && !/manitou|kiralama/i.test(d.headline ?? ''));
+  const pub = (u?: string | null) => /\/storage\/v1\/object\/public\//.test(u || '');
+  const rows = (data || []).filter((d) => d.design_provider !== 'embay_montage' && !/manitou|kiralama/i.test(d.headline ?? '')
+    && (pub(d.video_url) || (!d.video_url && (d.media_urls || []).filter(pub).length >= 4)));
   const { data: pool } = await db.from('media_library').select('url,edit').eq('kind', 'video').is('archived_at', null).neq('source', 'montage').limit(300);
   const ok = (pool || []).filter((v) => (v.edit as { codec?: string } | null)?.codec !== 'hevc' && /\/storage\/v1\/object\/public\//.test(v.url || '')).map((v) => v.url as string);
   const pick = (not: string) => ok.filter((u) => u !== not).sort(() => Math.random() - 0.5).slice(0, 3);
   // Sahneler kendi videosunun farklı bölümlerinden kesilir; havuz videoları yalnızca kaynak video çok kısaysa yedek olarak kullanılır
-  return { items: rows.map((d) => ({ id: d.id, video: d.video_url, extras: pick(d.video_url!), headline: d.headline ?? '', pillar: d.content_pillar ?? '', platform: d.primary_platform ?? '', style: parseInt(d.id.slice(0, 2), 16) % 4 })) };
+  return { items: rows.map((d) => ({ id: d.id, video: d.video_url, photos: d.video_url ? [] : (d.media_urls || []).filter(pub).slice(0, 12), extras: d.video_url ? pick(d.video_url) : [], headline: d.headline ?? '', pillar: d.content_pillar ?? '', platform: d.primary_platform ?? '', style: parseInt(d.id.slice(0, 2), 16) % 4 })) };
 }
 async function reelAttach(db: Db, body: { id?: string }) {
   const id = String(body.id || '');

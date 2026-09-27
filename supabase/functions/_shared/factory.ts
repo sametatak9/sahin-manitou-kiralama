@@ -478,8 +478,15 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
         } else {
           // Her Reels için DAHA ÖNCE HİÇ KULLANILMAMIŞ bir video; kalmadıysa aynı videoyu tekrar atmak yerine Reels üretilmez
           const v = freshVideos[vIdx++];
-          if (!v) { errors.push(`${q.platform}: yeni (kullanılmamış) video kalmadı — Video Havuzu’na yeni şantiye/tadilat videosu yükleyin`); continue; }
-          video_url = v.url; media = [v.url]; reelCover = v.cover_url ?? null; usedVideos.add(v.url); await markUsed(v);
+          if (v) { video_url = v.url; media = [v.url]; reelCover = v.cover_url ?? null; usedVideos.add(v.url); await markUsed(v); }
+          else {
+            // Yeni video kalmadıysa: kendi fotoğraflarımızdan ritme oturan foto-Reels (otomatik montaj müzik + geçiş ekler)
+            const set: Array<{ id: string; url: string; use_count?: number | null }> = [];
+            while (set.length < 6 && photos?.length && pIdx < photos.length * 2) { const ph = photos[pIdx++ % photos.length]; if (!set.some((x) => x.id === ph.id)) set.push(ph); }
+            if (set.length < 4) { errors.push(`${q.platform}: yeni video/fotoğraf kalmadı — Havuza yeni şantiye/tadilat videosu veya fotoğrafı yükleyin`); continue; }
+            for (const ph of set) await markUsed(ph);
+            media = set.map((x) => x.url); reelCover = set[0].url; note = 'FOTO-REELS: fotoğraflardan otomatik montaj';
+          }
         }
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
         const { error } = await db.from('social_drafts').insert({

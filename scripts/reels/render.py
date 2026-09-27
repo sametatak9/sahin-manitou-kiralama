@@ -238,68 +238,114 @@ def probe_duration(path):
     return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
 
 
+def bpm_of(music):
+    m = re.search(r'_(\d{2,3})_', os.path.basename(music or ''))
+    return int(m.group(1)) if m else 120
+
+
+def enc_args():
+    return ['-an', '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', str(FPS)]
+
+
+def segment(src, kind, ss, frames, out, overlay=None, punch=False, flash=False, kb_dir=1):
+    """Tek sahne: kaynak (video/fotoğraf) → 1080x1920, zoom (vuruşta 'punch' ya da yavaş Ken Burns), isteğe bağlı yazı katmanı ve flaş."""
+    d = frames / FPS
+    args = [ffmpeg_bin(), '-hide_banner', '-loglevel', os.environ.get('FFLOG', 'error'), '-y']
+    if kind == 'image': args += ['-loop', '1', '-t', f'{d + 0.2:.3f}', '-i', src]
+    else: args += ['-stream_loop', '-1', '-ss', f'{ss:.2f}', '-t', f'{d + 0.3:.3f}', '-i', src]
+    if overlay: args += ['-loop', '1', '-t', f'{d + 0.2:.3f}', '-i', overlay]
+    base = f'[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS}'
+    if kind == 'image':
+        z = f"1.04+0.10*on/{frames}"; xs = f"(iw-iw/zoom)*{'on' if kb_dir > 0 else f'({frames}-on)'}/{frames}"
+        base += f",zoompan=z='{z}':x='{xs}':y='(ih-ih/zoom)/2':d=1:s={W}x{H}:fps={FPS}"
+    elif punch:
+        base += f",zoompan=z='1.03+0.16*exp(-on/5)':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s={W}x{H}:fps={FPS}"
+    else:
+        base += f",zoompan=z='1.03+0.05*on/{frames}':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s={W}x{H}:fps={FPS}"
+    base += ',eq=saturation=1.12:contrast=1.06:brightness=0.01'
+    if flash: base += ',fade=t=in:st=0:d=0.2:color=white'
+    base += f',trim=end_frame={frames},setpts=PTS-STARTPTS'
+    fc = [base + ('[b]' if overlay else '[v]')]
+    if overlay: fc.append(f'[1:v]format=rgba[o];[b][o]overlay=0:0:format=auto:shortest=1,format=yuv420p[v]')
+    args += ['-filter_complex', ';'.join(fc), '-map', '[v]', '-frames:v', str(frames), *enc_args(), out]
+    subprocess.run(args, check=True)
+
+
+def card_segment(img, frames, out, flash=False):
+    d = frames / FPS
+    vf = f"scale={W}:{H},zoompan=z='1.0+0.06*on/{frames}':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s={W}x{H}:fps={FPS}"
+    if flash: vf += ',fade=t=in:st=0:d=0.2:color=white'
+    subprocess.run([ffmpeg_bin(), '-hide_banner', '-loglevel', os.environ.get('FFLOG', 'error'), '-y', '-loop', '1', '-t', f'{d + 0.2:.3f}', '-i', img,
+                    '-vf', vf, '-frames:v', str(frames), *enc_args(), out], check=True)
+
+
+def fetch(u, p):
+    if u.startswith('http'): urllib.request.urlretrieve(u, p)
+    else: shutil.copy(u, p)
+    return p
+
+
 def render(item, work, out_dir, music):
+    """Ritme oturan montaj: giriş kartı (1 ölçü) → hazırlık sahnesi (1 ölçü) → DROP'ta flaş + her 2 vuruşta kesme (zoom punch)
+    → kapanış kartı. Kaynak: taslağın KENDİ videosunun farklı anları veya kendi fotoğraf seti (tekrar yok)."""
     tkey = template_for(f"{item.get('headline', '')} {item.get('pillar', '')} {item.get('caption', '')}")
     labels, title = TEMPLATES[tkey]
     st = STYLES[int(item.get('style', 0)) % len(STYLES)]
     hook = (item.get('headline') or 'İnşaata dair tüm işleriniz').strip()[:80]
-    main_p = os.path.join(work, 'main.mp4')
-    u = item['video']
-    if u.startswith('http'): urllib.request.urlretrieve(u, main_p)
-    else: shutil.copy(u, main_p)
-    durs = [3.4, 3.0, 3.0, 3.2]
-    T = 0.45  # geçiş süresi
-    main_d = probe_duration(main_p)
-    # Sahneler: kendi videosunun farklı bölümlerinden (aynı görüntü başka gönderide tekrar edilmez); video çok kısaysa havuzdan yedek
-    clips = []
-    if main_d >= 9:
-        span = max(0.1, main_d - durs[-1] - 0.6)
-        clips = [(main_p, round(0.4 + span * k / 3, 2)) for k in range(4)]
-    else:
-        clips = [(main_p, 0.3)]
-        for n, eu in enumerate([x for x in item.get('extras', []) if x != u][:3]):
-            p = os.path.join(work, f'x{n}.mp4')
-            try: urllib.request.urlretrieve(eu, p); clips.append((p, 0.8))
-            except Exception as e: print('indirilemedi', eu, e)
-        while len(clips) < 4: clips.append((main_p, round(0.3 + len(clips) * 1.1, 2)))
+    beat = 60.0 / bpm_of(music)
+    # kaynaklar
+    srcs = []
+    photos = [u for u in item.get('photos', []) if u][:12]
+    if photos:
+        for n, u in enumerate(photos):
+            try: srcs.append(('image', fetch(u, os.path.join(work, f'p{n}.jpg')), 0.0))
+            except Exception as e: print('indirilemedi', u, e)
+    if item.get('video'):
+        mp = fetch(item['video'], os.path.join(work, 'main.mp4')); srcs.append(('video', mp, probe_duration(mp)))
+        if srcs[-1][2] < 6:
+            for n, eu in enumerate([x for x in item.get('extras', []) if x != item['video']][:3]):
+                try: p = fetch(eu, os.path.join(work, f'x{n}.mp4')); srcs.append(('video', p, probe_duration(p)))
+                except Exception as e: print('indirilemedi', eu, e)
+    if not srcs: raise RuntimeError('kaynak yok')
+    NCUT = 12
+    # zaman çizelgesi (vuruş cinsinden): giriş 4, hazırlık 4, kesmeler 12x2, kapanış 8
+    plan = [('intro', 4), ('build', 4)] + [('cut', 2)] * NCUT + [('outro', 8)]
+    edges = [0]
+    for _, nb in plan: edges.append(edges[-1] + nb)
+    fr = [round(e * beat * FPS) for e in edges]  # kümülatif kare → kayma yok
     intro, outro = os.path.join(work, 'intro.jpg'), os.path.join(work, 'outro.jpg')
     intro_card(hook, intro, st); outro_card(title, outro)
     ovs = []
     for i in range(4):
         p = os.path.join(work, f'ov{i}.png'); scene_overlay(labels[i], i + 1, 4, title, p); ovs.append(p)
-    INTRO, OUTRO = 2.4, 3.4
-    seg = [INTRO] + durs + [OUTRO]
-    total = sum(seg) - T * 5
-    args = [ffmpeg_bin(), '-hide_banner', '-loglevel', os.environ.get('FFLOG', 'error'), '-y', '-loop', '1', '-t', str(INTRO), '-i', intro]
-    for i, (cp, ss) in enumerate(clips): args += ['-stream_loop', '-1', '-ss', str(ss), '-t', str(durs[i] + 0.5), '-i', cp]
-    for p in ovs: args += ['-loop', '1', '-t', '4', '-i', p]
-    args += ['-loop', '1', '-t', str(OUTRO), '-i', outro]
-    moff = (int(item['id'][:4], 16) % 40) if re.match(r'^[0-9a-f]{4}', item.get('id', '')) else 0
-    if music: args += ['-stream_loop', '-1', '-ss', str(moff), '-i', music]
-    Z = 1.12  # hafif yakınlaşma + kaydırma (Ken Burns) → durağan olmayan, akıcı görüntü
-    zw, zh = int(W * Z) // 2 * 2, int(H * Z) // 2 * 2
-    fc = [f'[0:v]scale={zw}:{zh},crop={W}:{H}:x=\'(iw-ow)/2\':y=\'(ih-oh)*(1-t/{INTRO})/2\',fps={FPS},setsar=1,format=yuv420p,settb=AVTB[v0]']
-    for i in range(4):
-        d = durs[i]; dirx = '(iw-ow)*t/' + str(d) if i % 2 == 0 else '(iw-ow)*(1-t/' + str(d) + ')'
-        fc.append(f'[{1 + i}:v]scale={zw}:{zh}:force_original_aspect_ratio=increase,crop={zw}:{zh},crop={W}:{H}:x=\'{dirx}\':y=\'(ih-oh)/2\','
-                  f'fps={FPS},setsar=1,eq=saturation=1.1:contrast=1.05,trim=duration={d},setpts=PTS-STARTPTS[b{i}]')
-        fc.append(f'[{5 + i}:v]format=rgba,trim=duration={d}[o{i}]')
-        fc.append(f'[b{i}][o{i}]overlay=0:0:format=auto:shortest=1,fps={FPS},format=yuv420p,settb=AVTB[v{1 + i}]')
-    fc.append(f'[9:v]scale={W}:{H},fps={FPS},setsar=1,format=yuv420p,settb=AVTB[v5]')
-    prev, acc = 'v0', seg[0]
-    for k in range(1, 6):
-        out = 'v' if k == 5 else f'x{k}'
-        fc.append(f'[{prev}][v{k}]xfade=transition={st["tr"][k - 1]}:duration={T}:offset={acc - T:.3f}[{out}]')
-        acc = acc - T + seg[k]; prev = out
-    maps = ['-map', '[v]']
-    if music:
-        fc.append(f'[10:a]atrim=duration={total},asetpts=PTS-STARTPTS,afade=t=in:d=0.5,afade=t=out:st={total - 1.4}:d=1.4,volume=0.9[a]')
-        maps += ['-map', '[a]']
+    # kesme kaynakları: videolarda farklı anlar, fotoğraflarda sırayla
+    vids = [s_ for s_ in srcs if s_[0] == 'video']; imgs = [s_ for s_ in srcs if s_[0] == 'image']
+    picks = []
+    for k in range(NCUT + 1):
+        if imgs and (not vids or k % 2 == 1):
+            picks.append((imgs[k % len(imgs)][1], 'image', 0.0))
+        else:
+            kind, path, dur = vids[k % len(vids)]
+            span = max(0.1, dur - 1.2); ss = 0.2 + span * ((k * 7) % (NCUT + 1)) / (NCUT + 1)
+            picks.append((path, 'video', ss))
+    segs = []
+    for i, (kind, _) in enumerate(plan):
+        frames = fr[i + 1] - fr[i]; out = os.path.join(work, f's{i:02d}.mp4')
+        if kind == 'intro': card_segment(intro, frames, out)
+        elif kind == 'outro': card_segment(outro, frames, out, flash=True)
+        elif kind == 'build':
+            src, sk, ss = picks[0]; segment(src, sk, ss, frames, out, overlay=ovs[0], kb_dir=1)
+        else:
+            c = i - 2; src, sk, ss = picks[1 + c]
+            segment(src, sk, ss, frames, out, overlay=ovs[min(3, c * 4 // NCUT)], punch=True, flash=(c == 0), kb_dir=1 if c % 2 else -1)
+        segs.append(out)
+    lst = os.path.join(work, 'list.txt')
+    with open(lst, 'w') as f: f.write(''.join(f"file '{p}'\n" for p in segs))
+    total = fr[-1] / FPS
     out_mp4 = os.path.join(out_dir, f"{item['id']}.mp4")
-    args += ['-filter_complex', ';'.join(fc), *maps, '-t', f'{total:.2f}', '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'veryfast',
-             '-crf', '21', '-maxrate', '8M', '-bufsize', '16M', '-pix_fmt', 'yuv420p', '-r', str(FPS)]
-    if music: args += ['-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2']
-    args += ['-movflags', '+faststart', out_mp4]
+    args = [ffmpeg_bin(), '-hide_banner', '-loglevel', os.environ.get('FFLOG', 'error'), '-y', '-f', 'concat', '-safe', '0', '-i', lst]
+    if music: args += ['-i', music, '-map', '0:v', '-map', '1:a', '-af', f'afade=t=out:st={total - 1.2:.2f}:d=1.2', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2']
+    args += ['-c:v', 'copy', '-t', f'{total:.3f}', '-movflags', '+faststart', out_mp4]
     subprocess.run(args, check=True)
     Image.open(intro).convert('RGB').save(os.path.join(out_dir, f"{item['id']}.jpg"), quality=88)
     return out_mp4
@@ -310,20 +356,21 @@ def main():
     ap.add_argument('--queue', default='https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/reels/queue')
     ap.add_argument('--out', default='public/reels')
     ap.add_argument('--test', nargs='*')
+    ap.add_argument('--photos', nargs='*')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     # Müzik havuzu: scripts/reels/music/ içindeki parçalar sırayla (her videoda farklı parça), yoksa varsayılan music.m4a
     mdir = os.path.join(HERE, 'music')
     tracks = sorted(os.path.join(mdir, f) for f in os.listdir(mdir) if f.lower().endswith(('.m4a', '.mp3', '.aac', '.wav'))) if os.path.isdir(mdir) else []
     if os.path.exists(os.path.join(HERE, 'music.m4a')): tracks.append(os.path.join(HERE, 'music.m4a'))
-    if a.test:
-        items = [{'id': f'test{k}', 'video': a.test[0], 'extras': a.test[1:], 'headline': h, 'style': k} for k, h in enumerate(['Eski Ev, Yeni Hayat', 'Çatınız Akıtıyorsa İzleyin'])]
+    if a.test or a.photos:
+        items = [{'id': f'test{k}', 'video': a.test[0] if a.test else None, 'extras': (a.test or [])[1:], 'photos': a.photos or [], 'headline': h, 'style': k} for k, h in enumerate(['Eski Ev, Yeni Hayat', 'Çatınız Akıtıyorsa İzleyin'])]
     else:
         with urllib.request.urlopen(a.queue, timeout=60) as r:
             items = json.load(r).get('items', [])
     done = []
     for it in items:
-        if not a.test and os.path.exists(os.path.join(a.out, f"{it['id']}.mp4")):
+        if not (a.test or a.photos) and os.path.exists(os.path.join(a.out, f"{it['id']}.mp4")):
             done.append(it['id']); continue
         with tempfile.TemporaryDirectory() as work:
             try:
