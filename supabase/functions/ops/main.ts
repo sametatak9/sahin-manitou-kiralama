@@ -14,7 +14,7 @@ import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
 import { businessDiscovery, graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
-import { factoryTick, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
+import { aiImage, factoryTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
@@ -712,6 +712,17 @@ Deno.serve(async (req) => {
     }
     // Otomatik Reels montajı (GitHub Actions): montaj bekleyen Reels kuyruğu ve üretilen videoyu taslağa bağlama.
     // Gizli anahtar gerekmez: kuyruk yalnızca zaten herkese açık video adreslerini verir; bağlama yalnızca kendi panel alan adımızdaki dosyayı kabul eder.
+    // Tasarım önizleme (yalnızca iç gizli anahtarla): yapay zekâ görselli lüks banner'ı base64 JPEG döndürür — yayın yapmaz, kayıt tutmaz
+    if (path.startsWith('/design-preview') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { prompt?: string; headline?: string; subtitle?: string; badge?: string; w?: number; h?: number; seed?: number };
+      const w = b.w ?? 1080; const h = b.h ?? 1350;
+      const photo = await aiImage(String(b.prompt || 'modern detached house, photorealistic, no text'), w, h, b.seed ?? 1);
+      const jpg = await renderBanner({ w, h, brand: { phone: '0531 436 29 04', website: 'www.embayyapi.com.tr' }, brandName: 'Embay Yapı', badge: b.badge || 'EV YAPIMI', headline: b.headline || 'Hayalinizdeki Ev', subtitle: b.subtitle || '', cta: 'Ücretsiz keşif', photo, photoMime: 'image/jpeg' });
+      let bin = ''; for (let i = 0; i < jpg.length; i += 0x8000) bin += String.fromCharCode(...jpg.subarray(i, i + 0x8000));
+      return json({ ai: Boolean(photo), bytes: jpg.length, b64: btoa(bin) });
+    }
     if (path.startsWith('/reels/queue') && req.method === 'GET') return json(await reelQueue(db));
     if (path.startsWith('/reels/attach') && req.method === 'POST') return json(await reelAttach(db, await req.json().catch(() => ({}))));
     // Meta (Facebook/Instagram) gelen olaylar: yorum, mesaj, bahsetme. Doğrulama belirteci Vault'ta; imza uygulama gizli anahtarıyla kontrol edilir.

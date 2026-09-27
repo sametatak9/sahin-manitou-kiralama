@@ -279,6 +279,38 @@ ${bar}
 </svg>`;
 }
 
+
+// ── Yapay zekâ görseli (ücretsiz, anahtarsız: Pollinations / FLUX). Temsili konsept görsel üretir; gönderide "temsilidir" notu düşülür.
+const AI_SCENES: Record<string, string[]> = {
+  ev: ['modern two-storey detached family house with garden, warm evening light, stone and white plaster facade, wooden details', 'newly built detached house in Istanbul countryside, landscaped yard, golden hour, architectural photography'],
+  villa: ['luxury modern villa with infinity pool at dusk, warm interior lights, natural stone walls, olive trees', 'contemporary villa with large glass windows and wooden pergola, sunset, Mediterranean landscape'],
+  bina: ['modern residential apartment building, clean facade with balconies, blue sky, urban Istanbul street', 'reinforced concrete building under construction with tower crane, scaffolding, dramatic sky'],
+  tadilat: ['bright renovated living room with oak floor and stone accent wall, warm lighting, interior design photography', 'freshly renovated modern kitchen with marble countertop and wood cabinets, soft daylight'],
+  tamirat: ['roof renovation with new clay tiles on a family house, craftsman tools, clear sky', 'house exterior facade insulation and fresh plaster work, scaffolding, daylight'],
+  santiye: ['construction site at sunrise with concrete formwork and rebar, workers silhouettes, cinematic', 'concrete pouring on a building slab, construction workers, golden hour, cinematic'],
+  ipucu: ['architect blueprint and hard hat on a table with a house model, soft light, top view', 'site engineer checking building plans at a construction site, shallow depth of field'],
+};
+function aiPrompt(pillar: string, di: number) {
+  const list = AI_SCENES[pillar] ?? AI_SCENES.ev;
+  return `${list[di % list.length]}, photorealistic, high detail, professional real estate photography, 35mm, no text, no watermark, no logo, no people faces`;
+}
+export async function aiImage(prompt: string, w: number, h: number, seed: number): Promise<Uint8Array | null> {
+  // FLUX en iyi 1024 civarında çalışır: oranı koru, banner çiziminde ölçeklenir
+  const k = 1024 / Math.max(w, h); const iw = Math.round((w * k) / 8) * 8; const ih = Math.round((h * k) / 8) * 8;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${iw}&height=${ih}&model=flux&nologo=true&enhance=false&seed=${seed}`;
+  for (let tries = 0; tries < 2; tries++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+      const ct = r.headers.get('content-type') || '';
+      if (r.ok && /image\/(jpeg|png|webp)/.test(ct)) {
+        const b = new Uint8Array(await r.arrayBuffer());
+        if (b.length > 20_000) return b;
+      }
+    } catch { /* tekrar dene */ }
+  }
+  return null;
+}
+
 const LEGACY_SAHIN_DESIGN = false as boolean;
 const LUXURY_DESIGN = true as boolean; // lacivert+altın lüks tasarım (false → önceki mavi Embay tasarımı)
 export async function renderBanner(o: BannerOpts) {
@@ -462,19 +494,25 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
       try {
         if (it.format === 'banner') rendered++;
         const slot = q.slot_times[Math.min(i + (3 - plan.length), q.slot_times.length - 1)] ?? '12:00';
-        let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null;
+        let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null; let aiUsed = false;
         if (it.format === 'banner') {
-          const ph = photos?.length ? photos[pIdx++ % photos.length] : null;
-          const photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null;
-          if (ph) await markUsed(ph);
-          const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: it.brand, badge: it.badge, headline: it.headline, subtitle: it.subtitle, cta: it.cta, photo: photo && photo.length < 4_000_000 ? photo : null, photoMime: ph?.mime });
+          // 1. banner: kendi fotoğrafımız; 2. banner: yapay zekâ konsept görseli (temsilî — açıklamaya not düşülür)
+          const pillarKey = PILLARS.find((pp) => pp.badge === it.badge)?.key ?? 'ev';
+          let photo: Uint8Array | null = null; let photoMime: string | undefined; let ph: { id: string; url: string; mime?: string | null } | null = null;
+          if (i === plan.length - 1) { photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = 'image/jpeg'; aiUsed = true; } }
+          if (!photo) {
+            ph = photos?.length ? photos[pIdx++ % photos.length] : null;
+            photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null; photoMime = ph?.mime ?? undefined;
+            if (ph) await markUsed(ph as { id: string });
+          }
+          const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: it.brand, badge: it.badge, headline: it.headline, subtitle: it.subtitle, cta: it.cta, photo: photo && photo.length < 4_000_000 ? photo : null, photoMime });
           const path = `factory/${day}/${q.platform}-${Date.now()}-${i}.jpg`;
           const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/jpeg', upsert: true });
           if (up.error) throw up.error;
           media = [db.storage.from('design-exports').getPublicUrl(path).data.publicUrl];
           await db.from('media_library').insert({ kind: 'banner', title: it.headline.slice(0, 120), url: media[0], mime: 'image/jpeg', width: q.width, height: q.height, targets: [q.platform],
             caption: it.caption, hashtags: it.hashtags, status: 'queued', platform: q.platform, pillar: it.badge, source: 'factory', created_by: admin?.user_id ?? null,
-            template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null } });
+            template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null, ai_image: aiUsed } });
         } else {
           // Her Reels için DAHA ÖNCE HİÇ KULLANILMAMIŞ bir video; kalmadıysa aynı videoyu tekrar atmak yerine Reels üretilmez
           const v = freshVideos[vIdx++];
@@ -488,6 +526,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
             media = set.map((x) => x.url); reelCover = set[0].url; note = 'FOTO-REELS: fotoğraflardan otomatik montaj';
           }
         }
+        if (aiUsed) it.caption = `${it.caption}\n\n📌 Görsel temsilidir (yapay zekâ ile hazırlanmıştır).`;
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
         const { error } = await db.from('social_drafts').insert({
           brand: it.brand, title: `${q.platform.toUpperCase()} · ${it.format === 'reel' ? 'Kısa video' : 'Banner'} · ${it.headline}`.slice(0, 200), body,
