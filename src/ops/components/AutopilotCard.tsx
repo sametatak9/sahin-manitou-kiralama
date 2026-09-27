@@ -50,6 +50,20 @@ export function AutopilotCard() {
   const q = useQuery(load, { state: null, plan: [], pendingDrafts: 0, todayPosts: [], factory: null } as Data, [], ['ops_autopilot', 'bot_missions', 'social_drafts', 'content_factory_days']);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  // "Botları başlat": otopilotu açar ve zamanlanmış tüm bot görevlerini HEMEN başlatır
+  const runNow = async () => {
+    setBusy(true); setErr(null); setDone(null);
+    const { data, error } = await db().rpc('autopilot_run_now');
+    if (error) setErr(error.message);
+    else {
+      const r = data as { started: Array<{ title: string }>; skipped: number };
+      setDone(r.started.length
+        ? `${r.started.length} bot görevi şimdi başladı: ${r.started.map((x) => x.title.split(' — ')[0]).join(' · ')}.${r.skipped ? ` (${r.skipped} görev bugün zaten çalıştı ya da şu an çalışıyor.)` : ''} Canlı izlemek için Raporlar ekranına bakın.`
+        : 'Bütün görevler bugün zaten çalıştı ya da şu an çalışıyor — yenileri yarın otomatik başlar.');
+    }
+    await q.reload(); setBusy(false);
+  };
   const st = q.data.state;
 
   const toggle = async (enabled: boolean, patch: Partial<State> = {}) => {
@@ -83,8 +97,8 @@ export function AutopilotCard() {
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             {st.enabled
-              ? <Button variant="danger" loading={busy} onClick={() => toggle(false)} icon={<CirclePause className="w-5 h-5" />}>Botları durdur</Button>
-              : <Button variant="primary" loading={busy} onClick={() => toggle(true)} icon={<CirclePlay className="w-5 h-5" />}>Botları başlat</Button>}
+              ? <><Button variant="primary" loading={busy} onClick={runNow} icon={<CirclePlay className="w-5 h-5" />}>Tüm botları şimdi çalıştır</Button><Button variant="danger" loading={busy} onClick={() => toggle(false)} icon={<CirclePause className="w-5 h-5" />}>Botları durdur</Button></>
+              : <Button variant="primary" loading={busy} onClick={runNow} icon={<CirclePlay className="w-5 h-5" />}>Botları başlat</Button>}
             <label className="inline-flex items-center gap-1 text-xs text-ink-400"><Clock className="w-3.5 h-3.5" />
               <select className="ops-input !py-1 !px-2 !w-auto" value={st.start_hour} disabled={busy} onChange={(e) => toggle(st.enabled, { start_hour: Number(e.target.value) })}>
                 {Array.from({ length: 12 }, (_, i) => i + 5).filter((h) => h < st.end_hour).map((h) => <option key={h} value={h}>{hh(h)}</option>)}
@@ -97,6 +111,7 @@ export function AutopilotCard() {
         )}
       </div>
       {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
+      {done && <div className="mt-3"><Notice tone="ok">{done}</Notice></div>}
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="rounded-xl bg-ink-900/60 ring-1 ring-ink-800 p-3">
