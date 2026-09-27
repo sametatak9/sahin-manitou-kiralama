@@ -58,7 +58,14 @@ export async function liveKeyTest(p: KeyProvider, key: string, model?: string): 
             body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ok' }] }], generationConfig: { maxOutputTokens: 5 } }) })
         : await fetch(COMPAT[p].url, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
             body: JSON.stringify({ model: model || COMPAT[p].testModel, max_tokens: 5, messages: [{ role: 'user', content: 'ok' }] }) });
-    if (r.ok) return { ok: true, detail: 'Çalışıyor (gerçek cevap üretti)' };
+    if (r.ok) {
+      // OpenAI uyumlu uçlar gerçek bir cevap (choices) döndürmeli; ör. GitHub Models bazen yalnızca "OK" döndürüyor → çalışmıyor say
+      if (p !== 'anthropic' && p !== 'gemini') {
+        const body = await r.json().catch(() => null) as { choices?: unknown[] } | null;
+        if (!body?.choices?.length) return { ok: false, detail: 'Reddedildi: sağlayıcı gerçek cevap üretmedi (servis kapalı / değişmiş olabilir) — başka ücretsiz sağlayıcı (Cerebras, Groq) ekleyin' };
+      }
+      return { ok: true, detail: 'Çalışıyor (gerçek cevap üretti)' };
+    }
     // Gemini ana modeli yoğunsa (503) hafif modelle doğrula — yoğunluk anahtar hatası değildir
     if (p === 'gemini' && r.status === 503 && !model) return await liveKeyTest(p, key, 'gemini-flash-lite-latest');
     const t = (await r.text()).slice(0, 500);
