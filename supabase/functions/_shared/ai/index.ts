@@ -1,5 +1,5 @@
 import { anthropicProvider } from './anthropic.ts';
-import { geminiProvider, githubProvider, groqProvider, openaiProvider, openrouterProvider } from './others.ts';
+import { cerebrasProvider, geminiProvider, githubProvider, groqProvider, mistralProvider, openaiProvider, openrouterProvider } from './others.ts';
 import type { AgentConfig, AIProvider } from './types.ts';
 
 export * from './types.ts';
@@ -11,6 +11,8 @@ const providers: Record<AgentConfig['provider'], AIProvider> = {
   groq: groqProvider,
   openrouter: openrouterProvider,
   github: githubProvider,
+  cerebras: cerebrasProvider,
+  mistral: mistralProvider,
 };
 
 export function getProvider(name: AgentConfig['provider']): AIProvider {

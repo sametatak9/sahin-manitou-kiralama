@@ -7,6 +7,7 @@ import type { Approval, Draft } from '../lib/types';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
 import { PostPreview } from '../components/PostPreview';
+import { DraftApprovals } from '../components/DraftApprovals';
 
 type Filter = 'pending_approval' | 'scheduled' | 'approved' | 'published' | 'failed' | 'rejected' | 'all';
 const FILTERS: Array<{ id: Filter; label: string }> = [
@@ -30,16 +31,26 @@ export function ApprovalsScreen() {
     return c;
   }, {} as Record<string, number>, [], ['approval_requests']);
   const selected = state.id ?? null;
+  const drafts = useQuery(async () => (await db().from('social_drafts').select('id', { count: 'exact', head: true }).eq('workflow_status', 'pending_approval').is('archived_at', null)).count ?? 0, 0, [], ['social_drafts']);
+  const [section, setSection] = useState<'drafts' | 'actions' | null>(null);
+  const sec = section ?? (drafts.data > 0 || (counts.data.pending_approval ?? 0) === 0 ? 'drafts' : 'actions');
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl font-semibold text-ink-100">Approval Stream</h2>
-          <p className="text-xs text-ink-400">Sosyal yayın, müşteri mesajı, WhatsApp, e-posta, ilan ve lead dönüşümü insan onayı olmadan yürütülmez. Her karar audit log’a yazılır.</p>
-        </div>
-        <Tabs value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ ...f, count: f.id === 'all' ? undefined : counts.data[f.id] ?? 0 }))} />
+      <div>
+        <h2 className="font-display text-xl font-semibold text-ink-100">Onay Merkezi</h2>
+        <p className="text-xs text-ink-400">Botların hazırladığı paylaşımlar, mesajlar ve teklifler onayınız olmadan dışarı çıkmaz. Her karar kayıt altına alınır.</p>
       </div>
+      <div className="grid grid-cols-2 gap-2">
+        {([['drafts', 'İçerik taslakları', drafts.data, 'Paylaşım onayı'], ['actions', 'İşlem onayları', counts.data.pending_approval ?? 0, 'Mesaj · teklif · ilan · lead']] as const).map(([id, label, n, sub]) => (
+          <button key={id} type="button" onClick={() => setSection(id)} className={cx('rounded-2xl p-3 text-left ring-1 transition', sec === id ? 'bg-gradient-to-br from-[#262A6B] to-[#1E3FA0] text-white ring-transparent shadow' : 'bg-white ring-ink-700 text-ink-200 hover:ring-brand-green/40')}>
+            <div className="flex items-center justify-between"><span className="text-sm font-semibold">{label}</span><span className={cx('min-w-7 text-center rounded-full px-2 py-0.5 text-xs font-bold', n ? (sec === id ? 'bg-amber-300 text-ink-100' : 'bg-amber-400 text-white') : sec === id ? 'bg-white/20' : 'bg-ink-800 text-ink-400')}>{n}</span></div>
+            <div className={cx('text-[11px] mt-0.5', sec === id ? 'text-[#CFE4FA]' : 'text-ink-400')}>{sub}</div>
+          </button>
+        ))}
+      </div>
+      {sec === 'drafts' ? <DraftApprovals onCount={() => drafts.reload()} /> : <>
+      <Tabs value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ ...f, count: f.id === 'all' ? undefined : counts.data[f.id] ?? 0 }))} />
       {q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : q.data.length === 0 ? (
         <StateView kind="empty" title="Bu durumda kayıt yok" message="Botlar onay gerektiren bir işlem ürettiğinde veya Gönderi Stüdyosu’ndan onaya gönderdiğinizde burada görünür." />
       ) : (
@@ -62,6 +73,7 @@ export function ApprovalsScreen() {
           ))}
         </div>
       )}
+      </>}
       {selected && <ApprovalDetail id={selected} onClose={() => go('approvals')} onChanged={() => { q.reload(); counts.reload(); }} />}
     </div>
   );

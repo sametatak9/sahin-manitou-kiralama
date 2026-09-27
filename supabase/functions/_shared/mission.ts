@@ -230,7 +230,8 @@ export const ERROR_KIND: Record<string, string> = {
 };
 
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
-interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq' | 'openrouter' | 'github'; model: string; system: string; key: string }
+type CompatResearch = 'openrouter' | 'github' | 'cerebras' | 'mistral';
+interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq' | CompatResearch; model: string; system: string; key: string }
 async function chooseAi(db: Db, botId: string | null, preferred?: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
   if (botId) {
@@ -245,7 +246,7 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
   if (gk) return { provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest', system: base, key: gk };
   const qk = await getAiKey('groq');
   if (qk) return { provider: 'groq', model: GROQ_RESEARCH_MODEL(), system: base, key: qk };
-  for (const p of ['openrouter', 'github'] as const) { const k = await getAiKey(p); if (k) return { provider: p, model: COMPAT[p].agentModel, system: base, key: k }; }
+  for (const p of ['cerebras', 'mistral', 'openrouter', 'github'] as const) { const k = await getAiKey(p); if (k) return { provider: p, model: COMPAT[p].agentModel, system: base, key: k }; }
   return null;
 }
 
@@ -365,13 +366,15 @@ async function groqResearch(key: string, model: string, system: string, prompt: 
 }
 
 /** OpenRouter / GitHub Models: web araması yoktur — yalnızca görevdeki hedef sayfa içeriği ve verilen bilgilerle çalışır. */
-async function compatResearch(provider: 'openrouter' | 'github', key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+/** GitHub Models ücretsiz katmanı ~8K token girdi kabul eder: uzun istem baştan ve sondan kırpılır. */
+const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, Math.round(max * 0.22))}\n…\n${t.slice(-Math.round(max * 0.78))}` : t);
+async function compatResearch(provider: CompatResearch, key: string, model: string, system: string, prompt: string): Promise<AiResult> {
   const res = await fetch(COMPAT[provider].url, {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, max_tokens: 3000, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: prompt.length > 18000 ? `${prompt.slice(0, 4000)}\n…\n${prompt.slice(-14000)}` : prompt }] }),
+    body: JSON.stringify({ model, max_tokens: 3000, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: clip(prompt, provider === 'github' ? 12000 : 18000) }] }),
   });
   const data = await res.json().catch(() => ({}));
-  const label = provider === 'github' ? 'GitHub Models' : 'OpenRouter';
+  const label = AI_LABEL[provider] ?? provider;
   if (!res.ok) {
     const detail = JSON.stringify(data).slice(0, 300);
     if (res.status === 401 || res.status === 403) throw new AiFatalError('ai_auth', `${label} anahtarı reddedildi (${res.status})`);
@@ -381,23 +384,23 @@ async function compatResearch(provider: 'openrouter' | 'github', key: string, mo
   return { text: String(data.choices?.[0]?.message?.content ?? ''), sources: [], tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0, searches: 0, model, provider };
 }
 
-const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', github: 'GitHub Models' };
+const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', github: 'GitHub Models', cerebras: 'Cerebras', mistral: 'Mistral' };
 function research(provider: string, key: string, model: string, system: string, prompt: string) {
   if (provider === 'anthropic') return anthropicResearch(key, model, system, prompt);
   if (provider === 'gemini') return geminiResearch(key, model, system, prompt);
-  if (provider === 'openrouter' || provider === 'github') return compatResearch(provider, key, model, system, prompt);
+  if (['openrouter', 'github', 'cerebras', 'mistral'].includes(provider)) return compatResearch(provider as CompatResearch, key, model, system, prompt);
   return groqResearch(key, model, system, prompt);
 }
 const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p === 'gemini' ? (Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest')
-  : p === 'openrouter' || p === 'github' ? COMPAT[p].agentModel : GROQ_RESEARCH_MODEL());
+  : ['openrouter', 'github', 'cerebras', 'mistral'].includes(p) ? COMPAT[p as CompatResearch].agentModel : GROQ_RESEARCH_MODEL());
 
 /** Sırayla dener: seçilen sağlayıcı → diğerleri (Claude, Gemini, Groq). Kredi/anahtar/limit hatasında bir sonrakine geçer. */
 async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
-  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'openrouter', 'github'].filter((p) => p !== c.provider)];
+  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'cerebras', 'mistral', 'openrouter', 'github'].filter((p) => p !== c.provider)];
   const errors: string[] = [];
   let firstErr: unknown = null; let lastErr: unknown = null; let prev: string = c.provider;
   for (const p of chain) {
-    const key = p === c.provider ? c.key : await getAiKey(p as 'anthropic' | 'gemini' | 'groq' | 'openrouter' | 'github');
+    const key = p === c.provider ? c.key : await getAiKey(p as 'anthropic' | 'gemini' | 'groq' | CompatResearch);
     if (!key) continue;
     if (p !== c.provider) {
       if (!isQuotaOrRateLimit(firstErr)) break; // ilk hata kredi/anahtar/limit değilse yedeğe geçme

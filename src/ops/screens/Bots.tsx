@@ -237,4 +237,208 @@ function TasksTab({ bot, p, skills, reload }: { bot: Bot; p: Portfolio; skills: 
                     {t.last_error && <div className="text-[11px] text-rose-700 mt-1 line-clamp-2">⚠ {t.last_error}</div>}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <Button variant="primary" loading={busy === `run-${t.id}`} onClick={() => act(`run-${t.id}`, async () => { const r =
+                    <Button variant="primary" loading={busy === `run-${t.id}`} onClick={() => act(`run-${t.id}`, async () => { const r = await callOps<{ status: string; summary: string; error: string | null }>('run_task', { task_id: t.id }); if (r.status === 'blocked' || r.status === 'failed') throw new Error(`${RUN_LABELS[r.status]}: ${r.error}`); }, 'Görev çalıştı; koşu kaydı ve loglar oluştu.')} icon={<Play className="w-3.5 h-3.5" />}>Şimdi çalıştır</Button>
+                    <Button variant="subtle" onClick={() => act(`toggle-${t.id}`, async () => { const { error } = await db().from('automation_tasks').update(t.enabled ? { enabled: false, status: 'paused' } : { enabled: true, status: 'scheduled', next_run_at: computeNextRun(t)?.toISOString() ?? t.next_run_at }).eq('id', t.id); if (error) throw error; }, t.enabled ? 'Duraklatıldı.' : 'Devam ediyor.')} icon={t.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}>{t.enabled ? 'Duraklat' : 'Devam'}</Button>
+                    {['dead_letter', 'failed', 'completed'].includes(t.status) && <Button variant="warn" onClick={() => act(`rq-${t.id}`, async () => { const { error } = await db().rpc('requeue_task', { p_id: t.id }); if (error) throw error; }, 'Yeniden kuyruğa alındı.')} icon={<RotateCcw className="w-3.5 h-3.5" />}>Kuyruğa al</Button>}
+                    <Button variant="subtle" onClick={() => setEditing(t)}>Düzenle</Button>
+                    <Button variant="danger" onClick={() => act(`ar-${t.id}`, async () => { const { error } = await db().from('automation_tasks').update({ archived_at: new Date().toISOString(), enabled: false, status: 'cancelled' }).eq('id', t.id); if (error) throw error; }, 'Arşivlendi.')} icon={<Archive className="w-3.5 h-3.5" />} />
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {editing && <TaskEditor bot={bot} skills={skills} task={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
+    </Panel>
+  );
+}
+
+function TaskEditor({ bot, skills, task, onClose, onSaved }: { bot: Bot; skills: Skill[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState({
+    title: task?.title ?? '', skill_id: task?.skill_id ?? skills[0]?.id ?? '', platform: task?.platform ?? bot.platform ?? '', schedule_type: task?.schedule_type ?? 'daily',
+    run_time: task?.run_time ?? '09:00', run_at_date: task?.run_at ? dayKey(task.run_at) : dayKey(new Date()), run_at_time: task?.run_at ? timeOf(task.run_at) : '10:00',
+    cron_expression: task?.cron_expression ?? '0 9 * * 1-5', weekday: String((task?.input_config?.weekday as number) ?? 1), monthday: String((task?.input_config?.monthday as number) ?? 1),
+    topic: String(task?.input_config?.topic ?? ''), max_retries: String(task?.max_retries ?? 3), timeout_seconds: String(task?.timeout_seconds ?? 120),
+  });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const spec = { schedule_type: f.schedule_type, run_time: f.run_time, run_at: f.schedule_type === 'once' ? istanbulToIso(f.run_at_date, f.run_at_time) : null, cron_expression: f.cron_expression, timezone: 'Europe/Istanbul', input_config: { weekday: Number(f.weekday), monthday: Number(f.monthday) } };
+  const cronOk = f.schedule_type !== 'cron' || isValidCron(f.cron_expression);
+  const next = cronOk ? computeNextRun(spec) : null;
+  const skill = skills.find((s) => s.id === f.skill_id);
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      if (!cronOk) throw new Error('Cron ifadesi geçersiz');
+      const row = {
+        bot_id: bot.id, skill_id: f.skill_id, task_type: skill?.skill_key ?? 'managed_skill', title: f.title || skill?.display_name, platform: f.platform || null, schedule_type: f.schedule_type,
+        run_time: ['daily', 'weekly', 'monthly', 'hourly'].includes(f.schedule_type) ? f.run_time : null, run_at: spec.run_at, cron_expression: f.schedule_type === 'cron' ? f.cron_expression : null,
+        timezone: 'Europe/Istanbul', next_run_at: next?.toISOString() ?? null, status: next ? 'scheduled' : 'queued', enabled: true, max_retries: Number(f.max_retries), timeout_seconds: Number(f.timeout_seconds),
+        approval_state: skill?.approval_required ? 'approval_required' : 'not_required',
+        input_config: { ...(task?.input_config || {}), source: task?.input_config?.source ?? 'panel', topic: f.topic || null, weekday: Number(f.weekday), monthday: Number(f.monthday) },
+      };
+      const { error } = task ? await db().from('automation_tasks').update(row).eq('id', task.id) : await db().from('automation_tasks').insert(row);
+      if (error) throw error;
+      onSaved();
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} title={task ? 'Görevi düzenle' : 'Yeni görev'} footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button></>}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Skill" className="sm:col-span-2"><select className="ops-input" value={f.skill_id} onChange={(e) => setF({ ...f, skill_id: e.target.value })}>{skills.map((s) => <option key={s.id} value={s.id}>{s.display_name} · {s.execution_mode === 'pipeline' ? 'pipeline' : 'AI agent'}</option>)}</select></Field>
+        <Field label="Görev adı"><input className="ops-input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder={skill?.display_name} /></Field>
+        <Field label="Platform"><input className="ops-input" value={f.platform} onChange={(e) => setF({ ...f, platform: e.target.value })} placeholder="instagram / web / —" /></Field>
+        <Field label="Konu / girdi" className="sm:col-span-2" hint="Skill’e iletilen sabit girdi. Kullanıcı serbest prompt yazmaz; skill talimatı esastır."><input className="ops-input" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })} /></Field>
+        <Field label="Zamanlama"><select className="ops-input" value={f.schedule_type} onChange={(e) => setF({ ...f, schedule_type: e.target.value })}>
+          {[['manual', 'Manuel'], ['once', 'Tek sefer'], ['hourly', 'Saatlik'], ['daily', 'Günlük'], ['weekly', 'Haftalık'], ['monthly', 'Aylık'], ['cron', 'Cron'], ['event', 'Olay tetiklemeli']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        {['daily', 'weekly', 'monthly', 'hourly'].includes(f.schedule_type) && <Field label={f.schedule_type === 'hourly' ? 'Dakika (HH:MM’den)' : 'Saat'}><input type="time" className="ops-input" value={f.run_time} onChange={(e) => setF({ ...f, run_time: e.target.value })} /></Field>}
+        {f.schedule_type === 'weekly' && <Field label="Gün"><select className="ops-input" value={f.weekday} onChange={(e) => setF({ ...f, weekday: e.target.value })}>{['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((d, i) => <option key={d} value={i}>{d}</option>)}</select></Field>}
+        {f.schedule_type === 'monthly' && <Field label="Ayın günü"><input type="number" min={1} max={28} className="ops-input" value={f.monthday} onChange={(e) => setF({ ...f, monthday: e.target.value })} /></Field>}
+        {f.schedule_type === 'once' && <><Field label="Tarih"><input type="date" className="ops-input" value={f.run_at_date} onChange={(e) => setF({ ...f, run_at_date: e.target.value })} /></Field><Field label="Saat"><input type="time" className="ops-input" value={f.run_at_time} onChange={(e) => setF({ ...f, run_at_time: e.target.value })} /></Field></>}
+        {f.schedule_type === 'cron' && <Field label="Cron (dk saat gün ay haftagünü)" hint={cronOk ? 'Europe/Istanbul' : 'Geçersiz ifade'}><input className={cx('ops-input font-mono', !cronOk && '!border-rose-500')} value={f.cron_expression} onChange={(e) => setF({ ...f, cron_expression: e.target.value })} /></Field>}
+        <Field label="Maks. deneme"><input type="number" min={0} max={10} className="ops-input" value={f.max_retries} onChange={(e) => setF({ ...f, max_retries: e.target.value })} /></Field>
+        <Field label="Zaman aşımı (sn)"><input type="number" min={5} max={600} className="ops-input" value={f.timeout_seconds} onChange={(e) => setF({ ...f, timeout_seconds: e.target.value })} /></Field>
+      </div>
+      <div className="mt-3"><Notice tone="info">{next ? `İlk çalışma: ${fmtDateTime(next.toISOString())} (İstanbul) · ${describeSchedule(spec)}` : f.schedule_type === 'event' ? 'Olay tetiklemeli: sistem olayı veya “Şimdi çalıştır” ile çalışır.' : 'Manuel: yalnızca “Şimdi çalıştır” ile çalışır.'}</Notice></div>
+      {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
+    </Modal>
+  );
+}
+
+function SkillsTab({ bot, p, skills, reload, isAdmin }: { bot: Bot; p: Portfolio; skills: Skill[]; reload: () => void; isAdmin: boolean }) {
+  const [add, setAdd] = useState('');
+  const [prompting, setPrompting] = useState(false);
+  const available = p.skills.filter((s) => !skills.some((b) => b.id === s.id) && !s.archived_at);
+  return (
+    <>
+    {prompting && <SkillPromptModal botId={bot.id} botName={bot.name} onClose={() => setPrompting(false)} onSaved={() => { setPrompting(false); reload(); }} />}
+    <Panel title="Bağlı yetenekler" kicker="Bot yetenekleri" action={isAdmin && (
+      <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => setPrompting(true)} icon={<Wand2 className="w-4 h-4" />}>Prompt ile yetenek ekle</Button><select className="ops-input !py-1.5 text-xs" value={add} onChange={(e) => setAdd(e.target.value)}><option value="">Skill ekle…</option>{available.map((s) => <option key={s.id} value={s.id}>{s.display_name}</option>)}</select>
+        <Button variant="primary" disabled={!add} onClick={async () => { const { error } = await db().from('automation_bot_skills').insert({ bot_id: bot.id, skill_id: add, position: skills.length }); if (error) { window.alert(`Yetenek eklenemedi: ${errorText(error)}`); return; } setAdd(''); reload(); }} icon={<Plus className="w-4 h-4" />} /></div>)}>
+      {skills.length === 0 ? <StateView kind="empty" compact /> : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {skills.map((s) => (
+            <div key={s.id} className="rounded-xl bg-ink-900/60 ring-1 ring-ink-800 p-3 flex items-start gap-3">
+              <span className="w-8 h-8 rounded-lg bg-ink-800 text-brand-green flex items-center justify-center"><DynIcon name={s.icon} /></span>
+              <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-ink-100">{s.display_name}</div><div className="text-[11px] text-ink-400">{s.description}</div>
+                <div className="flex flex-wrap gap-1 mt-1.5"><Pill tone={s.execution_mode === 'pipeline' ? 'go' : 'info'} dot={false}>{s.execution_mode === 'pipeline' ? 'PIPELINE' : 'AI AGENT'}</Pill>{s.approval_required && <Pill tone="wait" dot={false}>ONAY</Pill>}{!s.enabled && <Pill tone="idle">PASİF</Pill>}</div></div>
+              {isAdmin && <button title="Kaldır" onClick={async () => { await db().from('automation_bot_skills').delete().eq('bot_id', bot.id).eq('skill_id', s.id); reload(); }} className="p-1.5 rounded-lg text-ink-500 hover:text-rose-700"><Trash2 className="w-4 h-4" /></button>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+    </>
+  );
+}
+
+export function RunsTable({ runs, p }: { runs: Run[]; p?: Portfolio }) {
+  if (!runs.length) return <StateView kind="empty" title="Henüz koşu yok" message="Zamanı gelen görevler worker tarafından çalıştırıldığında gerçek koşu kayıtları burada görünür." />;
+  return (
+    <div className="ops-panel overflow-x-auto ops-scroll">
+      <table className="w-full text-xs min-w-[720px]">
+        <thead><tr className="text-left text-[10px] font-mono uppercase tracking-wider text-ink-500 border-b border-ink-800"><th className="p-3">Zaman</th><th className="p-3">Skill</th><th className="p-3">Tetik</th><th className="p-3">Durum</th><th className="p-3">Süre</th><th className="p-3">Özet / hata</th></tr></thead>
+        <tbody>{runs.map((r) => (
+          <tr key={r.id} className="border-b border-ink-800/60">
+            <td className="p-3 font-mono text-ink-300 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
+            <td className="p-3 text-ink-200">{p?.skills.find((s) => s.id === r.skill_id)?.display_name ?? r.run_scope}</td>
+            <td className="p-3 text-ink-400">{r.trigger}{r.attempt > 1 ? ` #${r.attempt}` : ''}</td>
+            <td className="p-3"><Pill tone={runTone(r.status)}>{RUN_LABELS[r.status] ?? r.status}</Pill></td>
+            <td className="p-3 font-mono text-ink-400">{r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : '—'}</td>
+            <td className="p-3 text-ink-300 max-w-md truncate">{r.error ? <span className="text-rose-700">{r.error_code}: {r.error}</span> : r.summary}</td>
+          </tr>))}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function BotApprovals({ botId }: { botId: string }) {
+  const { go } = useRouter();
+  const q = useQuery(async () => unwrap(await db().from('approval_requests').select('*').eq('bot_id', botId).order('created_at', { ascending: false }).limit(50)) as Approval[], [] as Approval[], [botId]);
+  if (q.loading) return <StateView kind="loading" compact />;
+  if (!q.data.length) return <StateView kind="empty" title="Bu botun onay isteği yok" />;
+  return (
+    <div className="space-y-2">{q.data.map((a) => (
+      <button key={a.id} onClick={() => go('approvals', a.id)} className="w-full text-left ops-panel !rounded-xl p-3 flex items-center gap-3">
+        <PlatformBadge platform={a.platform} /><span className="flex-1 min-w-0"><span className="block text-sm text-ink-100 truncate">{a.title}</span><span className="block text-[10px] font-mono text-ink-500">{a.tool_key ?? a.entity_type} · {fmtDateTime(a.created_at)}</span></span>
+        <Pill tone={approvalTone(a.status)}>{approvalLabel(a.status)}</Pill>
+      </button>))}</div>
+  );
+}
+
+function BotLogs({ runs }: { runs: Run[] }) {
+  const ids = runs.map((r) => r.id);
+  const q = useQuery(async () => (ids.length ? unwrap(await db().from('automation_run_logs').select('*').in('run_id', ids).order('at', { ascending: false }).limit(300)) as RunLog[] : []), [] as RunLog[], [ids.join(',')]);
+  if (q.loading) return <StateView kind="loading" compact />;
+  if (!q.data.length) return <StateView kind="empty" title="Log yok" />;
+  const color: Record<string, string> = { info: 'text-sky-700', warn: 'text-amber-700', error: 'text-rose-700', debug: 'text-ink-500' };
+  return (
+    <div className="ops-panel p-3 font-mono text-[11px] max-h-[520px] overflow-y-auto ops-scroll space-y-0.5">
+      {q.data.map((l) => <div key={l.id} className="grid grid-cols-[120px_52px_1fr] gap-2"><span className="text-ink-500">{fmtDateTime(l.at)}</span><span className={color[l.level] ?? 'text-ink-300'}>{l.level.toUpperCase()}</span><span className="text-ink-200 break-words">{l.message}{l.data ? <span className="text-ink-500"> {JSON.stringify(l.data).slice(0, 200)}</span> : null}</span></div>)}
+    </div>
+  );
+}
+
+function BotResults({ runs }: { runs: Run[] }) {
+  if (!runs.length) return <StateView kind="empty" title="Henüz sonuç yok" />;
+  return (
+    <div className="space-y-3">{runs.map((r) => {
+      const tools = r.output?.tools || {};
+      const seo = tools.seo_audit as { score?: number; findings?: Array<{ level: string; message: string }>; url?: string } | undefined;
+      const report = tools.create_report as { title?: string; body?: string } | undefined;
+      return (
+        <Panel key={r.id} kicker={fmtDateTime(r.created_at)} title={r.summary || r.run_scope}>
+          {seo && <div className="mb-3"><div className="text-xs text-ink-300 mb-2">SEO skoru: <b className="text-ink-100">{seo.score}</b> · {seo.url}</div>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-1">{(seo.findings || []).map((f, i) => <li key={i} className="flex items-center gap-2 text-[11px]"><span className={cx('w-2 h-2 rounded-full', f.level === 'ok' ? 'bg-signal-go' : f.level === 'warn' ? 'bg-signal-wait' : 'bg-signal-stop')} />{f.message}</li>)}</ul></div>}
+          {report?.body && <pre className="text-[12px] text-ink-200 whitespace-pre-wrap font-sans bg-ink-950 rounded-xl p-3">{report.body}</pre>}
+          {!seo && !report && <pre className="text-[11px] text-ink-400 whitespace-pre-wrap font-mono bg-ink-950 rounded-xl p-3 max-h-60 overflow-auto ops-scroll">{JSON.stringify(tools, null, 2)}</pre>}
+        </Panel>
+      );
+    })}</div>
+  );
+}
+
+const ICON_CHOICES = ['bot', 'search-check', 'share-2', 'instagram', 'facebook', 'store', 'hammer', 'map-pin', 'radar', 'users', 'pen-line', 'megaphone', 'line-chart', 'telescope', 'briefcase'];
+
+function BotEditor({ p, bot, onClose, onSaved, inline = false }: { p: Portfolio; bot?: Bot; onClose: () => void; onSaved: (id: string) => void; inline?: boolean }) {
+  const [f, setF] = useState({
+    name: bot?.name ?? '', slug: bot?.slug ?? '', bot_type: bot?.bot_type ?? 'custom', platform: bot?.platform ?? '', icon: bot?.icon ?? 'bot', description: bot?.description ?? '',
+    instructions: bot?.instructions ?? '', ai_agent_id: bot?.ai_agent_id ?? p.agents[0]?.id ?? '', connector_key: bot?.connector_key ?? '', status: bot?.status ?? 'active',
+    skills: (bot?.automation_bot_skills || []).map((l) => l.skill_id),
+  });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const slugify = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const row = { name: f.name, slug: f.slug || slugify(f.name), bot_type: f.bot_type, platform: f.platform || null, icon: f.icon, description: f.description, instructions: f.instructions,
+        ai_agent_id: f.ai_agent_id || null, connector_key: f.connector_key || null, status: f.status, archived_at: f.status === 'archived' ? new Date().toISOString() : null };
+      let id = bot?.id;
+      if (bot) { const { error } = await db().from('automation_bots').update(row).eq('id', bot.id); if (error) throw error; }
+      else { const { data, error } = await db().from('automation_bots').insert(row).select('id').single(); if (error) throw error; id = data.id; }
+      if (!bot && f.skills.length) { const { error } = await db().from('automation_bot_skills').insert(f.skills.map((s, i) => ({ bot_id: id, skill_id: s, position: i }))); if (error) throw error; }
+      const { data: saved } = await db().from('automation_bots').select('updated_at').eq('id', id!).single();
+      setSavedAt(saved?.updated_at ?? new Date().toISOString());
+      onSaved(id!);
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
+  };
+  const form = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Field label="Bot adı"><input className="ops-input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value, slug: bot ? f.slug : slugify(e.target.value) })} /></Field>
+      <Field label="Slug"><input className="ops-input font-mono" value={f.slug} onChange={(e) => setF({ ...f, slug: slugify(e.target.value) })} /></Field>
+      <Field label="Tip"><input className="ops-input" value={f.bot_type} onChange={(e) => setF({ ...f, bot_type: e.target.value })} placeholder="social / seo / crm …" /></Field>
+      <Field label="Platform"><input className="ops-input" value={f.platform} onChange={(e) => setF({ ...f, platform: e.target.value })} placeholder="instagram / web / multi" /></Field>
+      <Field label="Connector"><input className="ops-input" value={f.connector_key} onChange={(e) => setF({ ...f, connector_key: e.target.value })} placeholder="instagram / facebook / website" /></Field>
+      <Field label="AI agent"><select className="ops-input" value={f.ai_agent_id} onChange={(e) => setF({ ...f, ai_agent_id: e.target.value })}>{p.agents.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.provider}/{a.model}</option>)}</select></Field>
+      <Field label="Durum"><select className="ops-input" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>{Object.entries(BOT_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field>
+      <Field label="İkon"><div className="flex flex-wrap gap-1">{ICON_CHOICES.map((i) => <button key={i} type="button" onClick={() => setF({ ...f, icon: i })} className={cx('p-1.5 rounded-lg ring-1', f.icon === i ? 'ring-brand-green bg-ink-750 text-brand-green' : 'ring-ink-700 text-ink-400')}><DynIcon name={i} /></button>)}</div></Field>
+      <Field label="Açıklama" className="sm:col-span-2"><input className="ops-input" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+      <Field label="Talimat (instructions)" className="sm:col-span-2"><textarea className="ops-input min-h-[90px]" value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })} /></Field>
+      {!bot && <Field label="Skill’ler" className="sm:col-span-2"><div className="flex flex-wrap gap-1.5">{p.skills.map((s) => <button key={s.id} type="button" onClick={() => setF({ ...f, skills: f.skills.includes(s.id) ? f.skills.filter((x) => x !== s.id) : [...f.skills, s.id] })} className={cx('rounded-lg px-2 py-1 text-[11px] ring-1', f.skills.includes(s.id) ? 'ring-brand-green bg-ink-750 text-ink-100' : 'ring-ink-700 text-ink-400')}>{s.display_name}</button>)}</div></Field>}
+      {err && <div className="sm:col-span-2"><Notice tone="error">{err}</Notice></div>}
+    </div>
+  );
+  if (inline) return <Panel title="Bot ayarları" action={<div className="flex flex-col items-end gap-1"><Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button><SavedStamp at={savedAt} /></div>}>{form}</Panel>;
+  return <Modal open wide onClose={onClose} title={bot ? 'Botu düzenle' : 'Yeni bot'} footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} disabled={!f.name} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button></>}>{form}</Modal>;
+}

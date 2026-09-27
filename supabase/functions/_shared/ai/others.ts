@@ -1,6 +1,6 @@
 // OpenAI ve Gemini adaptörleri (resmi REST uçları). Anahtar yoksa CONFIGURATION_REQUIRED.
 import { ConfigurationRequiredError, extractJson } from './types.ts';
-import { COMPAT, getAiKey, type KeyProvider } from './keys.ts';
+import { COMPAT, getAiKey, type KeyProvider, type CompatProvider } from './keys.ts';
 import type { AgentConfig, AgentRunInput, AgentRunResult, AIProvider, CompleteInput, CompleteResult } from './types.ts';
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown) {
@@ -12,7 +12,7 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
 
 // ── OpenAI (Chat Completions + function calling) ─────────────────────────────
 /** OpenAI ve OpenAI uyumlu sağlayıcılar (Groq) için ortak adaptör. */
-function openAiCompatible(name: 'openai' | 'groq' | 'openrouter' | 'github', url: string, envName: string): AIProvider {
+function openAiCompatible(name: CompatProvider, url: string, envName: string): AIProvider {
   const openaiKey = async () => {
     const k = await getAiKey(name as KeyProvider);
     if (!k) throw new ConfigurationRequiredError(envName);
@@ -63,6 +63,8 @@ export const openaiProvider = openAiCompatible('openai', COMPAT.openai.url, 'OPE
 export const groqProvider = openAiCompatible('groq', COMPAT.groq.url, 'GROQ_API_KEY');
 export const openrouterProvider = openAiCompatible('openrouter', COMPAT.openrouter.url, 'OPENROUTER_API_KEY');
 export const githubProvider = openAiCompatible('github', COMPAT.github.url, 'GITHUB_MODELS_TOKEN');
+export const cerebrasProvider = openAiCompatible('cerebras', COMPAT.cerebras.url, 'CEREBRAS_API_KEY');
+export const mistralProvider = openAiCompatible('mistral', COMPAT.mistral.url, 'MISTRAL_API_KEY');
 
 // ── Google Gemini (generateContent + functionDeclarations) ──────────────────
 async function geminiKey() {

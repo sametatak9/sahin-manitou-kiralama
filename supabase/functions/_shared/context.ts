@@ -63,7 +63,7 @@ export async function loadAgent(db: Db, agentId: string | null, fallbackKey = 'c
     if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-sonnet-5' };
     if (agent.provider !== 'gemini' && (await getAiKey('gemini'))) return { ...agent, provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest' };
     if (agent.provider !== 'groq' && (await getAiKey('groq'))) return { ...agent, provider: 'groq', model: Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile' };
-    for (const p of ['openrouter', 'github'] as const) if (agent.provider !== p && (await getAiKey(p))) return { ...agent, provider: p, model: COMPAT[p].agentModel };
+    for (const p of ['cerebras', 'mistral', 'openrouter', 'github'] as const) if (agent.provider !== p && (await getAiKey(p))) return { ...agent, provider: p, model: COMPAT[p].agentModel };
   }
   return agent;
 }
@@ -81,7 +81,7 @@ export async function aiComplete(ctx: Pick<EngineCtx, 'db' | 'runId' | 'actorId'
     let res: Awaited<ReturnType<ReturnType<typeof getProvider>['complete']>> | null = null; let lastErr: unknown = null; let used = agent;
     const chain: AgentConfig[] = [agent];
     const alt: Array<[AgentConfig['provider'], string]> = [['gemini', Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest'], ['groq', Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile'],
-      ['openrouter', COMPAT.openrouter.agentModel], ['github', COMPAT.github.agentModel], ['anthropic', 'claude-sonnet-5']];
+      ['cerebras', COMPAT.cerebras.agentModel], ['mistral', COMPAT.mistral.agentModel], ['openrouter', COMPAT.openrouter.agentModel], ['github', COMPAT.github.agentModel], ['anthropic', 'claude-sonnet-5']];
     for (const [p, m] of alt) if (p !== agent.provider && (await getAiKey(p))) chain.push({ ...agent, provider: p, model: m });
     for (const a of chain) {
       // JSON şemasını yalnızca Claude/OpenAI yerel olarak uygular: diğerlerine şema istemde açıkça verilir

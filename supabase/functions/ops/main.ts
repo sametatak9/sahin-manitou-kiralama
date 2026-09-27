@@ -179,9 +179,9 @@ async function credentialsReport(db: Db) {
   const rows: KeyRow[] = [];
   // 1) Yapay zekâ anahtarları (botların beyni)
   const { data: aiRows } = await db.from('ai_provider_keys').select('provider,updated_at');
-  const ENVN = { anthropic: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', github: 'GITHUB_MODELS_TOKEN' } as const;
-  const AIL = { anthropic: 'Claude (Anthropic)', gemini: 'Gemini (Google)', openai: 'OpenAI (ChatGPT)', groq: 'Groq (ücretsiz)', openrouter: 'OpenRouter (ücretsiz)', github: 'GitHub Models (ücretsiz)' } as const;
-  for (const p of ['anthropic', 'gemini', 'openai', 'groq', 'openrouter', 'github'] as const) {
+  const ENVN = { anthropic: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', github: 'GITHUB_MODELS_TOKEN', cerebras: 'CEREBRAS_API_KEY', mistral: 'MISTRAL_API_KEY' } as const;
+  const AIL = { anthropic: 'Claude (Anthropic)', gemini: 'Gemini (Google)', openai: 'OpenAI (ChatGPT)', groq: 'Groq (ücretsiz)', openrouter: 'OpenRouter (ücretsiz)', github: 'GitHub Models (ücretsiz)', cerebras: 'Cerebras (ücretsiz)', mistral: 'Mistral (ücretsiz)' } as const;
+  for (const p of ['anthropic', 'gemini', 'openai', 'groq', 'openrouter', 'github', 'cerebras', 'mistral'] as const) {
     const key = await getAiKey(p);
     const panelRow = (aiRows || []).find((r: { provider: string }) => r.provider === p) as { updated_at: string } | undefined;
     const source = panelRow ? 'panel' : Deno.env.get(ENVN[p]) ? 'sunucu' : null;
@@ -663,7 +663,7 @@ Deno.serve(async (req) => {
       const { data: panelRows } = await db.from('ai_provider_keys').select('provider');
       const panel = new Set((panelRows || []).map((r: { provider: string }) => r.provider));
       const out: Record<string, unknown> = {};
-      for (const p of ['anthropic', 'gemini', 'openai', 'groq', 'openrouter', 'github'] as const) {
+      for (const p of ['anthropic', 'gemini', 'openai', 'groq', 'openrouter', 'github', 'cerebras', 'mistral'] as const) {
         const key = await getAiKey(p);
         if (!key) { out[p] = { source: null }; continue; }
         const body = await req.clone().json().catch(() => ({}));

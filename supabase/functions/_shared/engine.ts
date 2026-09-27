@@ -139,7 +139,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
         const errStr = String((agentErr as Error)?.message || agentErr);
         const isQuota = /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing/i.test(errStr);
         if (isQuota) {
-          const fallbacks = (['anthropic', 'gemini', 'groq', 'openrouter', 'github', 'openai'] as const).filter((p) => p !== ctx.agent!.provider);
+          const fallbacks = (['anthropic', 'gemini', 'groq', 'cerebras', 'mistral', 'openrouter', 'github', 'openai'] as const).filter((p) => p !== ctx.agent!.provider);
           let recovered = false;
           for (const fallback of fallbacks) {
             try {

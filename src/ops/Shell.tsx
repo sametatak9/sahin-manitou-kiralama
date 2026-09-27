@@ -41,12 +41,13 @@ const MOBILE_LABEL: Partial<Record<Route, string>> = { home: 'Genel', bots: 'Bot
 function useBadges() {
   return useQuery(async () => {
     if (!supabase) return { approvals: 0, alerts: 0 };
-    const [a, t] = await Promise.all([
+    const [a, t, d] = await Promise.all([
       supabase.from('approval_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
       supabase.from('automation_tasks').select('id', { count: 'exact', head: true }).in('status', ['dead_letter', 'failed']),
+      supabase.from('social_drafts').select('id', { count: 'exact', head: true }).eq('workflow_status', 'pending_approval').is('archived_at', null),
     ]);
-    return { approvals: a.count ?? 0, alerts: t.count ?? 0 };
-  }, { approvals: 0, alerts: 0 }, [], ['approval_requests', 'automation_tasks']);
+    return { approvals: (a.count ?? 0) + (d.count ?? 0), alerts: t.count ?? 0 };
+  }, { approvals: 0, alerts: 0 }, [], ['approval_requests', 'automation_tasks', 'social_drafts']);
 }
 
 function Clock() {
