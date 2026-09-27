@@ -198,6 +198,16 @@ function KeysPanel() {
       await callOps('reload_secrets'); await q.reload();
     } catch (e) { setMsg(errorText(e)); } finally { setBusy(null); }
   };
+  const [edit, setEdit] = useState<string | null>(null);
+  const [val, setVal] = useState('');
+  const save = async (r: KeyRow) => {
+    setBusy(r.name); setMsg(null);
+    try {
+      if (r.name.startsWith('ai:')) unwrap(await db().rpc('set_ai_key', { p_provider: r.name.slice(3), p_key: val.trim() }));
+      else unwrap(await db().rpc('set_app_credential', { p_name: r.name, p_value: val.trim() }));
+      await callOps('reload_secrets'); setEdit(null); setVal(''); await q.reload();
+    } catch (e) { setMsg(errorText(e)); } finally { setBusy(null); }
+  };
   const rows = q.data?.rows ?? [];
   const groups = [...new Set(rows.map((r) => r.group))];
   const count = { ok: rows.filter((r) => r.state === 'ok').length, fail: rows.filter((r) => r.state === 'fail').length, missing: rows.filter((r) => r.state === 'missing').length };
@@ -222,14 +232,27 @@ function KeysPanel() {
           <Panel key={g} title={g}>
             <ul className="divide-y divide-ink-800">
               {rows.filter((r) => r.group === g).map((r) => (
-                <li key={r.name} className="py-2.5 flex flex-wrap items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-ink-100">{r.label}</div>
-                    <div className="text-xs text-ink-300 font-mono break-all">{r.masked ?? '—'}{r.source && <span className="font-sans text-ink-500"> · {r.source === 'panel' ? 'panelden girildi' : 'sunucu ayarında (eski)'}</span>}{r.saved_at && <span className="font-sans text-ink-500"> · {fmtDateTime(r.saved_at)}</span>}</div>
-                    <div className={cx('text-xs mt-0.5', r.state === 'fail' ? 'text-rose-700' : 'text-ink-400')}>{r.detail}</div>
+                <li key={r.name} className="py-3 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1 text-sm font-semibold text-ink-100 break-words">{r.label}</div>
+                    <span className={cx('shrink-0 text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1', TONE[r.state])}>{LABEL[r.state]}</span>
                   </div>
-                  <span className={cx('text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1', TONE[r.state])}>{LABEL[r.state]}</span>
-                  {r.can_clear && <button type="button" onClick={() => clear(r)} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{busy === r.name ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}Sil</button>}
+                  <div className="text-xs text-ink-300 font-mono break-all">{r.masked ?? '—'}{r.source && <span className="font-sans text-ink-500"> · {r.source === 'panel' ? 'panelden girildi' : 'sunucu ayarında (eski)'}</span>}{r.saved_at && <span className="font-sans text-ink-500"> · {fmtDateTime(r.saved_at)}</span>}</div>
+                  <div className={cx('text-xs break-words', r.state === 'fail' ? 'text-rose-700' : 'text-ink-400')}>{r.detail}</div>
+                  {edit === r.name ? (
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                      <input type="password" autoComplete="off" autoFocus className="ops-input font-mono text-xs flex-1 min-w-0" placeholder="Yeni değeri yapıştırın" value={val} onChange={(e) => setVal(e.target.value)} />
+                      <div className="flex gap-2">
+                        <Button variant="primary" loading={busy === r.name} disabled={val.trim().length < 6} onClick={() => save(r)}>Kaydet ve test et</Button>
+                        <Button variant="ghost" onClick={() => { setEdit(null); setVal(''); }}>Vazgeç</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      <button type="button" onClick={() => { setEdit(r.name); setVal(''); }} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-ink-700 bg-white px-2 py-1 text-[11px] font-semibold text-ink-200 hover:ring-brand-green/50"><KeyRound className="w-3.5 h-3.5" />{r.state === 'missing' ? 'Ekle' : 'Değiştir'}</button>
+                      {r.can_clear && <button type="button" onClick={() => clear(r)} className="inline-flex items-center gap-1 rounded-lg ring-1 ring-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{busy === r.name ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}Sil</button>}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

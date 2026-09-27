@@ -1,11 +1,11 @@
 // Bulgu kartviziti: bot bulgularını düz yazı yerine kartvizit görünümünde gösterir
 // (firma baş harfi / platform rozeti, uygunluk puanı, konum-tarih, iletişim düğmeleri, portföye arşivle).
 import { useState } from 'react';
-import { Archive, CalendarDays, ChevronDown, ExternalLink, Globe, Mail, MapPin, MessageCircle, Phone, Target } from 'lucide-react';
+import { Archive, CalendarDays, ChevronDown, ExternalLink, Globe, Mail, Maximize2, MapPin, MessageCircle, Phone, Quote, ShieldCheck, Target } from 'lucide-react';
 import { db } from '../lib/hooks';
 import { relTime } from '../lib/format';
 import type { Mission, MissionFinding } from '../lib/types';
-import { cx } from '../ui';
+import { Button, cx, Modal } from '../ui';
 
 /** Türkiye numarasını wa.me biçimine çevirir (905xxxxxxxxx). Geçersizse null. */
 export function waNumber(phone?: string | null) {
@@ -42,6 +42,7 @@ const VERDICT: Record<string, { label: string; cls: string }> = {
 export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick<Mission, 'bot_id' | 'search_for'> }) {
   const [archived, setArchived] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [zoom, setZoom] = useState(false);
   const wa = waNumber(f.phone);
   const pf = platformOf(f.url);
   const name = displayName(f);
@@ -57,7 +58,7 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
   return (
     <li className="list-none rounded-2xl overflow-hidden bg-white shadow-sm ring-1 ring-ink-700/70 flex flex-col">
       {/* Kartvizit başlığı */}
-      <div className="relative bg-gradient-to-br from-[#262A6B] via-[#1E3FA0] to-[#262A6B] text-white px-4 pt-3.5 pb-3">
+      <div role="button" tabIndex={0} onClick={() => setZoom(true)} onKeyDown={(e) => { if (e.key === 'Enter') setZoom(true); }} title="Detayı aç" className="relative cursor-pointer bg-gradient-to-br from-[#262A6B] via-[#1E3FA0] to-[#262A6B] text-white px-4 pt-3.5 pb-3">
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
         <div className="relative flex items-start gap-3">
           <div className={cx('shrink-0 w-12 h-12 rounded-xl grid place-items-center text-lg font-bold ring-2 ring-white/40',
@@ -66,7 +67,7 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
             <div className="font-display font-semibold text-[15px] leading-tight line-clamp-2">{name}</div>
             <div className="text-[11px] text-[#CFE4FA] mt-0.5 truncate">{pf.handle ?? (pf.key === 'facebook' ? 'Facebook' : '')}{f.posted ? ` · ${f.posted}` : ''}</div>
           </div>
-          <span className="shrink-0 font-mono text-[10px] text-white/60">#{i + 1}</span>
+          <span className="shrink-0 inline-flex items-center gap-1 font-mono text-[10px] text-white/70">#{i + 1}<Maximize2 className="w-3.5 h-3.5" /></span>
         </div>
         <div className="relative flex flex-wrap items-center gap-1.5 mt-2.5">
           {f.verdict && <span className={cx('rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1', VERDICT[f.verdict]?.cls)}>{VERDICT[f.verdict]?.label}</span>}
@@ -107,6 +108,39 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
         {archived ? <span className="text-[11px] font-semibold text-emerald-700 self-center">{archived}</span>
           : <button type="button" onClick={archive} className="ops-chip"><Archive className="w-3.5 h-3.5" />Portföye ekle</button>}
       </div>
+      {zoom && (
+        <Modal open wide onClose={() => setZoom(false)} title={<span className="inline-flex items-center gap-2"><span className="w-7 h-7 rounded-lg grid place-items-center text-sm font-bold text-white bg-gradient-to-br from-[#262A6B] to-[#1E3FA0]">{initial}</span>{name}</span>}
+          footer={<><a href={f.url} target="_blank" rel="noreferrer"><Button variant="ghost" icon={<ExternalLink className="w-4 h-4" />}>Kaynağı aç</Button></a>{!archived && <Button variant="primary" onClick={archive} icon={<Archive className="w-4 h-4" />}>Portföye ekle</Button>}</>}>
+          <div className="space-y-4">
+            <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-[#262A6B] via-[#1E3FA0] to-[#262A6B] text-white p-5">
+              <div className="text-[10px] font-mono tracking-widest text-[#CFE4FA]">EMBAY YAPI & ŞAHİN MANİTOU · BULGU KARTI #{i + 1}</div>
+              <div className="font-display text-xl font-semibold mt-1">{name}</div>
+              {subtitle && <div className="text-sm text-[#DCE9FB] mt-1">{subtitle}</div>}
+              <div className="flex flex-wrap gap-2 mt-3 text-[11px]">
+                {f.location && <span className="rounded-full bg-white/15 px-2.5 py-1 inline-flex items-center gap-1"><MapPin className="w-3 h-3" />{f.location}</span>}
+                {f.posted && <span className="rounded-full bg-white/15 px-2.5 py-1 inline-flex items-center gap-1"><CalendarDays className="w-3 h-3" />{f.posted}</span>}
+                {score !== null && <span className="rounded-full bg-white/15 px-2.5 py-1">Uygunluk {score}/10</span>}
+                {f.verdict && <span className={cx('rounded-full px-2.5 py-1 ring-1', VERDICT[f.verdict]?.cls)}>{VERDICT[f.verdict]?.label}</span>}
+                {pf.handle && <span className="rounded-full bg-white/15 px-2.5 py-1">{pf.handle}</span>}
+              </div>
+            </div>
+            {f.fit && <div className="flex gap-2 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 text-[13px] text-emerald-900"><Target className="w-4 h-4 mt-0.5 shrink-0" /><div><b>Neden uygun:</b> {f.fit}</div></div>}
+            {f.summary && <div className="rounded-xl bg-ink-900/60 ring-1 ring-ink-800 p-3 text-[13px] text-ink-200">{f.summary}</div>}
+            {f.detail && <div><div className="text-xs font-semibold text-ink-300 mb-1">Ayrıntı</div><p className="text-[13px] text-ink-200 whitespace-pre-line">{f.detail}</p></div>}
+            {f.evidence && <div className="flex gap-2 rounded-xl bg-ink-900/40 p-3 text-[12px] italic text-ink-300"><Quote className="w-4 h-4 shrink-0" />{f.evidence}</div>}
+            {f.verdict_reason && <div className="flex gap-2 text-[12px] text-ink-400"><ShieldCheck className="w-4 h-4 shrink-0" />Denetim: {f.verdict_reason}</div>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {f.company && <div className="rounded-xl ring-1 ring-ink-700 p-2.5"><div className="text-[10px] font-mono text-ink-500">FİRMA / KURUM</div><div className="text-sm text-ink-100">{f.company}</div></div>}
+              {f.phone && <a href={`tel:${f.phone.replace(/[^\d+]/g, '')}`} className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">KURUMSAL TELEFON</div><div className="text-sm text-ink-100 inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{f.phone}</div></a>}
+              {f.email && <a href={`mailto:${f.email}`} className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">E-POSTA</div><div className="text-sm text-ink-100 break-all">{f.email}</div></a>}
+              {f.website && <a href={f.website} target="_blank" rel="noreferrer" className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">WEB</div><div className="text-sm text-ink-100 break-all">{f.website}</div></a>}
+              <a href={f.url} target="_blank" rel="noreferrer" className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50 sm:col-span-2"><div className="text-[10px] font-mono text-ink-500">KAYNAK</div><div className="text-[12px] text-brand-green break-all">{f.url}</div></a>
+            </div>
+            {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(WA_TEXT(f))}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white py-2.5 text-sm font-semibold"><MessageCircle className="w-4 h-4" />WhatsApp’tan yaz (hazır mesaj)</a>}
+            {archived && <div className="text-[12px] font-semibold text-emerald-700">{archived}</div>}
+          </div>
+        </Modal>
+      )}
     </li>
   );
 }

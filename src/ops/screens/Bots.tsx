@@ -9,8 +9,8 @@ import type { Approval, Bot, Run, RunLog, Skill, Task, Tool } from '../lib/types
 import { useRouter, useSession } from '../session';
 import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, SavedStamp, Stat, StateView, Tabs } from '../ui';
 
-interface Portfolio { bots: Bot[]; skills: Skill[]; tools: Tool[]; tasks: Task[]; runs: Run[]; agents: Array<{ id: string; name: string; model: string; provider: string }> }
-const EMPTY: Portfolio = { bots: [], skills: [], tools: [], tasks: [], runs: [], agents: [] };
+interface Portfolio { bots: Bot[]; skills: Skill[]; tools: Tool[]; tasks: Task[]; runs: Run[]; agents: Array<{ id: string; name: string; model: string; provider: string }>; live: Record<string, number>; lastMission: Record<string, { at: string; findings: number }> }
+const EMPTY: Portfolio = { bots: [], skills: [], tools: [], tasks: [], runs: [], agents: [], live: {}, lastMission: {} };
 
 async function loadPortfolio(): Promise<Portfolio> {
   const s = db();
@@ -23,7 +23,15 @@ async function loadPortfolio(): Promise<Portfolio> {
     s.from('social_bot_runs').select('id,bot_id,task_id,skill_id,status,created_at,duration_ms,tokens_in,tokens_out,summary,error,error_code,trigger,attempt,platform,run_scope,started_at,completed_at,output').gte('created_at', since).order('created_at', { ascending: false }).limit(1000),
     s.from('ai_agents').select('id,name,model,provider').eq('active', true),
   ]);
-  return { bots: unwrap(bots), skills: unwrap(skills), tools: unwrap(tools), tasks: unwrap(tasks), runs: unwrap(runs), agents: unwrap(agents) };
+  // Görev (mission) bazlı canlılık: şu an çalışan görevler + son görev ve bulgu sayısı (hata olursa ekran yine açılır)
+  const live: Record<string, number> = {}; const lastMission: Portfolio['lastMission'] = {};
+  const ms = await s.from('bot_missions').select('bot_id,status,created_at,findings').gte('created_at', since).order('created_at', { ascending: false }).limit(400);
+  for (const m of (ms.data ?? []) as Array<{ bot_id: string | null; status: string; created_at: string; findings: unknown[] | null }>) {
+    if (!m.bot_id) continue;
+    if (m.status === 'running' || m.status === 'finalizing') live[m.bot_id] = (live[m.bot_id] ?? 0) + 1;
+    if (!lastMission[m.bot_id]) lastMission[m.bot_id] = { at: m.created_at, findings: Array.isArray(m.findings) ? m.findings.length : 0 };
+  }
+  return { bots: unwrap(bots), skills: unwrap(skills), tools: unwrap(tools), tasks: unwrap(tasks), runs: unwrap(runs), agents: unwrap(agents), live, lastMission };
 }
 
 function botStats(p: Portfolio, botId: string) {
@@ -39,7 +47,7 @@ function botStats(p: Portfolio, botId: string) {
 export function BotsScreen() {
   const { state, go } = useRouter();
   const session = useSession();
-  const q = useQuery(loadPortfolio, EMPTY, [], ['automation_tasks', 'social_bot_runs']);
+  const q = useQuery(loadPortfolio, EMPTY, [], ['automation_tasks', 'social_bot_runs', 'bot_missions']);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'waiting_connection' | 'paused' | 'archived'>('all');
 
@@ -64,38 +72,68 @@ export function BotsScreen() {
           {session.role === 'admin' && <Button variant="primary" onClick={() => setCreating(true)} icon={<Plus className="w-4 h-4" />}>Yeni bot</Button>}
         </div>
       </div>
-      {q.loading ? <StateView kind="loading" /> : bots.length === 0 ? <StateView kind="empty" /> : (
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
-          {bots.map((b) => {
-            const st = botStats(q.data, b.id); const meta = BOT_STATUS[b.status] ?? BOT_STATUS.active;
-            const skillNames = (b.automation_bot_skills || []).map((l) => q.data.skills.find((s) => s.id === l.skill_id)?.display_name).filter(Boolean);
-            const running = st.runs.some((r) => r.status === 'running');
-            return (
-              <button key={b.id} onClick={() => go('bots', b.id)} className="ops-panel text-left p-4 hover:ring-1 hover:ring-brand-green/40 transition group">
-                <div className="flex items-start gap-3">
-                  <div className={cx('relative w-11 h-11 rounded-2xl flex items-center justify-center ring-1', running ? 'bg-sky-500/15 ring-sky-400/40 text-sky-700' : 'bg-ink-800 ring-ink-600 text-brand-green')}>
-                    <DynIcon name={b.icon} className="w-5 h-5" />{running && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-signal-run ops-pulse" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2"><span className="font-display font-semibold text-ink-100 truncate">{b.name}</span><Pill tone={meta.tone}>{meta.label}</Pill></div>
-                    <p className="text-[11px] text-ink-400 line-clamp-2 mt-0.5">{b.description}</p>
-                  </div>
+      {q.loading ? <StateView kind="loading" /> : bots.length === 0 ? <StateView kind="empty" /> : (() => {
+        const isLive = (b: Bot) => (q.data.live[b.id] ?? 0) > 0 || botStats(q.data, b.id).runs.some((r) => r.status === 'running');
+        const groups: Array<{ key: string; title: string; hint: string; items: Bot[] }> = filter === 'all' ? [
+          { key: 'live', title: 'Şu an çalışan', hint: 'Görevi süren botlar', items: bots.filter((b) => b.status === 'active' && isLive(b)) },
+          { key: 'active', title: 'Aktif · hazır', hint: 'Otopilotla ya da “Görev ver” ile çalışır', items: bots.filter((b) => b.status === 'active' && !isLive(b)) },
+          { key: 'waiting', title: 'Bağlantı bekliyor', hint: 'Uygulama bağlanınca aktifleşir', items: bots.filter((b) => b.status === 'waiting_connection') },
+          { key: 'paused', title: 'Pasif · duraklatılan', hint: 'Yönetici durdurdu', items: bots.filter((b) => b.status === 'paused') },
+        ] : [{ key: filter, title: '', hint: '', items: bots }];
+        return (
+          <div className="space-y-5">
+            {filter === 'all' && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {groups.map((g) => <div key={g.key} className="rounded-xl bg-white ring-1 ring-ink-700 px-3 py-2"><div className="text-lg font-bold text-ink-100 tabular-nums">{g.items.length}</div><div className="text-[11px] text-ink-400">{g.title}</div></div>)}
+              </div>
+            )}
+            {groups.filter((g) => g.items.length).map((g) => (
+              <section key={g.key} className="space-y-2">
+                {g.title && <div className="flex items-baseline gap-2"><h3 className="font-display text-sm font-semibold text-ink-100">{g.title}</h3><span className="text-[11px] text-ink-500">{g.hint}</span></div>}
+                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                  {g.items.map((b) => <BotCard key={b.id} b={b} p={q.data} live={isLive(b)} onOpen={() => go('bots', b.id)} />)}
                 </div>
-                <div className="flex flex-wrap gap-1 mt-3">{skillNames.slice(0, 4).map((n) => <span key={n} className="text-[10px] rounded-md bg-ink-800 px-1.5 py-0.5 text-ink-300">{n}</span>)}</div>
-                <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-ink-800 text-[10px]">
-                  <div><div className="font-mono text-ink-500">SON</div><div className="text-ink-200 truncate">{st.last ? relTime(st.last.created_at) : '—'}</div></div>
-                  <div><div className="font-mono text-ink-500">SONRAKİ</div><div className="text-ink-200 truncate">{st.next ? fmtDateTime(st.next) : '—'}</div></div>
-                  <div><div className="font-mono text-ink-500">BAŞARI</div><div className={cx('font-semibold', st.success === null ? 'text-ink-400' : st.success >= 80 ? 'text-emerald-700' : 'text-amber-700')}>{st.success === null ? '—' : `%${st.success}`}</div></div>
-                  <div><div className="font-mono text-ink-500">HATA</div><div className={st.errors ? 'text-rose-700 font-semibold' : 'text-ink-300'}>{st.errors}{st.blocked ? ` · ${st.blocked}⛔` : ''}</div></div>
-                </div>
-                <div className="flex items-center gap-1.5 mt-2 text-[10px] text-ink-500"><PlatformBadge platform={b.platform || 'system'} /> {platformMeta(b.platform).name}</div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+              </section>
+            ))}
+          </div>
+        );
+      })()}
       {creating && <BotEditor p={q.data} onClose={() => setCreating(false)} onSaved={(id) => { setCreating(false); q.reload(); go('bots', id); }} />}
     </div>
+  );
+}
+
+/** Bot kartviziti: marka renkli başlık, durum, yetenekler, son görev ve sayaçlar. */
+function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; onOpen: () => void }) {
+  const st = botStats(p, b.id); const meta = BOT_STATUS[b.status] ?? BOT_STATUS.active;
+  const skillNames = (b.automation_bot_skills || []).map((l) => p.skills.find((s) => s.id === l.skill_id)?.display_name).filter(Boolean) as string[];
+  const lm = p.lastMission[b.id];
+  const passive = b.status !== 'active';
+  return (
+    <button type="button" onClick={onOpen} className={cx('text-left rounded-2xl overflow-hidden bg-white shadow-sm ring-1 transition hover:shadow-md', live ? 'ring-sky-400/60' : 'ring-ink-700/70 hover:ring-brand-green/50', passive && 'opacity-80')}>
+      <div className={cx('relative px-4 pt-3.5 pb-3 text-white bg-gradient-to-br', passive ? 'from-slate-500 to-slate-700' : 'from-[#262A6B] via-[#1E3FA0] to-[#262A6B]')}>
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
+        <div className="relative flex items-start gap-3">
+          <div className="relative w-12 h-12 rounded-xl bg-white/15 ring-2 ring-white/40 grid place-items-center"><DynIcon name={b.icon} className="w-6 h-6" />
+            {live && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-sky-300 ring-2 ring-white ops-pulse" />}</div>
+          <div className="min-w-0 flex-1">
+            <div className="font-display font-semibold text-[15px] leading-tight line-clamp-2">{b.name}</div>
+            <div className="text-[11px] text-[#CFE4FA] mt-0.5 inline-flex items-center gap-1.5"><PlatformBadge platform={b.platform || 'system'} />{platformMeta(b.platform).name}</div>
+          </div>
+          <span className={cx('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold', live ? 'bg-sky-300 text-[#1B1F52]' : passive ? 'bg-white/20' : 'bg-emerald-300 text-emerald-950')}>{live ? '● ÇALIŞIYOR' : meta.label}</span>
+        </div>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <p className="text-[12px] text-ink-300 line-clamp-2 min-h-[2.4em]">{b.description}</p>
+        <div className="flex flex-wrap gap-1">{skillNames.slice(0, 4).map((n) => <span key={n} className="text-[10px] rounded-md bg-emerald-50 ring-1 ring-emerald-200 px-1.5 py-0.5 text-emerald-900">{n}</span>)}{skillNames.length > 4 && <span className="text-[10px] text-ink-500">+{skillNames.length - 4}</span>}</div>
+      </div>
+      <div className="grid grid-cols-4 gap-2 border-t border-ink-800 bg-ink-900/40 px-4 py-2.5 text-[10px]">
+        <div><div className="font-mono text-ink-500">SON GÖREV</div><div className="text-ink-200 truncate">{lm ? relTime(lm.at) : st.last ? relTime(st.last.created_at) : '—'}</div></div>
+        <div><div className="font-mono text-ink-500">BULGU</div><div className="text-ink-200">{lm ? lm.findings : '—'}</div></div>
+        <div><div className="font-mono text-ink-500">BAŞARI</div><div className={cx('font-semibold', st.success === null ? 'text-ink-400' : st.success >= 80 ? 'text-emerald-700' : 'text-amber-700')}>{st.success === null ? '—' : `%${st.success}`}</div></div>
+        <div><div className="font-mono text-ink-500">HATA</div><div className={st.errors ? 'text-rose-700 font-semibold' : 'text-ink-300'}>{st.errors}{st.blocked ? ` · ${st.blocked}⛔` : ''}</div></div>
+      </div>
+    </button>
   );
 }
 

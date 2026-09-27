@@ -71,23 +71,32 @@ export function PortfolioScreen() {
             {companies.map((c) => {
               const st = stageMeta(c.lifecycle_stage); const overdue = c.next_action_at && new Date(c.next_action_at) <= new Date();
               return (
-                <button key={c.id} onClick={() => setOpen(c)} className="ops-panel text-left p-4 hover:ring-1 hover:ring-brand-green/40">
-                  <div className="flex items-start gap-3">
-                    <span className="w-10 h-10 rounded-xl bg-ink-800 text-brand-green flex items-center justify-center shrink-0"><Building className="w-5 h-5" /></span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2"><span className="font-semibold text-ink-100 truncate">{c.firm_name}</span><Pill tone={st.tone}>{st.label}</Pill></div>
-                      <div className="text-[11px] text-ink-400 truncate">{[c.sector, c.ilce, c.il].filter(Boolean).join(' · ') || '—'}</div>
+                <button key={c.id} onClick={() => setOpen(c)} className="text-left rounded-2xl overflow-hidden bg-white shadow-sm ring-1 ring-ink-700/70 hover:ring-brand-green/50 hover:shadow-md transition flex flex-col">
+                  <div className="relative px-4 pt-3.5 pb-3 text-white bg-gradient-to-br from-[#262A6B] via-[#1E3FA0] to-[#262A6B]">
+                    <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
+                    <div className="relative flex items-start gap-3">
+                      <span className="w-12 h-12 rounded-xl bg-[#8FC6F2] text-[#1B1F52] grid place-items-center text-lg font-bold ring-2 ring-white/40 shrink-0">{c.firm_name.replace(/^[^\p{L}\p{N}]+/u, '').charAt(0).toLocaleUpperCase('tr-TR') || <Building className="w-5 h-5" />}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-display font-semibold text-[15px] leading-tight line-clamp-2">{c.firm_name}</div>
+                        <div className="text-[11px] text-[#CFE4FA] mt-0.5 truncate">{[c.sector, c.ilce, c.il].filter(Boolean).join(' · ') || '—'}</div>
+                      </div>
+                      <span className="shrink-0"><Pill tone={st.tone}>{st.label}</Pill></span>
+                    </div>
+                    {typeof c.priority_score === 'number' && <div className="relative mt-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold">Öncelik {c.priority_score}</div>}
+                  </div>
+                  <div className="px-4 py-3 space-y-1.5 flex-1">
+                    {c.need && <div className="text-[12px] text-emerald-900 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-2 py-1 line-clamp-2">🎯 {c.need}</div>}
+                    {c.ai_notes && <p className="text-[12px] text-ink-300 line-clamp-2">{c.ai_notes}</p>}
+                    <div className="flex flex-col gap-0.5 text-[12px] text-ink-200">
+                      {c.public_phone && <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-brand-green" />{c.public_phone}</span>}
+                      {c.public_email && <span className="inline-flex items-center gap-1.5 min-w-0"><Mail className="w-3.5 h-3.5 text-brand-green shrink-0" /><span className="truncate">{c.public_email}</span></span>}
+                      {c.website && <span className="inline-flex items-center gap-1.5 min-w-0"><Globe className="w-3.5 h-3.5 text-brand-green shrink-0" /><span className="truncate">{c.website.replace(/^https?:\/\//, '')}</span></span>}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-ink-300">
-                    {c.public_phone && <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" />{c.public_phone}</span>}
-                    {c.public_email && <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" />{c.public_email}</span>}
-                    {c.website && <span className="inline-flex items-center gap-1"><Globe className="w-3 h-3" />{c.website.replace(/^https?:\/\//, '').slice(0, 30)}</span>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] font-mono text-ink-500">
+                  <div className="flex flex-wrap items-center gap-2 border-t border-ink-800 bg-ink-900/40 px-4 py-2 text-[10px] font-mono text-ink-500">
                     <span>{c.opt_out ? '⛔ İLETİŞİM İSTEMİYOR' : `⏰ ${c.follow_up_days} günde bir`}</span>
                     {c.next_action_at && !c.opt_out && <span className={overdue ? 'text-amber-700 font-bold' : ''}>sonraki {fmtDate(c.next_action_at)}</span>}
-                    <span>eklendi {relTime(c.first_seen_at)}</span>
+                    <span className="ml-auto">eklendi {relTime(c.first_seen_at)}</span>
                   </div>
                 </button>
               );
