@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { BookOpenCheck, Briefcase, CalendarClock, CheckCircle2, Heart, ListChecks, Radio, Users } from 'lucide-react';
+import { BookOpenCheck, Briefcase, CalendarClock, CheckCircle2, Heart, ListChecks, MessageCircle, Radio, Users } from 'lucide-react';
+import { SocialInbox } from '../components/SocialInbox';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import type { Bot } from '../lib/types';
 import { MissionList } from '../components/Missions';
@@ -11,8 +12,9 @@ import { OpportunityWall } from '../components/OpportunityWall';
 import { useRouter } from '../session';
 import { cx, ErrorState } from '../ui';
 
-type View = 'engage' | 'opps' | 'all' | 'pending' | 'approved' | 'auto' | 'follow' | 'learn';
+type View = 'inbox' | 'engage' | 'opps' | 'all' | 'pending' | 'approved' | 'auto' | 'follow' | 'learn';
 const VIEWS: Array<{ id: View; label: string; icon: typeof Heart; hint: string }> = [
+  { id: 'inbox', label: 'Gelen sorular', icon: MessageCircle, hint: 'Fiyat · bilgi talepleri (yorum botu)' },
   { id: 'engage', label: 'Etkileşim listesi', icon: Heart, hint: 'Beğen · yorum · takip (elle)' },
   { id: 'opps', label: 'İş fırsatları', icon: Briefcase, hint: 'Botların bulduğu müşteriler' },
   { id: 'all', label: 'Tüm görevler', icon: ListChecks, hint: 'Her görev ve raporu' },
@@ -37,8 +39,8 @@ export function ReportsScreen() {
     const f = ((today.data ?? []) as Array<{ findings: unknown[] | null }>).reduce((a, m) => a + (Array.isArray(m.findings) ? m.findings.length : 0), 0);
     return { live: live.count ?? 0, todayMissions: today.data?.length ?? 0, todayFindings: f, pending: pending.count ?? 0 };
   }, { live: 0, todayMissions: 0, todayFindings: 0, pending: 0 }, [], ['bot_missions']);
-  const initial = (router.state.params.get('view') as View) || (router.state.id ? 'all' : 'engage');
-  const [view, setView] = useState<View>(VIEWS.some((v) => v.id === initial) ? initial : 'engage');
+  const initial = (router.state.params.get('view') as View) || (router.state.id ? 'all' : 'inbox');
+  const [view, setView] = useState<View>(VIEWS.some((v) => v.id === initial) ? initial : 'inbox');
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
   const tiles = [
     { label: 'Şu an çalışan', value: stats.data.live, icon: Radio, tone: stats.data.live ? 'text-sky-700' : 'text-ink-300' },
@@ -69,7 +71,8 @@ export function ReportsScreen() {
           </button>
         ))}
       </div>
-      {view === 'engage' ? <EngagementList />
+      {view === 'inbox' ? <SocialInbox />
+        : view === 'engage' ? <EngagementList />
         : view === 'opps' ? <OpportunityWall />
         : view === 'learn' ? <LearningLog bots={q.data} />
         : view === 'follow' ? <FollowList />

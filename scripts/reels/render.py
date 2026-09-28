@@ -29,6 +29,8 @@ TEMPLATES = {
     'tamirat': (['Sorun', 'Tespit', 'Onarım', 'Sonuç'], 'Tamirat & onarım'),
     'santiye': (['Sabah', 'Ekibimiz', 'İşin mutfağı', 'Günün sonu'], 'Şantiyeden gerçek iş'),
     'ipucu': (['1. ipucu', '2. ipucu', '3. ipucu', 'Özet'], 'Ustadan ipuçları'),
+    'celik': (['Çelik iskelet', 'Montaj', 'Kaplama & yalıtım', 'Anahtar teslim'], 'Çelik konstrüksiyon ev'),
+    'teslim': (['Temel', 'Yapı yükseliyor', 'İnce işler', 'Anahtar teslim'], 'Söz verdiğimiz gibi'),
 }
 # Her Reels farklı görünsün: geçiş efekti, üst etiket ve kanca kartı değişir (renkler Embay lacivert/gök mavisi içinde kalır)
 STYLES = [
@@ -59,6 +61,8 @@ def font(bold=True, size=60):
 
 def template_for(text):
     t = (text or '').lower()
+    if re.search(r'çelik|celik|konstrüksiyon', t): return 'celik'
+    if re.search(r'teslim|sözümüz|söz verdiğimiz', t): return 'teslim'
     if re.search(r'tamir|onar|rutubet|yalıtım|çatlak|akıt', t): return 'tamirat'
     if re.search(r'tadilat|renovasyon|mutfak|banyo|cephe|mantolama|önce', t): return 'tadilat'
     if re.search(r'ipucu|hata|dikkat|rehber', t): return 'ipucu'

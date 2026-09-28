@@ -23,6 +23,8 @@ const PLATFORM_RULES: Record<Platform, string> = {
 // İçerik direkleri — YALNIZCA Embay Yapı inşaat işleri (yönetici kararı 2026-09-27: Manitou için sosyal medya içeriği/reklamı YOK).
 // "150 günde villa" konsepti bir kez yayınlandı; tekrar etmemek için hiçbir direkte bu kalıp kullanılmaz.
 const PILLARS = [
+  { key: 'teslim', brand: 'Embay Yapı', topic: 'Anahtar teslim sözümüz: ev ve villaları söz verdiğimiz gibi teslim ediyoruz; projelerimizden gerçek görüntüler (belirli bir teslim olayı / tarih / m² UYDURMA)', badge: 'TESLİM ETTİK' },
+  { key: 'celik', brand: 'Embay Yapı', topic: 'Ağır çelik ve hafif çelik konstrüksiyon ev / villa: depreme dayanıklı, hızlı ve ekonomik yapı sistemleri', badge: 'ÇELİK YAPI' },
   { key: 'ev', brand: 'Embay Yapı', topic: 'Müstakil ev yapımı: arsadan anahtar teslime ev yaptırma süreci, zemin etüdü, proje ve ruhsat, doğru malzeme seçimi', badge: 'EV YAPIMI' },
   { key: 'tadilat', brand: 'Embay Yapı', topic: 'Komple tadilat ve renovasyon: mutfak, banyo, zemin, iç mekân yenileme; eski evi yeni gibi yapmak', badge: 'TADİLAT & RENOVASYON' },
   { key: 'bina', brand: 'Embay Yapı', topic: 'Bina yapımı ve kentsel dönüşüm: depreme dayanıklı betonarme, kat karşılığı, apartman inşaatı', badge: 'BİNA YAPIMI' },
@@ -33,6 +35,8 @@ const PILLARS = [
 ] as const;
 // Her direk için birbirinden farklı yedek başlıklar (AI yoksa bile aynı başlık tekrar tekrar çıkmasın)
 const HEADLINES: Record<string, string[]> = {
+  teslim: ['Sözümüzün Arkasındayız', 'Anahtar Teslim, Söz Verdiğimiz Gibi', 'Hayallerinizdeki Yaşamı Teslim Ediyoruz', 'Projelerimizden Kareler', 'Temelden Anahtara Tek Muhatap'],
+  celik: ['Ağır Çelik ile Depreme Dayanıklı Ev', 'Hafif Çelik Villa: Hızlı ve Sağlam', 'Çelik Konstrüksiyonun Avantajları', 'Çelik Yapıyla Güvenli Yaşam', 'Çelik Villa Adım Adım Yükseliyor'],
   ev: ['Hayalinizdeki Ev, Temelden', 'Ev Yaptırmadan Önce Bunu İzleyin', 'Arsadan Anahtara Tek Muhatap', 'Sağlam Ev Zeminden Başlar', 'Müstakil Ev Yaptırmak İstiyorum'],
   tadilat: ['Eski Ev, Yeni Hayat', 'Tadilatta En Çok Yapılan 3 Hata', 'Mutfak Yenileme Nasıl Yapılır?', 'Banyo Tadilatı Adım Adım', 'Önce / Sonra: Farkı Görün'],
   bina: ['Depreme Dayanıklı Bina Nasıl Yapılır?', 'Kentsel Dönüşümde Doğru Adım', 'Betonarmede Gözden Kaçanlar', 'Apartman İnşaatı Aşamaları', 'Kat Karşılığında Nelere Dikkat?'],
@@ -90,7 +94,7 @@ const ICONS: Record<string, string> = {
   manitou: '<path d="M12 74h44V54H40l-6-12H20v12h-8z"/><path d="M48 60l34-30"/><path d="M52 66l34-30"/><path d="M84 26v16h12"/><circle cx="24" cy="80" r="9"/><circle cx="50" cy="80" r="9"/>',
   alet: '<path d="M22 84l36-36"/><path d="M58 48a14 14 0 1 0 12-22l-8 8-6-2-2-6 8-8a14 14 0 0 0-4 30"/><path d="M34 22l22 22M28 28l12-12 10 10-12 12z"/><path d="M50 44l30 30-6 6-30-30"/>',
 };
-const PILLAR_ICON: Record<string, string> = { manitou: 'manitou', kampanya: 'manitou', ev: 'ev', bina: 'bina', tamirat: 'alet', villa: 'ev', donusum: 'bina', tadilat: 'alet', santiye: 'vinc', ipucu: 'baret' };
+const PILLAR_ICON: Record<string, string> = { teslim: 'ev', celik: 'bina', manitou: 'manitou', kampanya: 'manitou', ev: 'ev', bina: 'bina', tamirat: 'alet', villa: 'ev', donusum: 'bina', tadilat: 'alet', santiye: 'vinc', ipucu: 'baret' };
 export function iconFor(badge: string) {
   const t = badge.toLocaleLowerCase('tr-TR');
   if (/manitou|kiralık|kiralama|kampanya/.test(t)) return 'manitou';
@@ -283,6 +287,8 @@ ${bar}
 
 // ── Yapay zekâ görseli (Google Gemini görsel modeli). Temsili konsept görsel üretir; gönderide "temsilidir" notu düşülür.
 const AI_SCENES: Record<string, string[]> = {
+  teslim: ['newly completed modern two-storey villa handed over to owners, keys on a table in front, landscaped garden, golden hour', 'finished modern detached house exterior at sunset, fresh landscaping, warm lights'],
+  celik: ['steel frame house structure under construction, heavy steel beams and columns, clean site, blue sky', 'modern light gauge steel framed villa under construction, galvanized steel studs, daylight'],
   ev: ['modern two-storey detached family house with garden, warm evening light, stone and white plaster facade, wooden details', 'newly built detached house in Istanbul countryside, landscaped yard, golden hour, architectural photography'],
   villa: ['luxury modern villa with infinity pool at dusk, warm interior lights, natural stone walls, olive trees', 'contemporary villa with large glass windows and wooden pergola, sunset, Mediterranean landscape'],
   bina: ['modern residential apartment building, clean facade with balconies, blue sky, urban Istanbul street', 'reinforced concrete building under construction with tower crane, scaffolding, dramatic sky'],
@@ -398,6 +404,8 @@ function dayIndex(day: string) { return Math.floor(new Date(`${day}T00:00:00Z`).
 const TAGS = {
   yerel: ['#çatalca', '#silivri', '#büyükçekmece', '#istanbul', '#arnavutköy', '#beylikdüzü', '#hadımköy', '#esenyurt', '#avcılar', '#başakşehir', '#güngören', '#istanbulinşaat'],
   konu: {
+    teslim: ['#anahtarteslim', '#tesliminyapıldı', '#villa', '#evyapımı', '#müstakilev', '#yenievimiz', '#hayalimdekiev', '#çatalca', '#projeteslim'],
+    celik: ['#çelikev', '#ağırçelik', '#hafifçelik', '#çelikkonstrüksiyon', '#çelikyapı', '#çelikvilla', '#depremedayanıklı', '#hızlıev', '#modülerev'],
     ev: ['#evyapımı', '#müstakilev', '#anahtarteslim', '#evyaptırmak', '#yapı', '#bahçeliev', '#evinşaatı', '#yeniev', '#hayalimdekiev'],
     bina: ['#binayapımı', '#kentseldönüşüm', '#depremedayanıklı', '#betonarme', '#müteahhit', '#apartman', '#katkarşılığı', '#yenibina', '#depremgüvenliği'],
     tamirat: ['#tamirat', '#onarım', '#çatıtamiri', '#suyalıtımı', '#mantolama', '#çatıaktarma', '#rutubet', '#dışcephe', '#bakımonarım'],
@@ -485,11 +493,17 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
     if (partial) break;
     const h = have.get(q.platform); const needV = Math.max(0, q.video_per_day - (h?.videos ?? 0)); const needB = Math.max(0, q.image_per_day - (h?.banners ?? 0));
     if (!needV && !needB && !opts.force) continue;
-    const pillars = [0, 1, 2].map((i) => PILLARS[(di * 3 + i + ['instagram', 'tiktok', 'youtube', 'facebook', 'x'].indexOf(q.platform)) % PILLARS.length]);
+    const pIdx0 = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'].indexOf(q.platform);
+    const pillars = [0, 1, 2].map((i) => PILLARS[(di * 3 + i + pIdx0) % PILLARS.length]);
+    // Geçmiş verisi (Instagram 2025): en çok ilgi ve fiyat sorusu 'biten/teslim edilen proje' ve 'çelik villa' videolarına geldi → Reels bunlardan
+    const REEL_KEYS = ['teslim', 'celik', 'santiye', 'teslim', 'villa', 'celik', 'ev'];
+    const reelPillar = PILLARS.find((pp) => pp.key === REEL_KEYS[(di + pIdx0) % REEL_KEYS.length]);
+    if (reelPillar) { pillars[0] = reelPillar; if (pillars[1].key === reelPillar.key || pillars[2].key === reelPillar.key) { const alt = PILLARS.filter((pp) => ![reelPillar.key, pillars[1].key, pillars[2].key].includes(pp.key)); if (pillars[1].key === reelPillar.key) pillars[1] = alt[0]; else pillars[2] = alt[0]; } }
     let items: Item[] = [];
     try {
       const { json } = await aiComplete(actx, 'content_factory', [
         `Embay Yapı (Çatalca/İstanbul) için ${q.platform.toUpperCase()} platformunda BUGÜN paylaşılacak 3 içerik yaz. Ana mesaj: ev yapımı, villa yapımı, bina yapımı, tadilat, tamirat — inşaata dair tüm işleriniz yapılır.`,
+        `ÜSLUP (geçmişte en çok ilgi ve fiyat talebi alan gönderilerimizden): kısa ve samimi, emojili bir açılış cümlesi (ör. "SÖZÜMÜZÜN ARKASINDAYIZ 🎉", "Biten İstanbul/Çatalca projemiz sizlerle! 🏡"), ardından "Embay Yapı olarak ..." ile başlayan 2-3 cümlelik güven veren açıklama, sonunda "Fiyat ve detaylı bilgi için DM'den ya da WhatsApp ${brand?.phone ?? '0531 436 29 04'}'ten yazın" çağrısı. Proje adı, m², şehir UYDURMA — bilinmiyorsa genel yaz.`,
         `YASAK: Manitou, iş makinesi, kiralama konusu YAZMA. "150 günde villa" kalıbını ve aşağıdaki son kullanılan başlıkları TEKRAR ETME; her içerik özgün bir açı/konsept olsun (ipucu, önce-sonra, hata-doğru, soru-cevap, işin mutfağı, müşteri sorusu vb.). Son kullanılan başlıklar: ${[...usedHeads].slice(0, 40).join(' | ') || '—'}`,
         `1. içerik format=reel (kısa dikey video: kanca + çekim senaryosu video_script'e), 2. ve 3. içerik format=banner (görsel üzerinde büyük başlık "headline" en fazla 5 kelime, "subtitle" en fazla 14 kelime).`,
         `Konular sırasıyla: ${pillars.map((p, i) => `${i + 1}) ${p.topic} [marka: ${p.brand}]`).join(' · ')}`,

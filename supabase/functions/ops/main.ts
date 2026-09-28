@@ -14,6 +14,7 @@ import { ConnectorError, resolveStatus } from '../_shared/connectors/types.ts';
 import { businessDiscovery, graphVersion, instagramLoginExchange, instagramLoginUrl, metaAuthorizeUrl, metaExchange } from '../_shared/connectors/meta.ts';
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
+import { inboxReply, inboxTick } from '../_shared/inbox.ts';
 import { aiImage, factoryTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
@@ -64,7 +65,9 @@ async function runWorker(db: Db, workerId: string) {
   const metrics = await syncMetrics(db, 3);
   const factory = autopilot.enabled ? await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) })) : { skipped: 'otopilot kapalı' };
   const drive = await driveTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive, autopilot };
+  // Yorum botu: kendi gönderilerimize gelen sorular (10 dk'da bir) — mesai dışında da çalışır, müşteri beklemez
+  const inbox = await inboxTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, inbox, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
@@ -466,6 +469,8 @@ async function api(db: Db, req: Request) {
   const action = String(body.action || '');
   switch (action) {
     case 'status': { await requireUser(db, req); return status(db); }
+    case 'inbox_reply': { await requireUser(db, req); return inboxReply(db, String(body.id || ''), String(body.message || '')); }
+    case 'inbox_sync': { await requireUser(db, req); return inboxTick(db, true); }
 
     case 'run_task': {
       const u = await requireUser(db, req);
