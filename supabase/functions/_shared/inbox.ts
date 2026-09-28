@@ -43,6 +43,15 @@ export function replyFor(intent: Intent, seed: string) {
   return list[h % list.length];
 }
 
+/** Instagram iş hesabı kimliği + Graph (graph.facebook.com) için Facebook sayfa token'ı (IG yorumları sayfa token'ıyla okunur/yanıtlanır). */
+async function igAccess(db: Db) {
+  const { data: acc } = await db.from('social_accounts').select('*').eq('connector_key', 'instagram').eq('connection_status', 'connected').limit(1).maybeSingle();
+  if (!acc) return { acc: null, token: null };
+  const { data: fb } = await db.from('social_accounts').select('*').eq('connector_key', 'facebook').eq('connection_status', 'connected').limit(1).maybeSingle();
+  const token = fb ? await tokenFor(db, fb as AccountRow) : await tokenFor(db, acc as AccountRow);
+  return { acc, token };
+}
+
 async function g(path: string, token: string) {
   const r = await fetch(`${GRAPH}/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`);
   const j = await r.json().catch(() => ({}));
@@ -56,9 +65,8 @@ export async function inboxTick(db: Db, force = false) {
   const st = ap as { auto_reply?: boolean; auto_reply_since?: string; inbox_synced_at?: string | null } | null;
   if (!force && st?.inbox_synced_at && Date.now() - new Date(st.inbox_synced_at).getTime() < 10 * 60_000) return null;
   await db.from('ops_autopilot').update({ inbox_synced_at: new Date().toISOString() }).eq('id', 1);
-  const { data: acc } = await db.from('social_accounts').select('*').eq('connector_key', 'instagram').eq('connection_status', 'connected').limit(1).maybeSingle();
-  if (!acc) return { skipped: 'instagram bağlı değil' };
-  const token = await tokenFor(db, acc as AccountRow);
+  const { acc, token } = await igAccess(db);
+  if (!acc || !token) return { skipped: 'instagram bağlı değil' };
   const me = await g(`${acc.external_account_id}?fields=username`, token);
   const media = await g(`${acc.external_account_id}/media?fields=id,permalink,comments_count&limit=60`, token);
   const since = st?.auto_reply_since ? new Date(st.auto_reply_since).getTime() : Date.now();
@@ -110,9 +118,8 @@ export async function inboxReply(db: Db, id: string, message: string) {
   if (!row) throw new Error('Kayıt bulunamadı');
   const msg = String(message || '').trim().slice(0, 900);
   if (msg.length < 2) throw new Error('Yanıt boş');
-  const { data: acc } = await db.from('social_accounts').select('*').eq('connector_key', 'instagram').eq('connection_status', 'connected').limit(1).maybeSingle();
-  if (!acc) throw new Error('Instagram bağlı değil');
-  const token = await tokenFor(db, acc as AccountRow);
+  const { acc, token } = await igAccess(db);
+  if (!acc || !token) throw new Error('Instagram bağlı değil');
   const r = await fetch(`${GRAPH}/${row.external_id}/replies`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ message: msg, access_token: token }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
