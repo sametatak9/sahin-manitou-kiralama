@@ -33,7 +33,7 @@ export function SocialInbox() {
 
   const reply = async (r: Row) => {
     setBusy(r.id); setMsg(null);
-    try { await callOps('inbox_reply', { id: r.id, message: draft[r.id] ?? SUGGEST[r.intent] ?? SUGGEST.other }); setMsg({ tone: 'ok', text: `@${r.username} yanıtlandı (Instagram'da yayında).` }); await q.reload(); }
+    try { await callOps('inbox_reply', { id: r.id, message: draft[r.id] ?? SUGGEST[r.intent] ?? SUGGEST.other }); setMsg({ tone: 'ok', text: 'Yanıt gönderildi (Instagram’da yayında).' }); await q.reload(); }
     catch (e) { setMsg({ tone: 'error', text: (e as Error).message }); } finally { setBusy(null); }
   };
   const archive = async (r: Row) => { await db().from('social_inbox').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', r.id); await q.reload(); };
@@ -63,7 +63,7 @@ export function SocialInbox() {
                   <span className="shrink-0 w-10 h-10 rounded-xl grid place-items-center text-white bg-gradient-to-br from-fuchsia-500 via-rose-500 to-amber-400"><MessageCircle className="w-5 h-5" /></span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[13px] font-semibold text-ink-100">@{r.username}</span>
+                      <span className="text-[13px] font-semibold text-ink-100">{r.username ? `@${r.username}` : 'Instagram kullanıcısı'}</span>
                       <span className={cx('rounded-full px-2 py-0.5 text-[10px] font-bold', cls)}>{label}</span>
                       {r.replied && <span className="rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-600 text-white inline-flex items-center gap-1">{r.reply_source === 'bot' && <Bot className="w-3 h-3" />}Yanıtlandı</span>}
                     </div>

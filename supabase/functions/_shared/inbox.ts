@@ -67,23 +67,24 @@ export async function inboxTick(db: Db, force = false) {
   await db.from('ops_autopilot').update({ inbox_synced_at: new Date().toISOString() }).eq('id', 1);
   const { acc, token } = await igAccess(db);
   if (!acc || !token) return { skipped: 'instagram bağlı değil' };
-  const me = await g(`${acc.external_account_id}?fields=username`, token);
+  const me = await g(`${acc.external_account_id}?fields=id,username`, token);
   const media = await g(`${acc.external_account_id}/media?fields=id,permalink,comments_count&limit=60`, token);
   const since = st?.auto_reply_since ? new Date(st.auto_reply_since).getTime() : Date.now();
   let found = 0; let replied = 0; const fresh: string[] = [];
   for (const m of (media.data ?? []) as Array<{ id: string; permalink: string; comments_count: number }>) {
     if (!m.comments_count) continue;
-    const cs = await g(`${m.id}/comments?fields=id,text,timestamp,username,replies{username}&limit=50`, token).catch(() => ({ data: [] }));
-    for (const c of (cs.data ?? []) as Array<{ id: string; text?: string; timestamp?: string; username?: string; replies?: { data?: Array<{ username?: string }> } }>) {
-      if (!c.username || c.username === me.username) continue;
-      const answered = (c.replies?.data ?? []).some((r) => r.username === me.username);
+    const cs = await g(`${m.id}/comments?fields=id,text,timestamp,username,user,replies{user,username}&limit=50`, token).catch(() => ({ data: [] }));
+    for (const c of (cs.data ?? []) as Array<{ id: string; text?: string; timestamp?: string; username?: string; user?: { id?: string }; replies?: { data?: Array<{ username?: string; user?: { id?: string } }> } }>) {
+      // Meta, yorum yapanın kullanıcı adını her zaman vermez; bizim yorum/yanıtlarımız 'user.id' ile tanınır
+      if (c.user?.id === me.id || (c.username && c.username === me.username)) continue;
+      const answered = (c.replies?.data ?? []).some((r) => r.user?.id === me.id || (r.username && r.username === me.username));
       const intent = intentOf(c.text ?? '');
       const { data: existing } = await db.from('social_inbox').select('id,replied').eq('external_id', c.id).maybeSingle();
       if (!existing) {
-        await db.from('social_inbox').insert({ platform: 'instagram', external_id: c.id, media_id: m.id, permalink: m.permalink, username: c.username, text: (c.text ?? '').slice(0, 2000),
+        await db.from('social_inbox').insert({ platform: 'instagram', external_id: c.id, media_id: m.id, permalink: m.permalink, username: c.username ?? null, text: (c.text ?? '').slice(0, 2000),
           intent, commented_at: c.timestamp ?? null, replied: answered, status: answered ? 'replied' : 'open', reply_source: answered ? 'manual' : null });
         found++;
-        if (!answered && ['price', 'info', 'location'].includes(intent)) fresh.push(`• @${c.username}: “${(c.text ?? '').slice(0, 120)}”\n  ${m.permalink}`);
+        if (!answered && ['price', 'info', 'location'].includes(intent)) fresh.push(`• ${c.username ? '@' + c.username : 'Bir kullanıcı'}: “${(c.text ?? '').slice(0, 120)}”\n  ${m.permalink}`);
       } else if (answered && !existing.replied) {
         await db.from('social_inbox').update({ replied: true, status: 'replied', reply_source: 'manual', updated_at: new Date().toISOString() }).eq('id', existing.id);
         continue;
