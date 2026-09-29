@@ -1,11 +1,14 @@
-// İş fırsatları duvarı: iş bulma botlarının son 7 gündeki bulguları tek yerde, kartvizit olarak (tekrarlar ayıklanır, uygunluğa göre sıralanır).
+// İş fırsatları: yalnızca inşaat iş bulucu (Manitou botu kapalı).
 import { useMemo, useState } from 'react';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import type { Mission, MissionFinding } from '../lib/types';
 import { FindingCard } from './FindingCard';
 import { cx, StateView } from '../ui';
 
-const BOTS: Record<string, string> = { 'insaat-is-bulucu': 'İnşaat', 'manitou-is-bulucu': 'Manitou', 'market-intel-bot': 'İhale' };
+const BOTS: Record<string, string> = {
+  'insaat-is-bulucu': 'İnşaat',
+  'market-intel-bot': 'İhale',
+};
 
 export function OpportunityWall() {
   const q = useQuery(async () => {
@@ -18,6 +21,9 @@ export function OpportunityWall() {
     for (const m of ms) for (const f of m.findings ?? []) {
       const key = f.url.replace(/[?#].*$/, '').replace(/\/$/, '');
       if (f.verdict === 'rejected' || seen.has(key) || /Kural tabanlı ön eleme/.test(f.fit ?? '') && (f.relevance ?? 0) < 7) continue;
+      // Manitou / kiralama içeriklerini gösterme
+      const blob = `${f.title ?? ''} ${f.fit ?? ''} ${f.summary ?? ''}`.toLocaleLowerCase('tr-TR');
+      if (/manitou|teleskopik|telehandler|forklift kiral|iş makinesi kiral/.test(blob)) continue;
       seen.add(key); rows.push({ f, m, tag: tagOf.get(m.bot_id ?? '') ?? '' });
     }
     rows.sort((a, b) => (b.f.relevance ?? 0) - (a.f.relevance ?? 0));
@@ -27,9 +33,13 @@ export function OpportunityWall() {
   const rows = useMemo(() => q.data.rows.filter((r) => tag === 'all' || r.tag === tag), [q.data.rows, tag]);
 
   if (q.loading && !q.data.rows.length) return <StateView kind="loading" compact />;
-  if (!q.data.rows.length) return <StateView kind="empty" title="Son 7 günde fırsat yok" message="İş bulma botları çalıştıkça uygun bulgular burada kartvizit olarak birikir." />;
+  if (!q.data.rows.length) return <StateView kind="empty" title="Son 7 günde inşaat fırsatı yok" message="İnşaat İş Bulucu çalıştıkça uygun bulgular burada kart olarak birikir. Manitou aramaları kapalı." />;
   return (
     <div className="space-y-3">
+      <div className="rounded-2xl bg-emerald-50/80 ring-1 ring-emerald-200 px-3.5 py-2.5 text-xs text-ink-200">
+        <b className="text-ink-100">Ne yapmalısınız?</b> Kartı açın → uygunsa portföye kaydedin veya WhatsApp ile iletişime geçin.
+        Sadece villa, tadilat, kentsel dönüşüm, müstakil ev, çelik/betonarme işleri listelenir.
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {['all', ...Object.values(BOTS)].map((t) => (
           <button key={t} type="button" onClick={() => setTag(t)} className={cx('rounded-full px-3 py-1.5 text-xs font-semibold ring-1', tag === t ? 'bg-[#262A6B] text-white ring-[#262A6B]' : 'bg-white ring-ink-700 text-ink-300')}>

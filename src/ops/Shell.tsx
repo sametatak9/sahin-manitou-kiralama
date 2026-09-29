@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, Truck, X,
+  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -9,7 +9,7 @@ import { cx } from './ui';
 import { PageGuide } from './components/PageGuide';
 
 interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
-/** Sade menü: günlük iş → bot/içerik → müşteri/sistem. Az grup, net etiket. */
+/** Sade menü — yalnızca Embay Yapı inşaat odaklı. Manitou kiralama menüde yok. */
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Günlük İş', items: [
     { id: 'home', label: 'Genel Bakış', icon: Gauge, hint: 'Bugün ne oluyor' },
@@ -19,15 +19,14 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   ] },
   { title: 'Botlar & İçerik', items: [
     { id: 'bots', label: 'Bot Merkezi', icon: Bot, hint: 'Görev ver · yetenek' },
-    { id: 'reports', label: 'Bot Raporları', icon: FileText, hint: 'Araştırma sonuçları' },
+    { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
     { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
   ] },
   { title: 'Müşteri & Sistem', items: [
     { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'Arşiv · hatırlatma' },
-    { id: 'construction', label: 'İnşaat Müşterileri', icon: Building2, hint: 'Kentsel dönüşüm' },
-    { id: 'rental', label: 'Makine Kiralama', icon: Truck, hint: 'Manitou müşterileri' },
+    { id: 'construction', label: 'İnşaat Müşterileri', icon: Building2, hint: 'Villa · tadilat · dönüşüm' },
     { id: 'leads', label: 'Gelen Talepler', icon: Inbox, hint: 'Web formu + bot' },
     { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
     { id: 'skills', label: 'Yetenekler', icon: Blocks, hint: 'Skill kütüphanesi' },
@@ -94,7 +93,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         </div>
         <div>
           <div className="font-display text-sm font-bold tracking-wide text-ink-100">EMBAY OPS</div>
-          <div className="text-[10px] font-mono tracking-[0.2em] text-ink-400">AI OPERATIONS CENTER</div>
+          <div className="text-[10px] font-mono tracking-[0.2em] text-ink-400">İNŞAAT OPERASYON</div>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto ops-scroll px-2 space-y-4 pb-4">
@@ -127,7 +126,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
                 <h3 className="font-display text-lg font-bold text-ink-100 flex items-center gap-2">
                   <Radar className="w-5 h-5 text-brand-green" /> Menü
                 </h3>
-                <p className="text-xs text-ink-400 mt-0.5">Embay Yapı & Şahin Manitou</p>
+                <p className="text-xs text-ink-400 mt-0.5">Embay Yapı — inşaat</p>
               </div>
               <button onClick={() => setDrawer(false)} className="p-2 rounded-xl bg-ink-800 text-ink-400 hover:text-ink-100">
                 <X className="w-5 h-5" />
