@@ -1,7 +1,8 @@
 // Onay Merkezi → İçerik taslakları: İçerik Fabrikası / botların hazırladığı ve onay bekleyen paylaşımlar (social_drafts).
 // Her taslak kartvizit görünümünde: görsel/video önizleme, platform, saat, başlık, açıklama; Onayla / Reddet / Büyük önizleme.
+// Toplu onay: Hepsini onayla / Hepsini reddet (sırayla, slot dağıtımlı).
 import { useState } from 'react';
-import { CalendarClock, Check, Eye, Film, Hash, Sparkles, X } from 'lucide-react';
+import { CalendarClock, Check, CheckCheck, Eye, Film, Hash, Sparkles, X } from 'lucide-react';
 import { MONTAGE_TEMPLATES, renderMontage, type MontageClip } from '../lib/montage';
 import { recorderFormat, uploadBlob } from '../lib/media';
 import { db, unwrap, useQuery } from '../lib/hooks';
@@ -72,6 +73,7 @@ export function DraftApprovals({ onCount }: { onCount?: (n: number) => void }) {
     return rows;
   }, [] as Row[], [], ['social_drafts']);
   const [busy, setBusy] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [open, setOpen] = useState<Row | null>(null);
   const [progress, setProgress] = useState<Record<string, string>>({});
@@ -82,24 +84,84 @@ export function DraftApprovals({ onCount }: { onCount?: (n: number) => void }) {
     catch (e) { setMsg({ tone: 'error', text: `Montaj yapılamadı: ${(e as Error).message}` }); }
     finally { setProgress((p) => { const n = { ...p }; delete n[d.id]; return n; }); setBusy(null); q.reload(); }
   };
-  const decide = async (d: Row, ok: boolean) => {
+
+  const decide = async (d: Row, ok: boolean, takenSlots?: Set<string>) => {
     setBusy(d.id); setMsg(null);
     try {
       // Onaylanan ham Reels önce otomatik montajlanır (marka kartı + adım etiketleri + kapanış)
       if (ok && isReel(d) && !isEdited(d)) await editReel(d, (n) => setProgress((p) => ({ ...p, [d.id]: n })));
       let when = d.scheduled_at;
       if (ok && (!when || new Date(when).getTime() < Date.now() + 5 * 60_000)) {
-        const { data: busySlots } = await db().from('social_drafts').select('scheduled_at').eq('primary_platform', d.primary_platform ?? '').in('workflow_status', ['scheduled', 'approved']).gte('scheduled_at', new Date().toISOString());
-        when = nextSlot(new Date(), new Set((busySlots ?? []).map((r: { scheduled_at: string }) => new Date(r.scheduled_at).toISOString())));
+        const taken = takenSlots ?? new Set<string>();
+        if (!takenSlots) {
+          const { data: busySlots } = await db().from('social_drafts').select('scheduled_at').eq('primary_platform', d.primary_platform ?? '').in('workflow_status', ['scheduled', 'approved']).gte('scheduled_at', new Date().toISOString());
+          (busySlots ?? []).forEach((r: { scheduled_at: string }) => taken.add(new Date(r.scheduled_at).toISOString()));
+        }
+        when = nextSlot(new Date(), taken);
+        taken.add(when);
       }
       const patch = ok
         ? { workflow_status: 'scheduled', status: 'planlandi', approved_by: session.userId, approved_at: new Date().toISOString(), scheduled_at: when }
         : { workflow_status: 'cancelled' };
       const { error } = await db().from('social_drafts').update(patch).eq('id', d.id).eq('workflow_status', 'pending_approval');
       if (error) throw new Error(error.message);
-      setMsg({ tone: 'ok', text: ok ? `Onaylandı — ${when ? fmtDateTime(when) : 'ilk uygun saatte'} paylaşılacak.` : 'Reddedildi, paylaşılmayacak.' });
-    } catch (e) { setMsg({ tone: 'error', text: (e as Error).message }); }
-    finally { setProgress((p) => { const n = { ...p }; delete n[d.id]; return n; }); setBusy(null); setOpen(null); q.reload(); }
+      if (!takenSlots) setMsg({ tone: 'ok', text: ok ? `Onaylandı — ${when ? fmtDateTime(when) : 'ilk uygun saatte'} paylaşılacak.` : 'Reddedildi, paylaşılmayacak.' });
+      return when;
+    } catch (e) {
+      if (!takenSlots) setMsg({ tone: 'error', text: (e as Error).message });
+      throw e;
+    } finally {
+      setProgress((p) => { const n = { ...p }; delete n[d.id]; return n; });
+      setBusy(null);
+      if (!takenSlots) { setOpen(null); q.reload(); }
+    }
+  };
+
+  /** Tüm bekleyen taslakları sırayla onayla veya reddet. Reels montajı atlanır (hız için); slotlar dağıtılır. */
+  const bulkDecide = async (ok: boolean) => {
+    if (!admin || !q.data.length) return;
+    const label = ok ? 'onaylamak' : 'reddetmek';
+    if (!window.confirm(`${q.data.length} taslağı ${label} istediğinize emin misiniz?${ok ? '\n\nNot: Ham reels için otomatik montaj toplu onayda atlanır; gerekirse tek tek "Editle" kullanın.' : ''}`)) return;
+    setBulkBusy(true); setMsg(null);
+    let okCount = 0; let failCount = 0;
+    const taken = new Set<string>();
+    try {
+      const { data: busySlots } = await db().from('social_drafts').select('scheduled_at').in('workflow_status', ['scheduled', 'approved']).gte('scheduled_at', new Date().toISOString());
+      (busySlots ?? []).forEach((r: { scheduled_at: string }) => taken.add(new Date(r.scheduled_at).toISOString()));
+    } catch { /* devam */ }
+    for (const d of q.data) {
+      try {
+        if (ok) {
+          let when = d.scheduled_at;
+          if (!when || new Date(when).getTime() < Date.now() + 5 * 60_000) {
+            when = nextSlot(new Date(), taken);
+            taken.add(when);
+          }
+          const { error } = await db().from('social_drafts').update({
+            workflow_status: 'scheduled',
+            status: 'planlandi',
+            approved_by: session.userId,
+            approved_at: new Date().toISOString(),
+            scheduled_at: when,
+          }).eq('id', d.id).eq('workflow_status', 'pending_approval');
+          if (error) throw new Error(error.message);
+        } else {
+          const { error } = await db().from('social_drafts').update({ workflow_status: 'cancelled' }).eq('id', d.id).eq('workflow_status', 'pending_approval');
+          if (error) throw new Error(error.message);
+        }
+        okCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    setBulkBusy(false);
+    setMsg({
+      tone: failCount ? 'error' : 'ok',
+      text: ok
+        ? `${okCount} taslak onaylandı ve zamanlandı${failCount ? `, ${failCount} başarısız` : ''}.`
+        : `${okCount} taslak reddedildi${failCount ? `, ${failCount} başarısız` : ''}.`,
+    });
+    q.reload();
   };
 
   if (q.loading && !q.data.length) return <StateView kind="loading" compact />;
@@ -109,6 +171,17 @@ export function DraftApprovals({ onCount }: { onCount?: (n: number) => void }) {
   return (
     <div className="space-y-3">
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      {admin && q.data.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-ink-850/80 ring-1 ring-ink-700 px-3 py-2.5">
+          <span className="text-xs text-ink-300 flex-1">{q.data.length} taslak bekliyor</span>
+          <Button variant="primary" loading={bulkBusy} onClick={() => bulkDecide(true)} icon={<CheckCheck className="w-4 h-4" />}>
+            Hepsini onayla
+          </Button>
+          <Button variant="ghost" loading={bulkBusy} onClick={() => bulkDecide(false)} icon={<X className="w-4 h-4" />}>
+            Hepsini reddet
+          </Button>
+        </div>
+      )}
       <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {q.data.map((d) => {
           const m = mediaOf(d); const p = d.primary_platform || d.platform_targets?.[0] || 'instagram';
@@ -138,8 +211,8 @@ export function DraftApprovals({ onCount }: { onCount?: (n: number) => void }) {
               <div className="border-t border-ink-800 bg-ink-900/40 px-3 py-2.5 flex gap-1.5">
                 {admin ? <>
                   {isReel(d) && !isEdited(d) && <Button variant="subtle" loading={busy === d.id} onClick={() => edit(d)} icon={<Sparkles className="w-4 h-4" />}>Editle</Button>}
-                  <Button variant="primary" className="flex-1" loading={busy === d.id} onClick={() => decide(d, true)} icon={<Check className="w-4 h-4" />}>{isReel(d) && !isEdited(d) ? 'Editle + onayla' : 'Onayla'}</Button>
-                  <Button variant="ghost" loading={busy === d.id} onClick={() => decide(d, false)} icon={<X className="w-4 h-4" />}>Reddet</Button>
+                  <Button variant="primary" className="flex-1" loading={busy === d.id || bulkBusy} onClick={() => decide(d, true)} icon={<Check className="w-4 h-4" />}>{isReel(d) && !isEdited(d) ? 'Editle + onayla' : 'Onayla'}</Button>
+                  <Button variant="ghost" loading={busy === d.id || bulkBusy} onClick={() => decide(d, false)} icon={<X className="w-4 h-4" />}>Reddet</Button>
                 </> : <span className="text-[11px] text-ink-400">Onay yöneticide</span>}
                 <Button variant="subtle" onClick={() => setOpen(d)} icon={<Eye className="w-4 h-4" />}>Önizle</Button>
               </div>

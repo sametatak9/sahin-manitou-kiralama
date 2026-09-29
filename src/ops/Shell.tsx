@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Globe, Inbox, LogOut, Mail, Menu, Phone, PlugZap, Radar, Settings, ShieldCheck, Sparkles, Truck, X,
+  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, Truck, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -9,34 +9,39 @@ import { cx } from './ui';
 import { PageGuide } from './components/PageGuide';
 
 interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
+/** Sade menü: günlük iş → bot/içerik → müşteri/sistem. Az grup, net etiket. */
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
-  { title: 'Operasyon', items: [
+  { title: 'Günlük İş', items: [
     { id: 'home', label: 'Genel Bakış', icon: Gauge, hint: 'Bugün ne oluyor' },
-    { id: 'bots', label: 'Bot Merkezi', icon: Bot, hint: 'Görev ver · yetenek ekle' },
-    { id: 'reports', label: 'Bot Raporları', icon: FileText, hint: 'Araştırma ve analizler' },
-    { id: 'approvals', label: 'Onay Merkezi', icon: CheckCheck, hint: 'İnsan onayı' },
+    { id: 'approvals', label: 'Onay Merkezi', icon: CheckCheck, hint: 'Bekleyen paylaşımlar' },
+    { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Zamanlanmış paylaşımlar' },
+    { id: 'videos', label: 'İçerik Havuzu', icon: Film, hint: 'Video · banner · metin' },
   ] },
-  { title: 'Sosyal & İçerik', items: [
-    { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'Instagram, Facebook… bağlantı ve botlar' },
-    { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Görsel/video yükle · saatinde paylaş' },
-    { id: 'videos', label: 'Havuzlar', icon: Film, hint: 'Video · banner · gönderi metni' },
-    { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta · gün · kanban' },
-    { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım + önizleme' },
+  { title: 'Botlar & İçerik', items: [
+    { id: 'bots', label: 'Bot Merkezi', icon: Bot, hint: 'Görev ver · yetenek' },
+    { id: 'reports', label: 'Bot Raporları', icon: FileText, hint: 'Araştırma sonuçları' },
+    { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
+    { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
+    { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
   ] },
-  { title: 'Müşteri / CRM', items: [
-    { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'Arşiv · hatırlatma · aşama' },
-    { id: 'construction', label: 'İnşaat Müşterileri', icon: Building2, hint: 'Kentsel dönüşüm, konut' },
+  { title: 'Müşteri & Sistem', items: [
+    { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'Arşiv · hatırlatma' },
+    { id: 'construction', label: 'İnşaat Müşterileri', icon: Building2, hint: 'Kentsel dönüşüm' },
     { id: 'rental', label: 'Makine Kiralama', icon: Truck, hint: 'Manitou müşterileri' },
-    { id: 'leads', label: 'Gelen Talepler', icon: Inbox, hint: 'Web formu + bot adayları' },
-  ] },
-  { title: 'Sistem', items: [
-    { id: 'system', label: 'Bağlantı & Sistem', icon: ShieldCheck, hint: 'Giriş bilgileri · sistem kontrolü' },
-    { id: 'skills', label: 'Yetenek Kütüphanesi', icon: Blocks, hint: 'Skill & araçlar' },
-    { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka, AI, ekip, kayıtlar' },
+    { id: 'leads', label: 'Gelen Talepler', icon: Inbox, hint: 'Web formu + bot' },
+    { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
+    { id: 'skills', label: 'Yetenekler', icon: Blocks, hint: 'Skill kütüphanesi' },
+    { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'bots', 'queue', 'reports', 'connections'];
-const MOBILE_LABEL: Partial<Record<Route, string>> = { home: 'Genel', bots: 'Botlar', queue: 'Yayın', reports: 'Raporlar', connections: 'Uygulamalar' };
+const MOBILE: Route[] = ['home', 'approvals', 'bots', 'queue', 'connections'];
+const MOBILE_LABEL: Partial<Record<Route, string>> = {
+  home: 'Genel',
+  approvals: 'Onay',
+  bots: 'Botlar',
+  queue: 'Yayın',
+  connections: 'Uygulamalar',
+};
 
 function useBadges() {
   return useQuery(async () => {
@@ -120,9 +125,9 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
             <div className="flex items-start justify-between pb-3 border-b border-ink-800">
               <div>
                 <h3 className="font-display text-lg font-bold text-ink-100 flex items-center gap-2">
-                  <Radar className="w-5 h-5 text-brand-green" /> Tüm Operasyon Menüsü
+                  <Radar className="w-5 h-5 text-brand-green" /> Menü
                 </h3>
-                <p className="text-xs text-ink-400 mt-0.5">Embay Yapı & Şahin Manitou Yönetim Portalı</p>
+                <p className="text-xs text-ink-400 mt-0.5">Embay Yapı & Şahin Manitou</p>
               </div>
               <button onClick={() => setDrawer(false)} className="p-2 rounded-xl bg-ink-800 text-ink-400 hover:text-ink-100">
                 <X className="w-5 h-5" />
@@ -137,20 +142,24 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               {g.items.map((item) => {
                 const Icon = item.icon;
                 const active = state.route === item.id;
+                const badge = item.id === 'approvals' ? badges.data.approvals : 0;
                 return (
                   <button
                     key={item.id}
                     onClick={() => { go(item.id); setDrawer(false); }}
                     className={cx(
-                      'flex items-start gap-2.5 p-3 rounded-2xl text-left transition border',
+                      'flex items-start gap-2.5 p-3 rounded-2xl text-left transition border relative',
                       active
                         ? 'bg-brand-green/15 border-brand-green/40 text-brand-green'
                         : 'bg-ink-850/80 border-ink-800 text-ink-200 hover:bg-ink-800'
                     )}
                   >
-                    <Icon className="w-4 h-4 shrink-0 mt-0.5 text-brand-green" />{item.id === 'approvals' && badges.data.approvals > 0 && <span className="sr-only">{badges.data.approvals} onay</span>}
+                    <Icon className="w-4 h-4 shrink-0 mt-0.5 text-brand-green" />
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold truncate leading-tight">{item.label}</div>
+                      <div className="text-xs font-semibold truncate leading-tight flex items-center gap-1">
+                        {item.label}
+                        {badge > 0 && <span className="font-mono text-[9px] font-bold rounded-full px-1.5 py-0.5 bg-amber-400 text-white">{badge}</span>}
+                      </div>
                       <div className="text-[10px] text-ink-400 truncate mt-0.5">{item.hint}</div>
                     </div>
                   </button>
@@ -161,9 +170,9 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               ))}
             </div>
 
-            <button type="button" onClick={() => { setDrawer(false); onLogout(); }} className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-2xl ring-1 ring-rose-200 bg-rose-50 text-rose-700 py-2.5 text-sm font-semibold"><LogOut className="w-4 h-4" />Programdan çıkış yap</button>
+            <button type="button" onClick={() => { setDrawer(false); onLogout(); }} className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-2xl ring-1 ring-rose-200 bg-rose-50 text-rose-700 py-2.5 text-sm font-semibold"><LogOut className="w-4 h-4" />Çıkış yap</button>
             <div className="pt-3 border-t border-ink-800 flex items-center justify-between text-xs text-ink-400">
-              <span>Resmi Destek Hattı:</span>
+              <span>Destek:</span>
               <a href="tel:05314362904" className="font-mono text-brand-green font-semibold hover:underline">
                 0531 436 29 04
               </a>
@@ -201,7 +210,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               </button>
             );
           })}
-          <button onClick={() => setDrawer(true)} className="flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold text-ink-400"><X className="w-5 h-5 rotate-45" />Daha</button>
+          <button onClick={() => setDrawer(true)} className="flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold text-ink-400"><Menu className="w-5 h-5" />Menü</button>
         </div>
       </nav>
     </div>

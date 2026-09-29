@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Ban, CalendarClock, Check, ExternalLink, Pencil, Play, RotateCcw, Send, X } from 'lucide-react';
+import { Ban, CalendarClock, Check, CheckCheck, ExternalLink, Pencil, Play, RotateCcw, Send, X } from 'lucide-react';
 import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { approvalLabel, approvalTone, fmtDateTime, relTime, timeOf, dayKey, istanbulToIso } from '../lib/format';
@@ -18,6 +18,7 @@ const ENTITY_LABEL: Record<string, string> = { content: 'İçerik', publication:
 
 export function ApprovalsScreen() {
   const { state, go } = useRouter();
+  const session = useSession();
   const [filter, setFilter] = useState<Filter>('pending_approval');
   const q = useQuery(async () => {
     let query = db().from('approval_requests').select('*').order('created_at', { ascending: false }).limit(200);
@@ -33,7 +34,28 @@ export function ApprovalsScreen() {
   const selected = state.id ?? null;
   const drafts = useQuery(async () => (await db().from('social_drafts').select('id', { count: 'exact', head: true }).eq('workflow_status', 'pending_approval').is('archived_at', null)).count ?? 0, 0, [], ['social_drafts']);
   const [section, setSection] = useState<'drafts' | 'actions' | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const sec = section ?? (drafts.data > 0 || (counts.data.pending_approval ?? 0) === 0 ? 'drafts' : 'actions');
+
+  const bulkApproveActions = async () => {
+    if (session.role !== 'admin') return;
+    const pending = q.data.filter((a) => a.status === 'pending_approval');
+    if (!pending.length) return;
+    if (!window.confirm(`${pending.length} işlem onayını onaylamak istediğinize emin misiniz?`)) return;
+    setBulkBusy(true); setBulkMsg(null);
+    let ok = 0; let fail = 0;
+    for (const a of pending) {
+      try {
+        const { error } = await db().rpc('decide_approval', { p_id: a.id, p_decision: 'approve', p_note: 'Toplu onay', p_scheduled_for: null, p_payload: null });
+        if (error) throw error;
+        ok++;
+      } catch { fail++; }
+    }
+    setBulkBusy(false);
+    setBulkMsg({ tone: fail ? 'error' : 'ok', text: `${ok} onaylandı${fail ? `, ${fail} başarısız` : ''}.` });
+    q.reload(); counts.reload();
+  };
 
   return (
     <div className="space-y-4">
@@ -50,7 +72,15 @@ export function ApprovalsScreen() {
         ))}
       </div>
       {sec === 'drafts' ? <DraftApprovals onCount={() => drafts.reload()} /> : <>
-      <Tabs value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ ...f, count: f.id === 'all' ? undefined : counts.data[f.id] ?? 0 }))} />
+      {bulkMsg && <Notice tone={bulkMsg.tone}>{bulkMsg.text}</Notice>}
+      <div className="flex flex-wrap items-center gap-2">
+        <Tabs value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ ...f, count: f.id === 'all' ? undefined : counts.data[f.id] ?? 0 }))} />
+        {filter === 'pending_approval' && session.role === 'admin' && (counts.data.pending_approval ?? 0) > 1 && (
+          <Button variant="primary" loading={bulkBusy} onClick={bulkApproveActions} icon={<CheckCheck className="w-4 h-4" />}>
+            Hepsini onayla ({counts.data.pending_approval})
+          </Button>
+        )}
+      </div>
       {q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : q.data.length === 0 ? (
         <StateView kind="empty" title="Bu durumda kayıt yok" message="Botlar onay gerektiren bir işlem ürettiğinde veya Gönderi Stüdyosu’ndan onaya gönderdiğinizde burada görünür." />
       ) : (
