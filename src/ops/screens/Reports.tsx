@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Briefcase, CheckCircle2, Heart, ListChecks, Radio, TrendingUp, Users } from 'lucide-react';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import type { Bot } from '../lib/types';
-import { MissionList } from '../components/Missions';
+import { MissionList, MissionLauncher } from '../components/Missions';
 import { FollowList } from '../components/FollowList';
 import { EngagementList } from '../components/EngagementList';
 import { OpportunityWall } from '../components/OpportunityWall';
@@ -20,6 +20,7 @@ const VIEWS: Array<{ id: View; label: string; icon: typeof Heart; hint: string }
 
 function GrowthPanel() {
   const start = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' }) + 'T00:00:00+03:00').toISOString();
+  const [launch, setLaunch] = useState(false);
   const growthBot = useQuery(async () => {
     const { data } = await db().from('automation_bots').select('id,name,slug,status').eq('slug', 'sosyal-buyume').maybeSingle();
     return data as { id: string; name: string; slug: string; status: string } | null;
@@ -59,6 +60,7 @@ function GrowthPanel() {
   if (!growthBot.data) return <StateView kind="empty" title="Takipçi botu yok" message="sosyal-buyume botu tanımlı değil. Migration çalıştırın." />;
 
   const activeSchedules = schedules.data.filter((s) => s.enabled);
+  const botsForLaunch = [{ id: growthBot.data.id, name: growthBot.data.name, slug: growthBot.data.slug, status: growthBot.data.status } as Bot];
 
   return (
     <div className="space-y-4">
@@ -71,6 +73,10 @@ function GrowthPanel() {
               Bot her gün 08:00 hesap keşfi · 10:00 etkileşim planı · 16:00 hashtag üretir.
               Takip ve yorum <b>sizin telefonunuzdan</b> yapılır — otomatik yok.
             </p>
+            <button type="button" onClick={() => setLaunch(true)}
+              className="mt-3 rounded-xl bg-white text-[#1E3FA0] px-3.5 py-2 text-[12px] font-bold hover:bg-emerald-50">
+              Şimdi çalıştır (manuel görev)
+            </button>
           </div>
           <span className={cx('shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
             growthBot.data.status === 'active' ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-300 text-amber-950')}>
@@ -121,7 +127,7 @@ function GrowthPanel() {
       <div>
         <h3 className="text-sm font-semibold text-ink-100 mb-2">Son takipçi görevleri</h3>
         {missions.loading ? <StateView kind="loading" compact /> : missions.data.length === 0 ? (
-          <StateView kind="empty" title="Henüz görev yok" message="Otopilot veya Botlar’dan Sosyal Büyüme’yi bir kez çalıştırın." />
+          <StateView kind="empty" title="Henüz görev yok" message="Yukarıdaki Şimdi çalıştır ile ilk görevi başlatın." />
         ) : (
           <ul className="space-y-2">
             {missions.data.map((m) => {
@@ -137,11 +143,20 @@ function GrowthPanel() {
           </ul>
         )}
       </div>
+
+      {launch && (
+        <MissionLauncher
+          bots={botsForLaunch}
+          botId={growthBot.data.id}
+          onClose={() => setLaunch(false)}
+          onStarted={() => { setLaunch(false); missions.reload(); counts.reload(); }}
+        />
+      )}
     </div>
   );
 }
 
-export function ReportsScreen() {
+export function ReportsScreen({ forceView }: { forceView?: View } = {}) {
   const router = useRouter();
   const q = useQuery(async () => unwrap(await db().from('automation_bots').select('*').order('name')) as Bot[], [] as Bot[], []);
   const stats = useQuery(async () => {
@@ -156,9 +171,23 @@ export function ReportsScreen() {
     return { live: live.count ?? 0, todayFindings: f, pending: pending.count ?? 0, toFollow: prospects.count ?? 0 };
   }, { live: 0, todayFindings: 0, pending: 0, toFollow: 0 }, [], ['bot_missions', 'social_prospects']);
 
-  const initial = (router.state.params.get('view') as View) || 'opps';
+  const initial = (forceView || (router.state.params.get('view') as View) || 'opps') as View;
   const [view, setView] = useState<View>(VIEWS.some((v) => v.id === initial) ? initial : 'opps');
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
+
+  if (forceView === 'growth') {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="font-display text-xl font-semibold text-ink-100">Takipçi Büyüme</h2>
+          <p className="text-xs text-ink-400">
+            Ayrı çalışma alanı · günlük 24s program · hesap listesi. Takip/yorum otomatik değil — listeden elle yapılır.
+          </p>
+        </div>
+        <GrowthPanel />
+      </div>
+    );
+  }
 
   const tiles = [
     { label: 'Şu an çalışan', value: stats.data.live, icon: Radio, tone: stats.data.live ? 'text-sky-700' : 'text-ink-300', go: 'all' as View },
