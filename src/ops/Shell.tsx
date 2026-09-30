@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, X,
+  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -20,6 +20,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Botlar & İçerik', items: [
     { id: 'bots', label: 'Bot Merkezi', icon: Bot, hint: 'Görev ver · yetenek' },
     { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
+    { id: 'growth', label: 'Takipçi Büyüme', icon: TrendingUp, hint: '24s plan · hesap listesi' },
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
     { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
