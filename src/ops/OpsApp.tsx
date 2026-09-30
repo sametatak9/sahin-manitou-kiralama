@@ -5,9 +5,7 @@ import { StateView } from './ui';
 import { HomeScreen } from './screens/Home';
 import { ErrorBoundary, reloadOnceForNewVersion } from './ErrorBoundary';
 
-// Eski sürüm dosyası yüklenemezse (yeni yayın sonrası) bir kez yenile
 if (typeof window !== 'undefined') window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnceForNewVersion(); });
-// Sayfa sorunsuz açıldıysa otomatik-yenileme hakkını sıfırla
 if (typeof window !== 'undefined') setTimeout(() => { try { sessionStorage.removeItem('ops-reloaded'); } catch { /* yok */ } }, 15_000);
 
 function RoutedBoundary() {
@@ -51,6 +49,7 @@ function Screens() {
     case 'skills': return <SkillsScreen />;
     case 'settings': return <SettingsScreen />;
     case 'reports': return <ReportsScreen />;
+    case 'growth': return <ReportsScreen forceView="growth" />;
     case 'portfolio': return <PortfolioScreen />;
     case 'queue': return <QueueScreen />;
     case 'videos': return <PoolsScreen />;
