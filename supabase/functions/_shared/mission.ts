@@ -1,1 +1,1 @@
-// PLACEHOLDER_WILL_REPLACE
+@/home/workdir/artifacts/mission.ts
