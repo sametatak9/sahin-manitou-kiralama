@@ -10,8 +10,10 @@ const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram'
 
 // Facebook sayfası için yalnızca sayfa izinleri istenir. Instagram izinleri, uygulamaya "Instagram (Facebook girişiyle)"
 // kullanım durumu eklenmeden istenirse Meta tüm girişi "Invalid Scopes" ile durdurur → yalnızca "Facebook sayfası üzerinden Instagram" bağlarken eklenir.
-export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata'];
-export const META_IG_SCOPES = ['instagram_basic', 'instagram_content_publish', 'business_management'];
+// Yorum yanıtı (instagram_manage_comments / pages_manage_engagement), istatistik (instagram_manage_insights / read_insights),
+// sayfa yorumlarını okuma (pages_read_user_content) ve mesajlar (instagram_manage_messages / pages_messaging) — botların çalışması için gerekli
+export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_read_user_content', 'pages_manage_engagement', 'read_insights', 'pages_messaging'];
+export const META_IG_SCOPES = ['instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights', 'instagram_manage_messages', 'business_management'];
 export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 
 async function call(method: 'GET' | 'POST', path: string, params: Record<string, string>, host?: string) {
@@ -141,7 +143,7 @@ export async function facebookMetrics(_account: AccountRow, token: string, postI
 }
 
 // ── Doğrudan "Instagram ile giriş" (Instagram API with Instagram Login) — Facebook sayfası gerekmez ──
-export const IG_LOGIN_SCOPES = ['instagram_business_basic', 'instagram_business_content_publish', 'instagram_business_manage_insights'];
+export const IG_LOGIN_SCOPES = ['instagram_business_basic', 'instagram_business_content_publish', 'instagram_business_manage_insights', 'instagram_business_manage_comments', 'instagram_business_manage_messages'];
 
 export function instagramLoginUrl(state: string, redirectUri: string) {
   const u = new URL('https://www.instagram.com/oauth/authorize');

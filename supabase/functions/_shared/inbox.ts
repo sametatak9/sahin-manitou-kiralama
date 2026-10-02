@@ -105,6 +105,15 @@ export async function inboxTick(db: Db, force = false) {
       }
     }
   }
+  // Yönetici onayıyla sıraya alınmış yanıtlar (ör. eski cevapsız sorular): izin varsa gönder, yoksa sırada bekler
+  const { data: queued } = await db.from('social_inbox').select('id,external_id,reply_text').eq('replied', false).like('reply_source', 'kuyruk%').not('reply_text', 'is', null).limit(8);
+  for (const q of queued ?? []) {
+    if (!q.reply_text) continue;
+    const r = await fetch(`${GRAPH}/${q.external_id}/replies`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ message: q.reply_text, access_token: token }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) { await db.from('social_inbox').update({ replied: true, replied_at: new Date().toISOString(), reply_source: 'panel', status: 'replied', updated_at: new Date().toISOString() }).eq('id', q.id); replied++; }
+    else { await db.from('social_inbox').update({ reply_source: `kuyruk: ${String(j?.error?.message || r.status).slice(0, 120)}`, updated_at: new Date().toISOString() }).eq('id', q.id); break; }
+  }
   if (fresh.length) {
     await loadAppSecrets(db);
     if (appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID'))
