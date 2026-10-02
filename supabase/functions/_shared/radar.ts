@@ -114,6 +114,29 @@ async function scanTags(db: Db, c: ClientRow, a: { igId: string; token: string }
   return { tags, added, hot: hot.length, errors };
 }
 
+/** Her sabah 09:00: günün en sıcak 5 kartı (hazır yorumla) Telegram'a — yönetici telefondan 5 dakikada etkileşim yapar. */
+export async function radarDigest(db: Db) {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(new Date()));
+  if (hour < 9 || hour >= 12) return null;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date());
+  const { data: claimed } = await db.from('ops_autopilot').update({ radar_digest_at: new Date().toISOString() }).eq('id', 1)
+    .or(`radar_digest_at.is.null,radar_digest_at.lt.${today}T06:00:00+00:00`).select('id');
+  if (!claimed?.length) return null;
+  await loadAppSecrets(db);
+  if (!appSecret('TELEGRAM_BOT_TOKEN') || !appSecret('TELEGRAM_CHAT_ID')) return { skipped: 'telegram yok' };
+  const out: Array<Record<string, unknown>> = [];
+  for (const c of await activeClients(db)) {
+    const { data: cards } = await db.from('audience_radar').select('permalink,category,caption,suggested_comment').eq('client_id', c.id).is('done_at', null).is('skipped_at', null).is('archived_at', null)
+      .gte('posted_at', new Date(Date.now() - 30 * 86400000).toISOString()).order('score', { ascending: false }).limit(5);
+    if (!cards?.length) continue;
+    const LBL: Record<string, string> = { ev_yaptiran: '🏗️ Ev yaptırıyor', rakip_talepli: '💬 Talep toplayan', arsa: '📍 Arsa sahibi', hayalperest: '🏡 Ev hayali', kitle: '👥 Kitle' };
+    const lines = cards.map((k, i) => `${i + 1}) ${LBL[k.category] ?? k.category}\n${k.permalink}${k.suggested_comment ? `\n💬 “${k.suggested_comment}”` : ''}`);
+    await telegramSend([`☀️ ${c.name} · Bugünün 5 etkileşim kartı`, 'Gönderiyi aç → yorumu yapıştır → beğen. Toplam 5 dakika.', '', ...lines, '', 'Hepsi: Panel → Büyüme Merkezi'].join('\n')).catch(() => null);
+    out.push({ client: c.slug, sent: cards.length });
+  }
+  return out;
+}
+
 /** Günde bir kez: her müşterinin bağlı Instagram / Facebook hesabının gerçek takipçi ve gönderi sayısı (büyüme grafiği). */
 export async function growthTick(db: Db, force = false) {
   const { data: ap } = await db.from('ops_autopilot').select('growth_synced_at').eq('id', 1).maybeSingle();

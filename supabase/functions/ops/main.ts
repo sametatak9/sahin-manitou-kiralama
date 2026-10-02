@@ -15,7 +15,7 @@ import { businessDiscovery, graphVersion, instagramLoginExchange, instagramLogin
 import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, canvaProfile, canvaRefresh, canvaUploadFromUrl, pkceVerifier } from '../_shared/connectors/canva.ts';
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { inboxReply, inboxTick } from '../_shared/inbox.ts';
-import { archiveTick, growthTick, radarTick } from '../_shared/radar.ts';
+import { archiveTick, growthTick, radarDigest, radarTick } from '../_shared/radar.ts';
 import { aiImage, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
@@ -73,7 +73,8 @@ async function runWorker(db: Db, workerId: string) {
   const radar = await radarTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const growth = await growthTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const archive = await archiveTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, autopilot };
+  const digest = await radarDigest(db).catch((e) => ({ error: String(e).slice(0, 200) }));
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
