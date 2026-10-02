@@ -1,0 +1,48 @@
+# EMBAY · Marvel tarzı Reels kurgusu: eski Instagram Reels'lerimizden (gerçek projeler) 10 yeni kurgu.
+name: Marvel Reels kurgusu
+on:
+  workflow_dispatch:
+    inputs:
+      only: { description: 'Yalnızca bu slug ile başlayanlar (boş = hepsi)', required: false, default: '' }
+  push:
+    branches: [main]
+    paths: ['scripts/marvel/reels.json', 'scripts/marvel/marvel.py']
+permissions:
+  contents: write
+concurrency:
+  group: marvel-render
+  cancel-in-progress: true
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 1 }
+      - name: Araçlar
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          pip install -q pillow numpy opencv-python-headless
+          mkdir -p scripts/marvel/fonts
+          curl -sSfL -o scripts/marvel/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
+          curl -sSfL -o scripts/marvel/fonts/BebasNeue-Regular.ttf https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf
+          curl -sSfL -o scripts/marvel/fonts/Oswald-VF.ttf "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf"
+      - name: Kaynak videolar
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          os.makedirs('scripts/marvel/src', exist_ok=True)
+          for it in json.load(open('scripts/marvel/sources.json')):
+              p = f"scripts/marvel/src/{it['n']}.mp4"
+              if not os.path.exists(p): urllib.request.urlretrieve(it['url'], p)
+          PY
+      - name: Kurgu
+        run: python3 scripts/marvel/marvel.py --out public/reels/marvel --only "${{ github.event.inputs.only }}"
+      - name: Depoya yaz
+        run: |
+          git config user.name "embay-reels-bot"
+          git config user.email "embay-reels-bot@users.noreply.github.com"
+          git add public/reels/marvel
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Marvel tarzı Reels kurgusu ($(date -u +%Y-%m-%dT%H:%MZ))"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
