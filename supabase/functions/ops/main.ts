@@ -16,7 +16,7 @@ import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, ca
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { inboxReply, inboxTick } from '../_shared/inbox.ts';
 import { archiveTick, growthTick, radarTick } from '../_shared/radar.ts';
-import { aiImage, factoryTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
+import { aiImage, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
@@ -66,13 +66,14 @@ async function runWorker(db: Db, workerId: string) {
   const metrics = await syncMetrics(db, 3);
   const factory = autopilot.enabled ? await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) })) : { skipped: 'otopilot kapalı' };
   const drive = await driveTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
+  const plan = await planTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   // Yorum botu: kendi gönderilerimize gelen sorular (10 dk'da bir) — mesai dışında da çalışır, müşteri beklemez
   const inbox = await inboxTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   // Büyüme botu: günlük kitle radarı (resmi etiket araması), gerçek takipçi ölçümü, eski başarılı gönderileri havuza alma
   const radar = await radarTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const growth = await growthTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const archive = await archiveTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive, inbox, radar, growth, archive, autopilot };
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */

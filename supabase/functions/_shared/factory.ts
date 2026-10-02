@@ -468,6 +468,9 @@ function fallbackItems(p: Platform, pillars: typeof PILLARS[number][], di: numbe
 export async function runContentFactory(db: Db, opts: { force?: boolean; maxBanners?: number } = {}) {
   const maxBanners = opts.maxBanners ?? 1; let rendered = 0; let partial = false;
   const { label: day } = istanbulDayRange();
+  // Haftalık plan olan günde yapay zekâ ile ayrıca içerik üretilmez (plan, gözle seçilmiş görsel + uyumlu metin içerir)
+  const { count: planned } = await db.from('content_plan').select('id', { count: 'exact', head: true }).eq('day', day);
+  if (planned) { await db.from('content_factory_days').update({ finished_at: new Date().toISOString() }).eq('day', day); return { day, created: 0, errors: [], partial: false, plan: planned }; }
   const { data: quotas } = await db.from('content_quota').select('*').eq('enabled', true);
   const brand = await defaultBrand(db);
   const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
@@ -677,4 +680,73 @@ export async function renderBannerToPool(db: Db, input: { id?: string | null; ti
   }
   const { data, error } = await db.from('media_library').insert({ ...row, kind: 'banner', status: 'pool', source: 'manual', targets: input.platform ? [input.platform] : [], created_by: userId }).select('*').single();
   if (error) throw error; return data;
+}
+
+// ── HAFTALIK İÇERİK PLANI (content_plan) ──
+// Plan satırı = hangi gün/saatte, hangi GERÇEK fotoğraf/video ile, hangi başlık ve açıklama çıkacak. Satırlar fotoğraflar
+// gözle etiketlendikten sonra (media_library.vision) yazılır → görsel ile yazı birebir uyumlu. Bot planı aynen uygular:
+// banner'ı o fotoğrafla çizer, Reels'i o videoyla otomatik montaja gönderir, taslağı o saate zamanlar. Plan olan günde AI üretimi yapılmaz.
+interface PlanRow { id: string; day: string; slot: string; platforms: string[]; format: 'reel' | 'banner'; badge: string | null; media_ids: string[]; headline: string; subtitle: string | null;
+  caption: string; hashtags: string[]; cta: string | null; drafted_platforms: string[]; draft_ids: string[] }
+export async function planTick(db: Db) {
+  const { data: rows } = await db.from('content_plan').select('*').eq('status', 'planned').order('day').order('slot').limit(6);
+  if (!rows?.length) return null;
+  const brand = await defaultBrand(db);
+  const { data: quotas } = await db.from('content_quota').select('platform,width,height');
+  const size = new Map(((quotas || []) as Array<{ platform: string; width: number; height: number }>).map((q) => [q.platform, q]));
+  const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
+  const { data: admin } = await db.from('team_members').select('user_id').eq('role', 'admin').order('created_at').limit(1).maybeSingle();
+  const { data: ap } = await db.from('ops_autopilot').select('auto_publish').eq('id', 1).maybeSingle();
+  const autoPublish = (ap as { auto_publish?: boolean } | null)?.auto_publish === true;
+  let banners = 0; const done: string[] = []; const errors: string[] = [];
+  for (const r of rows as PlanRow[]) {
+    const todo = r.platforms.filter((p) => !r.drafted_platforms.includes(p));
+    const drafted = [...r.drafted_platforms]; const ids = [...r.draft_ids];
+    try {
+      const { data: media } = await db.from('media_library').select('id,url,cover_url,mime,kind').in('id', r.media_ids.length ? r.media_ids : ['00000000-0000-0000-0000-000000000000']);
+      const ordered = r.media_ids.map((id) => (media || []).find((m) => m.id === id)).filter(Boolean) as Array<{ id: string; url: string; cover_url: string | null; mime: string | null; kind: string }>;
+      for (const p of todo) {
+        let mediaUrls: string[] = []; let video_url: string | null = null; let design: string | null = null;
+        if (r.format === 'banner') {
+          if (banners >= 1) break; // sunucu CPU sınırı: çağrı başına 1 banner
+          banners++;
+          const ph = ordered[0];
+          const photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()) : null;
+          const q = size.get(p) ?? { width: 1080, height: 1350 };
+          const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: 'Embay Yapı', badge: r.badge ?? 'EMBAY YAPI', headline: r.headline, subtitle: r.subtitle ?? '', cta: r.cta ?? 'WhatsApp: 0531 436 29 04',
+            photo: photo && photo.length < 4_000_000 ? photo : null, photoMime: ph?.mime ?? undefined });
+          const path = `plan/${r.day}/${p}-${r.id}.jpg`;
+          const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/jpeg', upsert: true });
+          if (up.error) throw up.error;
+          design = db.storage.from('design-exports').getPublicUrl(path).data.publicUrl; mediaUrls = [design];
+          await db.from('media_library').insert({ kind: 'banner', title: r.headline.slice(0, 120), url: design, mime: 'image/jpeg', width: q.width, height: q.height, targets: [p], caption: r.caption, hashtags: r.hashtags,
+            status: 'queued', platform: p, pillar: r.badge, source: 'factory', created_by: admin?.user_id ?? null, template: { headline: r.headline, subtitle: r.subtitle, badge: r.badge, cta: r.cta, photo_url: ph?.url ?? null, plan_id: r.id } });
+        } else {
+          const vid = ordered.find((m) => m.kind === 'video');
+          if (vid) { video_url = vid.url; mediaUrls = [vid.url]; design = vid.cover_url; }
+          else { mediaUrls = ordered.map((m) => m.url); design = mediaUrls[0] ?? null; }
+        }
+        const { data: ins, error } = await db.from('social_drafts').insert({
+          brand: 'Embay Yapı', title: `${p.toUpperCase()} · ${r.format === 'reel' ? 'Reels' : 'Banner'} · ${r.headline}`.slice(0, 200), body: `${r.caption}\n\n${r.hashtags.join(' ')}`,
+          caption: r.caption, headline: r.headline, hashtags: r.hashtags, cta: r.cta, format: r.format, networks: [p], platform_targets: [p], primary_platform: p,
+          media_urls: mediaUrls, video_url, design_url: design, scheduled_at: slotIso(r.day, r.slot),
+          status: autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
+          ...(autoPublish ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
+          bot_id: bot?.id ?? null, content_pillar: r.badge, campaign_name: `Haftalık plan ${r.day}`, created_by: admin?.user_id ?? null,
+          kvkk_basis: 'Haftalık içerik planı (görseller gözle etiketlendi, metin görsele göre yazıldı).',
+        }).select('id').single();
+        if (error) throw error;
+        drafted.push(p); ids.push(ins.id);
+      }
+      for (const m of ordered) await db.from('media_library').update({ use_count: 1, last_used_at: new Date().toISOString() }).eq('id', m.id);
+      const complete = r.platforms.every((p) => drafted.includes(p));
+      await db.from('content_plan').update({ drafted_platforms: drafted, draft_ids: ids, status: complete ? 'drafted' : 'planned', error: null, updated_at: new Date().toISOString() }).eq('id', r.id);
+      if (complete) done.push(r.id);
+    } catch (e) {
+      errors.push(`${r.day} ${r.slot}: ${String((e as Error).message).slice(0, 160)}`);
+      await db.from('content_plan').update({ error: String((e as Error).message).slice(0, 300), updated_at: new Date().toISOString() }).eq('id', r.id);
+    }
+    if (banners >= 1) break;
+  }
+  return { done: done.length, errors };
 }

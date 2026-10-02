@@ -4,6 +4,8 @@
 import type { Db } from './context.ts';
 import { tokenFor } from './publisher.ts';
 import type { AccountRow } from './connectors/types.ts';
+import { telegramSend } from './connectors/messaging.ts';
+import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 // Hedef kitle etiketleri (Instagram: 7 günde en fazla 30 farklı etiket aranabilir → günde 7 etiket döner)
@@ -55,13 +57,12 @@ const COMMENT: Record<Cat, string[]> = {
 };
 const GENERIC_COMMENT = ['Çok güzel olmuş 👏', 'Emeğinize sağlık 🙌', 'Harika paylaşım, başarılar 🙏'];
 
-/** Günde bir kez (08:00 sonrası), her aktif müşterinin bağlı Instagram hesabıyla 7 etiketi tarar (müşterinin büyüme etiketleri). */
+/** 24 saat: 3 saatte bir, her aktif müşterinin bağlı Instagram hesabıyla günün 7 etiketini tarar (yeni gönderiler yakalanır).
+ *  Aynı gün aynı etiketler tekrar aranır → Instagram'ın 7 günde 30 farklı etiket sınırı aşılmaz. Sıcak kart çıkarsa Telegram'a haber verir. */
 export async function radarTick(db: Db, force = false) {
   const { data: ap } = await db.from('ops_autopilot').select('radar_synced_at').eq('id', 1).maybeSingle();
   const last = (ap as { radar_synced_at?: string | null } | null)?.radar_synced_at;
-  if (!force && last && Date.now() - new Date(last).getTime() < 20 * 3600_000) return null;
-  const hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(new Date());
-  if (!force && Number(hm) < 8) return null;
+  if (!force && last && Date.now() - new Date(last).getTime() < 3 * 3600_000) return null;
   await db.from('ops_autopilot').update({ radar_synced_at: new Date().toISOString() }).eq('id', 1);
   const out: Array<Record<string, unknown>> = [];
   for (const c of await activeClients(db)) {
@@ -80,7 +81,7 @@ async function scanTags(db: Db, c: ClientRow, a: { igId: string; token: string }
   const tags = [...new Set(Array.from({ length: Math.min(7, tagsPool.length) }, (_, i) => tagsPool[(day * 7 + i) % tagsPool.length]))];
   const sector = c.sector || 'insaat';
   const own = new RegExp(c.name.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, ''), 'i');
-  let added = 0; const errors: string[] = [];
+  let added = 0; const errors: string[] = []; const hot: string[] = [];
   for (const tag of tags) {
     try {
       const h = await g(`ig_hashtag_search?user_id=${a.igId}&q=${encodeURIComponent(tag)}`, a.token);
@@ -96,14 +97,21 @@ async function scanTags(db: Db, c: ClientRow, a: { igId: string; token: string }
           const score = WEIGHT[cat] + Math.min(60, (m.comments_count ?? 0) * 2) + Math.min(20, Math.floor((m.like_count ?? 0) / 50)) + recency;
           const list = sector === 'insaat' ? COMMENT[cat] : GENERIC_COMMENT;
           const sug = list.length ? list[(m.id.charCodeAt(m.id.length - 1)) % list.length] : null;
-          const { error } = await db.from('audience_radar').upsert({ media_id: m.id, permalink: m.permalink, hashtag: tag, category: cat, caption: (m.caption ?? '').slice(0, 600), client_id: c.id,
-            like_count: m.like_count ?? null, comments_count: m.comments_count ?? null, posted_at: m.timestamp ?? null, score, suggested_comment: sug }, { onConflict: 'media_id', ignoreDuplicates: true });
-          if (!error) added++;
+          const { data: ins, error } = await db.from('audience_radar').upsert({ media_id: m.id, permalink: m.permalink, hashtag: tag, category: cat, caption: (m.caption ?? '').slice(0, 600), client_id: c.id,
+            like_count: m.like_count ?? null, comments_count: m.comments_count ?? null, posted_at: m.timestamp ?? null, score, suggested_comment: sug }, { onConflict: 'media_id', ignoreDuplicates: true }).select('id');
+          if (!error && ins?.length) { added++; if (cat === 'ev_yaptiran' && Date.now() - ts < 3 * 86400000) hot.push(`• #${tag}: “${(m.caption ?? '').replace(/\s+/g, ' ').slice(0, 90)}”\n  ${m.permalink}`); }
         }
       }
     } catch (e) { errors.push(`#${tag}: ${String((e as Error).message).slice(0, 100)}`); }
   }
-  return { tags, added, errors };
+  // Yeni "ev yaptırıyor" gönderisi: yöneticiye hemen haber (gece 23–08 arası sessiz) — ilk yorumu yapan görünür olur
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(new Date()));
+  if (hot.length && hour >= 8 && hour < 23) {
+    await loadAppSecrets(db);
+    if (appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID'))
+      await telegramSend([`🔥 ${c.name}: ${hot.length} yeni “ev yaptırıyor” gönderisi`, 'Hemen tebrik yorumu bırakın — ilk yorumlar en çok görülür.', '', ...hot.slice(0, 4), '', 'Panel → Büyüme Merkezi'].join('\n')).catch(() => null);
+  }
+  return { tags, added, hot: hot.length, errors };
 }
 
 /** Günde bir kez: her müşterinin bağlı Instagram / Facebook hesabının gerçek takipçi ve gönderi sayısı (büyüme grafiği). */
