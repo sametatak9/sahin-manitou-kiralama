@@ -722,8 +722,9 @@ export async function planTick(db: Db) {
           await db.from('media_library').insert({ kind: 'banner', title: r.headline.slice(0, 120), url: design, mime: 'image/jpeg', width: q.width, height: q.height, targets: [p], caption: r.caption, hashtags: r.hashtags,
             status: 'queued', platform: p, pillar: r.badge, source: 'factory', created_by: admin?.user_id ?? null, template: { headline: r.headline, subtitle: r.subtitle, badge: r.badge, cta: r.cta, photo_url: ph?.url ?? null, plan_id: r.id } });
         } else {
+          // Ana video + aynı projenin diğer videoları (montaj ek sahneleri yalnızca bunlardan keser — alakasız kare girmez)
           const vid = ordered.find((m) => m.kind === 'video');
-          if (vid) { video_url = vid.url; mediaUrls = [vid.url]; design = vid.cover_url; }
+          if (vid) { video_url = vid.url; mediaUrls = [vid.url, ...ordered.filter((m) => m.kind === 'video' && m.id !== vid.id).map((m) => m.url)]; design = vid.cover_url; }
           else { mediaUrls = ordered.map((m) => m.url); design = mediaUrls[0] ?? null; }
         }
         const { data: ins, error } = await db.from('social_drafts').insert({

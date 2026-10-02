@@ -676,7 +676,7 @@ async function reelQueue(db: Db) {
   const ok = (pool || []).filter((v) => (v.edit as { codec?: string } | null)?.codec !== 'hevc' && /\/storage\/v1\/object\/public\//.test(v.url || '')).map((v) => v.url as string);
   const pick = (not: string) => ok.filter((u) => u !== not).sort(() => Math.random() - 0.5).slice(0, 3);
   // Sahneler kendi videosunun farklı bölümlerinden kesilir; havuz videoları yalnızca kaynak video çok kısaysa yedek olarak kullanılır
-  return { items: rows.map((d) => ({ id: d.id, video: d.video_url, photos: d.video_url ? [] : (d.media_urls || []).filter(pub).slice(0, 12), extras: d.video_url ? pick(d.video_url) : [], headline: d.headline ?? '', pillar: d.content_pillar ?? '', platform: d.primary_platform ?? '', style: parseInt(d.id.slice(0, 2), 16) % 4 })) };
+  return { items: rows.map((d) => ({ id: d.id, video: d.video_url, photos: d.video_url ? [] : (d.media_urls || []).filter(pub).slice(0, 12), extras: d.video_url ? ((d.media_urls || []).filter((u: string) => pub(u) && u !== d.video_url).slice(0, 4).length ? (d.media_urls || []).filter((u: string) => pub(u) && u !== d.video_url).slice(0, 4) : pick(d.video_url)) : [], headline: d.headline ?? '', pillar: d.content_pillar ?? '', platform: d.primary_platform ?? '', style: parseInt(d.id.slice(0, 2), 16) % 4 })) };
 }
 async function reelAttach(db: Db, body: { id?: string }) {
   const id = String(body.id || '');
