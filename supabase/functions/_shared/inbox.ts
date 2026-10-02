@@ -81,7 +81,7 @@ export async function inboxTick(db: Db, force = false) {
       const intent = intentOf(c.text ?? '');
       const { data: existing } = await db.from('social_inbox').select('id,replied').eq('external_id', c.id).maybeSingle();
       if (!existing) {
-        await db.from('social_inbox').insert({ platform: 'instagram', external_id: c.id, media_id: m.id, permalink: m.permalink, username: c.username ?? null, text: (c.text ?? '').slice(0, 2000),
+        await db.from('social_inbox').insert({ platform: 'instagram', client_id: (acc as { client_id?: string | null }).client_id ?? null, external_id: c.id, media_id: m.id, permalink: m.permalink, username: c.username ?? null, text: (c.text ?? '').slice(0, 2000),
           intent, commented_at: c.timestamp ?? null, replied: answered, status: answered ? 'replied' : 'open', reply_source: answered ? 'manual' : null });
         found++;
         if (!answered && ['price', 'info', 'location'].includes(intent)) fresh.push(`• ${c.username ? '@' + c.username : 'Bir kullanıcı'}: “${(c.text ?? '').slice(0, 120)}”\n  ${m.permalink}`);

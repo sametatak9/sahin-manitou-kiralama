@@ -3,6 +3,7 @@ import { OpsShell } from './Shell';
 import { RouterProvider, SessionContext, useRouter, type OpsSession } from './session';
 import { StateView } from './ui';
 import { HomeScreen } from './screens/Home';
+import { ClientProvider } from './client';
 import { ErrorBoundary, reloadOnceForNewVersion } from './ErrorBoundary';
 
 if (typeof window !== 'undefined') window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reloadOnceForNewVersion(); });
@@ -32,6 +33,8 @@ const PortfolioScreen = lazy(() => import('./screens/Portfolio').then((m) => ({ 
 const SystemScreen = lazy(() => import('./screens/System').then((m) => ({ default: m.SystemScreen })));
 const QueueScreen = lazy(() => import('./screens/Queue').then((m) => ({ default: m.QueueScreen })));
 const ReportsScreen = lazy(() => import('./screens/Reports').then((m) => ({ default: m.ReportsScreen })));
+const GrowthScreen = lazy(() => import('./screens/Growth').then((m) => ({ default: m.GrowthScreen })));
+const ClientsScreen = lazy(() => import('./screens/Clients').then((m) => ({ default: m.ClientsScreen })));
 const VideoStudioScreen = lazy(() => import('./screens/VideoStudio').then((m) => ({ default: m.VideoStudioScreen })));
 import { PoolsScreen } from './screens/Pools';
 
@@ -49,7 +52,8 @@ function Screens() {
     case 'skills': return <SkillsScreen />;
     case 'settings': return <SettingsScreen />;
     case 'reports': return <ReportsScreen />;
-    case 'growth': return <ReportsScreen forceView="growth" />;
+    case 'growth': return <GrowthScreen />;
+    case 'clients': return <ClientsScreen />;
     case 'portfolio': return <PortfolioScreen />;
     case 'queue': return <QueueScreen />;
     case 'videos': return <PoolsScreen />;
@@ -62,9 +66,11 @@ export function OpsApp({ session, onLogout }: { session: OpsSession; onLogout: (
   return (
     <SessionContext.Provider value={session}>
       <RouterProvider>
-        <OpsShell onLogout={onLogout}>
-          <RoutedBoundary />
-        </OpsShell>
+        <ClientProvider>
+          <OpsShell onLogout={onLogout}>
+            <RoutedBoundary />
+          </OpsShell>
+        </ClientProvider>
       </RouterProvider>
     </SessionContext.Provider>
   );

@@ -6,6 +6,7 @@ import { db, unwrap, useQuery } from '../lib/hooks';
 import { callOps } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 import { cx, Notice, StateView } from '../ui';
+import { useClient } from '../client';
 
 interface Row { id: string; username: string | null; text: string | null; intent: string; permalink: string | null; commented_at: string | null; replied: boolean; reply_text: string | null; reply_source: string | null; status: string }
 const LABEL: Record<string, [string, string]> = {
@@ -21,7 +22,13 @@ const SUGGEST: Record<string, string> = {
 };
 
 export function SocialInbox() {
-  const q = useQuery(async () => unwrap(await db().from('social_inbox').select('*').is('archived_at', null).order('commented_at', { ascending: false }).limit(300)) as Row[], [] as Row[], [], ['social_inbox']);
+  const { client } = useClient();
+  const cid = client?.id ?? null;
+  const q = useQuery(async () => {
+    let qq = db().from('social_inbox').select('*').is('archived_at', null);
+    if (cid) qq = qq.eq('client_id', cid);
+    return unwrap(await qq.order('commented_at', { ascending: false }).limit(300)) as Row[];
+  }, [] as Row[], [cid], ['social_inbox']);
   const [tab, setTab] = useState<'open' | 'all'>('open');
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);

@@ -50,7 +50,7 @@ async function attachFromPool(d: Row): Promise<string> {
     design_url: pick.url,
   }).eq('id', d.id);
   if (error) throw new Error(error.message);
-  await db().from('media_library').update({ use_count: 1 }).eq('id', pick.id).then(() => undefined).catch(() => undefined);
+  await db().from('media_library').update({ use_count: 1 }).eq('id', pick.id).then(() => undefined, () => undefined);
   return pick.url;
 }
 

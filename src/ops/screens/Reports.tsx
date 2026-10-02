@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Briefcase, CheckCircle2, Clock, Heart, ListChecks, Radio, TrendingUp, Users } from 'lucide-react';
+import { Briefcase, CheckCircle2, Clock, Heart, ListChecks, MessageCircle, Radio, TrendingUp, Users } from 'lucide-react';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import type { Bot } from '../lib/types';
 import { MissionList, MissionLauncher } from '../components/Missions';
@@ -7,15 +7,16 @@ import { FollowList } from '../components/FollowList';
 import { EngagementList } from '../components/EngagementList';
 import { OpportunityWall } from '../components/OpportunityWall';
 import { HourlyBoard } from '../components/HourlyBoard';
+import { SocialInbox } from '../components/SocialInbox';
 import { useRouter } from '../session';
 import { cx, ErrorState, StateView } from '../ui';
 import { fmtDateTime } from '../lib/format';
 
-type View = 'opps' | 'growth' | 'engage' | 'hourly' | 'all';
+type View = 'opps' | 'growth' | 'engage' | 'hourly' | 'all' | 'inbox';
 const VIEWS: Array<{ id: View; label: string; icon: typeof Heart; hint: string }> = [
   { id: 'hourly', label: 'Saatlik rapor', icon: Clock, hint: 'Kartvizit · gece/gündüz' },
   { id: 'opps', label: 'İş fırsatları', icon: Briefcase, hint: 'İnşaat iş bulguları' },
-  { id: 'growth', label: 'Takipçi büyüme', icon: TrendingUp, hint: 'Hesap listesi + günlük plan' },
+  { id: 'inbox', label: 'Gelen sorular', icon: MessageCircle, hint: 'Yorumlardaki fiyat / bilgi talepleri' },
   { id: 'engage', label: 'Etkileşim', icon: Heart, hint: 'Beğen · yorum (elle)' },
   { id: 'all', label: 'Tüm görevler', icon: ListChecks, hint: 'Her bot raporu' },
 ];
@@ -194,7 +195,7 @@ export function ReportsScreen({ forceView }: { forceView?: View } = {}) {
   const tiles = [
     { label: 'Şu an çalışan', value: stats.data.live, icon: Radio, tone: stats.data.live ? 'text-sky-700' : 'text-ink-300', go: 'hourly' as View },
     { label: 'Bugünkü bulgu', value: stats.data.todayFindings, icon: Briefcase, tone: 'text-emerald-700', go: 'opps' as View },
-    { label: 'Takip edilecek', value: stats.data.toFollow, icon: Users, tone: stats.data.toFollow ? 'text-sky-700' : 'text-ink-300', go: 'growth' as View },
+    { label: 'Takip edilecek', value: stats.data.toFollow, icon: Users, tone: stats.data.toFollow ? 'text-sky-700' : 'text-ink-300', go: 'inbox' as View },
     { label: 'Sonuç onayı', value: stats.data.pending, icon: CheckCircle2, tone: stats.data.pending ? 'text-amber-700' : 'text-ink-300', go: 'all' as View },
   ];
 
@@ -225,6 +226,7 @@ export function ReportsScreen({ forceView }: { forceView?: View } = {}) {
       {view === 'hourly' ? <HourlyBoard />
         : view === 'opps' ? <OpportunityWall />
         : view === 'growth' ? <GrowthPanel />
+        : view === 'inbox' ? <SocialInbox />
         : view === 'engage' ? <EngagementList />
         : <MissionList bots={q.data} />}
     </div>

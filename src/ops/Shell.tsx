@@ -1,16 +1,21 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
+  Blocks, Bot, Briefcase, Users, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
 import { useRouter, useSession, type Route } from './session';
 import { cx } from './ui';
 import { PageGuide } from './components/PageGuide';
+import { ClientSwitcher, useClient } from './client';
 
 interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
-/** Sade menü — yalnızca Embay Yapı inşaat odaklı. Manitou kiralama menüde yok. */
+/** Reklam ajansı menüsü: üstte seçili müşteri (işletme); tüm ekranlar o müşteri için çalışır. */
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
+  { title: 'Ajans', items: [
+    { id: 'clients', label: 'Müşteriler', icon: Users, hint: 'İşletmeler · hesaplar' },
+    { id: 'growth', label: 'Büyüme Merkezi', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
+  ] },
   { title: 'Günlük İş', items: [
     { id: 'home', label: 'Genel Bakış', icon: Gauge, hint: 'Bugün ne oluyor' },
     { id: 'approvals', label: 'Onay Merkezi', icon: CheckCheck, hint: 'Bekleyen paylaşımlar' },
@@ -20,7 +25,6 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Botlar & İçerik', items: [
     { id: 'bots', label: 'Bot Merkezi', icon: Bot, hint: 'Görev ver · yetenek' },
     { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
-    { id: 'growth', label: 'Takipçi Büyüme', icon: TrendingUp, hint: '24s plan · hesap listesi' },
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
     { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
     { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
@@ -34,9 +38,11 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'approvals', 'bots', 'queue', 'connections'];
+const MOBILE: Route[] = ['home', 'growth', 'approvals', 'queue', 'clients'];
 const MOBILE_LABEL: Partial<Record<Route, string>> = {
   home: 'Genel',
+  growth: 'Büyüme',
+  clients: 'Müşteri',
   approvals: 'Onay',
   bots: 'Botlar',
   queue: 'Yayın',
@@ -66,6 +72,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
   const session = useSession();
   const [drawer, setDrawer] = useState(false);
   const badges = useBadges();
+  const { client } = useClient();
   const all = GROUPS.flatMap((g) => g.items);
   const current = all.find((i) => i.id === state.route) ?? all[0];
 
@@ -93,10 +100,11 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
           <span className="absolute inset-0 ops-sweep" style={{ background: 'conic-gradient(from 0deg, rgba(61,170,92,.35), transparent 25%)' }} />
         </div>
         <div>
-          <div className="font-display text-sm font-bold tracking-wide text-ink-100">EMBAY OPS</div>
-          <div className="text-[10px] font-mono tracking-[0.2em] text-ink-400">İNŞAAT OPERASYON</div>
+          <div className="font-display text-sm font-bold tracking-wide text-ink-100">AJANS OPS</div>
+          <div className="text-[10px] font-mono tracking-[0.2em] text-ink-400">REKLAM AJANSI BOTLARI</div>
         </div>
       </div>
+      <div className="px-2 pb-3"><ClientSwitcher /></div>
       <nav className="flex-1 overflow-y-auto ops-scroll px-2 space-y-4 pb-4">
         {GROUPS.map((g) => (
           <div key={g.title}>
@@ -127,7 +135,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
                 <h3 className="font-display text-lg font-bold text-ink-100 flex items-center gap-2">
                   <Radar className="w-5 h-5 text-brand-green" /> Menü
                 </h3>
-                <p className="text-xs text-ink-400 mt-0.5">Embay Yapı — inşaat</p>
+                <p className="text-xs text-ink-400 mt-0.5">{client?.name ?? 'Ajans'} için çalışıyor</p>
               </div>
               <button onClick={() => setDrawer(false)} className="p-2 rounded-xl bg-ink-800 text-ink-400 hover:text-ink-100">
                 <X className="w-5 h-5" />
@@ -188,6 +196,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               <h1 className="font-display text-base font-semibold text-ink-100 truncate -mt-0.5">{current.label}</h1>
             </div>
             <div className="ml-auto flex items-center gap-3 text-xs text-ink-300">
+              <span className="lg:hidden"><ClientSwitcher compact /></span>
               <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-ink-850 ring-1 ring-ink-700 px-2.5 py-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-signal-go ops-pulse" /> İstanbul <Clock />
               </span>
