@@ -170,6 +170,21 @@ def lower_title(text):
     return np.array(img.crop((0, 0, int(min(W, x + tw + 40)), 200)))
 
 
+def brand_pill(text):
+    f = fit(text, 40, 600, 'sub'); tmp = ImageDraw.Draw(Image.new('RGBA', (10, 10))); tw = tmp.textlength(text, font=f)
+    img = Image.new('RGBA', (int(tw + 64), 72), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, img.width - 1, 71], radius=36, fill=NAVY + (240,))
+    d.text((32, 12), text, font=f, fill=WHITE + (255,))
+    return np.array(img)
+
+
+def darken_band(fr, y0, y1, a):
+    if a <= 0: return fr
+    m = np.zeros((H, 1, 1), np.float32); ys = np.arange(H)
+    m[:, 0, 0] = np.clip(1 - np.abs(ys - (y0 + y1) / 2) / ((y1 - y0) / 2), 0, 1) ** 0.6
+    return (fr.astype(np.float32) * (1 - a * m)).astype(np.uint8)
+
+
 def corner_logo():
     try:
         from render import lux_logo
@@ -293,6 +308,10 @@ def transition(kind, A, B, rng):
         elif kind == 'glitch':
             src = A[k] if k < T // 2 else B[k]
             fr = glitch(src, rng, 1.0 - abs(2 * p - 1) * 0.5)
+        elif kind == 'wipe':  # önce/sonra perdesi: açık mavi çizgi soldan sağa süpürür
+            off = int(ease_io(p) * W)
+            fr = np.where((np.arange(W) < off)[None, :, None], B[k], A[k]).copy()
+            cv2.rectangle(fr, (max(0, off - 7), 0), (min(W - 1, off + 7), H), GOLD, -1)
         else:  # flash
             fr = flash(A[k] if p < 0.5 else B[k], 1 - abs(2 * p - 1))
         out.append(fr)
@@ -303,9 +322,13 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
     slug = cfg['slug']; bpm = int(cfg['music'].split('_')[1]); beat = 60.0 / bpm
     bf = beat * FPS  # vuruş başına kare
     rng = np.random.default_rng(abs(hash(slug)) % (2 ** 32))
-    intro_beats, outro_beats = 4, 8
+    hook_intro = cfg.get('intro') == 'hook'          # Drive tarzı: logo girişi yok, başlık ilk karede görüntünün üstünde
+    card = os.path.join(ROOT, cfg['outro_card']) if cfg.get('outro_card') else None
+    trans_list = cfg.get('trans') or TRANS
+    intro_beats, outro_beats = (0 if hook_intro else 4), (0 if card else 8)
     total_beats = intro_beats + sum(s[2] for s in cfg['shots']) + outro_beats
-    total_frames = int(round(total_beats * bf))
+    card_frames = decode(card, 0, 30, [0, 0, 1, 1]) if card else []
+    total_frames = int(round(total_beats * bf)) + len(card_frames)
     dur = total_frames / FPS
     tmpd = tempfile.mkdtemp()
     vpath = os.path.join(tmpd, 'v.mp4'); apath = os.path.join(tmpd, 'a.wav')
@@ -325,9 +348,9 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
 
     t_frame = 0
     # ── GİRİŞ: lacivert flipbook (1,5 vuruş) → logo çarpar (2,5 vuruş)
-    flip_n = int(round(1.5 * bf)); slam_n = int(round(intro_beats * bf)) - flip_n
+    flip_n = 0 if hook_intro else int(round(1.5 * bf)); slam_n = 0 if hook_intro else int(round(intro_beats * bf)) - flip_n
     stills = [grade(sh['frames'][min(len(sh['frames']) - 1, len(sh['frames']) // 2)]) for sh in shots]
-    sfx.append((0.0, 'riser', flip_n / FPS))
+    if flip_n: sfx.append((0.0, 'riser', flip_n / FPS))
     for k in range(flip_n):
         st = stills[(k // 2) % len(stills)]
         side = 1 if (k // 2) % 2 == 0 else -1
@@ -335,8 +358,10 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
         fr = zoom(red_tint(st, 0.8), 1.15 - 0.05 * q, dx=side * 140 * (1 - q))
         fr = hblur(fr, 40 * (1 - q))
         wr.put(fr)
-    sfx.append((flip_n / FPS, 'impact', 0))
+    if not hook_intro: sfx.append((flip_n / FPS, 'impact', 0))
     hook = text_block(cfg['hook'], 128, None, cfg.get('sub'))
+    PILL = brand_pill('EMBAY YAPI')
+    hook_n = int(round(min(3.0, shots[0]['beats'] + (shots[1]['beats'] if len(shots) > 1 else 0)) * bf)) if hook_intro else 0
     bg = cv2.GaussianBlur(red_tint(stills[0], 0.9), (0, 0), 6)
     for k in range(slam_n):
         p = k / max(1, slam_n - 1)
@@ -381,10 +406,15 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
                 if a > 0:
                     over(fr, title, -260 * (1 - a_in), 1500, a)
             over(fr, LOGO, 26, 40, 0.92)
+            if hook_intro and t_frame + k < hook_n:  # açılış başlığı: ilk 2-3 vuruş görüntünün üstünde
+                g = t_frame + k; q = ease_out(min(1, g / 5)); a = q * (1 - max(0, (g - (hook_n - 6)) / 6))
+                fr = darken_band(fr, 380, 1180, 0.45 * a)
+                over(fr, PILL, (W - PILL.shape[1]) / 2, 470, a)
+                over(fr, hook, 0, 600 + 40 * (1 - q), a)
             out_frames.append(fr)
         if tail is not None:
             h = T // 2
-            kind = TRANS[(i - 1) % len(TRANS)]
+            kind = trans_list[(i - 1) % len(trans_list)]
             if kind in ('whip', 'spin', 'zoom'): sfx.append(((t_frame - h) / FPS, 'whoosh', 0))
             else: sfx.append(((t_frame - h) / FPS, 'hit', 0))
             # kesim noktası tam vuruşta: önceki sahnenin son h karesi + yeni sahnenin ilk h karesi = 2h geçiş karesi
@@ -408,10 +438,15 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
             prev_last = body[-1]
         t_frame += nf
 
+    if card:  # ── KAPANIŞ: kurumsal lacivert kart (public/reels/kit) — son sahneden flaşla geçiş
+        sfx.append((wr.n / FPS, 'impact', 0))
+        for j, fr in enumerate(card_frames):
+            wr.put(flash(fr, max(0, 0.7 - j * 0.15)))
+    out_n = 0 if card else total_frames - wr.n
     # ── KAPANIŞ: logo + 81 il + telefonlar + WhatsApp
-    out_n = total_frames - wr.n
     bg = cv2.GaussianBlur(prev_last, (0, 0), 14)
     bg = (bg.astype(np.float32) * 0.35).astype(np.uint8)
+    dur = total_frames / FPS
     l1 = text_block(["TÜRKİYE'NİN", '81 İLİNE KURULUM'], 110, RED)
     f_ph = fit(PHONES, 70, W - 100, 'sub'); ph = Image.new('RGBA', (W, 120), (0, 0, 0, 0)); d = ImageDraw.Draw(ph)
     tw = d.textlength(PHONES, font=f_ph); d.text(((W - tw) / 2, 20), PHONES, font=f_ph, fill=WHITE + (255,)); ph = np.array(ph)
@@ -457,7 +492,8 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
     out = os.path.join(out_dir, f'{slug}.mp4')
     subprocess.run([ffmpeg(), '-v', 'error', '-y', '-i', vpath, '-i', apath, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out], check=True)
     # kapak: logo slam karesi
-    subprocess.run([ffmpeg(), '-v', 'error', '-y', '-ss', f'{(int(1.5 * bf) + 8) / FPS:.2f}', '-i', out, '-frames:v', '1', '-q:v', '3', os.path.join(out_dir, f'{slug}.jpg')], check=True)
+    cover_at = (min(hook_n - 8, 24) if hook_intro else int(1.5 * bf) + 8) / FPS
+    subprocess.run([ffmpeg(), '-v', 'error', '-y', '-ss', f'{cover_at:.2f}', '-i', out, '-frames:v', '1', '-q:v', '3', os.path.join(out_dir, f'{slug}.jpg')], check=True)
     return {'slug': slug, 'dur': round(dur, 2), 'frames': wr.n}
 
 
@@ -467,15 +503,20 @@ def main():
     ap.add_argument('--out', default=os.path.join(ROOT, 'public', 'reels', 'marvel'))
     ap.add_argument('--music', default=os.path.join(ROOT, 'scripts', 'reels', 'music'))
     ap.add_argument('--only', default='')
+    ap.add_argument('--config', default='reels.json')
     a = ap.parse_args()
-    cfg = json.load(open(os.path.join(HERE, 'reels.json')))
+    cfg = json.load(open(os.path.join(HERE, a.config)))
     res = []
     for r in cfg['reels']:
         if a.only and not r['slug'].startswith(a.only): continue
         print('▶', r['slug'], flush=True)
         res.append(render_reel(r, cfg['crop'], a.src, a.out, a.music))
         print('  ✓', res[-1], flush=True)
-    json.dump(res, open(os.path.join(a.out, 'index.json'), 'w'), indent=1)
+    idx_p = os.path.join(a.out, 'index.json')  # mevcut kayıtlar korunur, yalnızca üretilenler güncellenir
+    old = json.load(open(idx_p)) if os.path.exists(idx_p) else []
+    done = {r['slug'] for r in res}
+    merged = sorted([r for r in old if r.get('slug') not in done] + res, key=lambda r: r['slug'])
+    json.dump(merged, open(idx_p, 'w'), indent=1)
 
 
 if __name__ == '__main__':
