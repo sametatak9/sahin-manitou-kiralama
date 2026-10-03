@@ -38,5 +38,92 @@
    "c3-dis-mekan/06.jpg",
    "c3-dis-mekan/07.jpg"
   ]
+ },
+ {
+  "slug": "et01-a-frame",
+  "files": [
+   "et01-a-frame/01.jpg",
+   "et01-a-frame/02.jpg",
+   "et01-a-frame/03.jpg",
+   "et01-a-frame/04.jpg",
+   "et01-a-frame/05.jpg"
+  ]
+ },
+ {
+  "slug": "et02-iskandinav",
+  "files": [
+   "et02-iskandinav/01.jpg",
+   "et02-iskandinav/02.jpg",
+   "et02-iskandinav/03.jpg",
+   "et02-iskandinav/04.jpg"
+  ]
+ },
+ {
+  "slug": "et03-tas-ev",
+  "files": [
+   "et03-tas-ev/01.jpg",
+   "et03-tas-ev/02.jpg",
+   "et03-tas-ev/03.jpg",
+   "et03-tas-ev/04.jpg",
+   "et03-tas-ev/05.jpg"
+  ]
+ },
+ {
+  "slug": "et04-ege-evi",
+  "files": [
+   "et04-ege-evi/01.jpg",
+   "et04-ege-evi/02.jpg",
+   "et04-ege-evi/03.jpg"
+  ]
+ },
+ {
+  "slug": "et05-barnhouse",
+  "files": [
+   "et05-barnhouse/01.jpg",
+   "et05-barnhouse/02.jpg",
+   "et05-barnhouse/03.jpg"
+  ]
+ },
+ {
+  "slug": "et06-hafif-celik",
+  "files": [
+   "et06-hafif-celik/01.jpg",
+   "et06-hafif-celik/02.jpg",
+   "et06-hafif-celik/03.jpg"
+  ]
+ },
+ {
+  "slug": "et07-tek-katli",
+  "files": [
+   "et07-tek-katli/01.jpg",
+   "et07-tek-katli/02.jpg",
+   "et07-tek-katli/03.jpg",
+   "et07-tek-katli/04.jpg"
+  ]
+ },
+ {
+  "slug": "et08-kutuk-ev",
+  "files": [
+   "et08-kutuk-ev/01.jpg",
+   "et08-kutuk-ev/02.jpg",
+   "et08-kutuk-ev/03.jpg"
+  ]
+ },
+ {
+  "slug": "et09-kubik-modern",
+  "files": [
+   "et09-kubik-modern/01.jpg",
+   "et09-kubik-modern/02.jpg",
+   "et09-kubik-modern/03.jpg"
+  ]
+ },
+ {
+  "slug": "et10-havuzlu-villa",
+  "files": [
+   "et10-havuzlu-villa/01.jpg",
+   "et10-havuzlu-villa/02.jpg",
+   "et10-havuzlu-villa/03.jpg",
+   "et10-havuzlu-villa/04.jpg"
+  ]
  }
 ]
