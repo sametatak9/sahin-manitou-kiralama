@@ -814,6 +814,40 @@ Deno.serve(async (req) => {
       if (error) throw error;
       return json(row);
     }
+    // Sunucu sesi (seslendirme): Google Gemini resmi TTS servisi → WAV → Supabase deposu. Reels montajı (GitHub Actions) bu dosyayı indirir.
+    // Yalnızca iç gizli anahtarla; metin bizim yazdığımız tanıtım metnidir (kişisel veri yok).
+    if (path.startsWith('/tts') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { key?: string; text?: string; voice?: string; style?: string };
+      const key = String(b.key || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 60);
+      if (!key || !b.text) throw new HttpError(400, 'key ve text gerekli');
+      const gk = await getAiKey('gemini');
+      if (!gk) throw new HttpError(400, 'Gemini anahtarı yok');
+      const prompt = `${b.style || 'Sıcak, güven veren, akıcı bir reklam sunucusu tonuyla, acele etmeden Türkçe oku:'}\n${String(b.text).slice(0, 1500)}`;
+      let lastErr = '';
+      for (const model of ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts']) {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST', signal: AbortSignal.timeout(110_000), headers: { 'content-type': 'application/json', 'x-goog-api-key': gk },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: b.voice || 'Charon' } } } } }),
+        });
+        if (!r.ok) { lastErr = `${model}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`; continue; }
+        const j = await r.json();
+        const data = j?.candidates?.[0]?.content?.parts?.find((p: { inlineData?: { data?: string } }) => p?.inlineData?.data)?.inlineData;
+        if (!data?.data) { lastErr = `${model}: ses dönmedi`; continue; }
+        const bin = atob(data.data); const pcm = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) pcm[i] = bin.charCodeAt(i);
+        const rate = Number(/rate=(\d+)/.exec(String(data.mimeType || ''))?.[1] || 24000);
+        // 16 bit mono PCM → WAV başlığı
+        const wav = new Uint8Array(44 + pcm.length); const dv = new DataView(wav.buffer);
+        const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) wav[o + i] = s.charCodeAt(i); };
+        w(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+        dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, pcm.length, true); wav.set(pcm, 44);
+        const up = await db.storage.from('design-exports').upload(`tts/${key}.wav`, wav, { contentType: 'audio/wav', upsert: true });
+        if (up.error) throw up.error;
+        return json({ url: db.storage.from('design-exports').getPublicUrl(`tts/${key}.wav`).data.publicUrl, model, seconds: Math.round(pcm.length / 2 / rate * 10) / 10 });
+      }
+      throw new HttpError(502, `seslendirme üretilemedi — ${lastErr}`);
+    }
     // Depodaki hazır slayt/video dosyalarını (yalnızca kendi GitHub depomuzun public/carousel|reels yolu) Supabase deposuna kopyalar.
     // Panel sitesi yayını gecikse bile paylaşım görselleri erişilebilir kalır. Yalnızca iç gizli anahtarla.
     if (path.startsWith('/media/mirror') && req.method === 'POST') {
