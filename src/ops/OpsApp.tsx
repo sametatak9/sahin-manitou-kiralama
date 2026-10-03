@@ -34,6 +34,7 @@ const SystemScreen = lazy(() => import('./screens/System').then((m) => ({ defaul
 const QueueScreen = lazy(() => import('./screens/Queue').then((m) => ({ default: m.QueueScreen })));
 const ReportsScreen = lazy(() => import('./screens/Reports').then((m) => ({ default: m.ReportsScreen })));
 const GrowthScreen = lazy(() => import('./screens/Growth').then((m) => ({ default: m.GrowthScreen })));
+const EditedVideosScreen = lazy(() => import('./screens/EditedVideos').then((m) => ({ default: m.EditedVideosScreen })));
 const ClientsScreen = lazy(() => import('./screens/Clients').then((m) => ({ default: m.ClientsScreen })));
 const VideoStudioScreen = lazy(() => import('./screens/VideoStudio').then((m) => ({ default: m.VideoStudioScreen })));
 import { PoolsScreen } from './screens/Pools';
@@ -54,6 +55,7 @@ function Screens() {
     case 'reports': return <ReportsScreen />;
     case 'growth': return <GrowthScreen />;
     case 'clients': return <ClientsScreen />;
+    case 'reels': return <EditedVideosScreen />;
     case 'portfolio': return <PortfolioScreen />;
     case 'queue': return <QueueScreen />;
     case 'videos': return <PoolsScreen />;

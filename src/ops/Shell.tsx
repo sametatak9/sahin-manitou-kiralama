@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Users, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
+  Blocks, Bot, Briefcase, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -20,6 +20,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'home', label: 'Genel Bakış', icon: Gauge, hint: 'Bugün ne oluyor' },
     { id: 'approvals', label: 'Onay Merkezi', icon: CheckCheck, hint: 'Bekleyen paylaşımlar' },
     { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Zamanlanmış paylaşımlar' },
+    { id: 'reels', label: 'Editli Videolar', icon: Clapperboard, hint: 'Marvel kurgu · hemen yayınla' },
     { id: 'videos', label: 'İçerik Havuzu', icon: Film, hint: 'Video · banner · metin' },
   ] },
   { title: 'Botlar & İçerik', items: [
@@ -38,10 +39,11 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'growth', 'approvals', 'queue', 'clients'];
+const MOBILE: Route[] = ['home', 'growth', 'reels', 'queue', 'clients'];
 const MOBILE_LABEL: Partial<Record<Route, string>> = {
   home: 'Genel',
   growth: 'Büyüme',
+  reels: 'Videolar',
   clients: 'Müşteri',
   approvals: 'Onay',
   bots: 'Botlar',
