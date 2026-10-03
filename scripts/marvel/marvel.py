@@ -308,6 +308,8 @@ def transition(kind, A, B, rng):
         elif kind == 'glitch':
             src = A[k] if k < T // 2 else B[k]
             fr = glitch(src, rng, 1.0 - abs(2 * p - 1) * 0.5)
+        elif kind == 'dissolve':  # yumuşak çapraz geçiş (mimari vitrin)
+            e = ease_io(p); fr = cv2.addWeighted(A[k], 1 - e, B[k], e, 0)
         elif kind == 'wipe':  # önce/sonra perdesi: açık mavi çizgi soldan sağa süpürür
             off = int(ease_io(p) * W)
             fr = np.where((np.arange(W) < off)[None, :, None], B[k], A[k]).copy()
@@ -319,7 +321,40 @@ def transition(kind, A, B, rng):
 
 
 # Tempo: 'hizli' = ilk kurgular; 'orta' = daha sakin (geçiş 0,4 sn, sahne ~1,5 kat uzun, yumuşak zoom/sarsıntı)
-PACE = {'hizli': {'T': 6, 'scale': 1.0, 'punch': 0.09, 'shake': 12}, 'orta': {'T': 12, 'scale': 1.5, 'punch': 0.045, 'shake': 5}}
+PACE = {'hizli': {'T': 6, 'scale': 1.0, 'punch': 0.09, 'shake': 12}, 'orta': {'T': 12, 'scale': 1.5, 'punch': 0.045, 'shake': 5},
+        # 'sakin' = mimari vitrin (A-frame tarzı): yumuşak çapraz geçiş, uzun sahne, vuruş zıplaması/sarsıntı yok, yavaş itme
+        'sakin': {'T': 18, 'scale': 2.0, 'punch': 0.0, 'shake': 0}}
+
+
+def src_size(path):
+    """Kaynağın gerçek (döndürülmüş) boyutu → (kısa kenar, uzun kenar)"""
+    try:
+        out = subprocess.run([ffmpeg(), '-hide_banner', '-i', path], capture_output=True, text=True).stderr
+        import re
+        m = re.search(r'Video:.*?(\d{3,5})x(\d{3,5})', out)
+        if not m: return (0, 0)
+        w, h = int(m.group(1)), int(m.group(2))
+        return (min(w, h), max(w, h))
+    except Exception:
+        return (0, 0)
+
+
+def sharp_start(path, ss, need, crop, span=1.5):
+    """Netlik süzgeci: ss'nin ±span saniyesinde, 'need' saniyelik pencere için en net başlangıcı seçer (Laplace varyansı)."""
+    a = max(0.0, ss - span); dur = need + 2 * span
+    x0, y0, x1, y1 = crop
+    vf = f"crop=iw*{x1 - x0:.3f}:ih*{y1 - y0:.3f}:iw*{x0:.3f}:ih*{y0:.3f},scale=270:480,fps=6"
+    p = subprocess.run([ffmpeg(), '-v', 'error', '-ss', f'{a:.2f}', '-t', f'{dur:.2f}', '-i', path, '-vf', vf, '-f', 'rawvideo', '-pix_fmt', 'gray', '-'], capture_output=True)
+    buf = np.frombuffer(p.stdout, np.uint8)
+    fs = 270 * 480
+    if buf.size < fs: return ss, 0.0
+    scores = [float(cv2.Laplacian(buf[i * fs:(i + 1) * fs].reshape(480, 270), cv2.CV_64F).var()) for i in range(buf.size // fs)]
+    win = max(1, int(round(need * 6)))
+    best, best_t = -1.0, ss
+    for i in range(0, max(1, len(scores) - win + 1)):
+        m = float(np.mean(scores[i:i + win]))
+        if m > best: best, best_t = m, a + i / 6
+    return round(best_t, 2), round(best, 1)
 
 
 def render_reel(cfg, crops, src_dir, out_dir, music_dir):
@@ -349,9 +384,19 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
         title = s[3] if len(s) > 3 and s[3] else None; ramp = len(s) > 4 and s[4] == 'ramp'
         nf = int(round(beats * bf))
         need = nf / FPS * (1.6 if ramp else 1.0) + 0.2
-        frames = decode(os.path.join(src_dir, f'{n_src}.mp4'), ss, need, crops.get(str(n_src), [0, 0, 1, 1]))
+        path = os.path.join(src_dir, f'{n_src}.mp4'); crop = crops.get(str(n_src), [0, 0, 1, 1])
+        if cfg.get('sharp'):
+            short, _ = src_size(path)
+            if short and short < cfg.get('min_short', 700):
+                print(f'  ⚠ #{n_src} düşük çözünürlük ({short}px) — mimari Reels’e alınmadı', flush=True); continue
+            ss, sc = sharp_start(path, ss, need, crop)
+            print(f'  · #{n_src} en net başlangıç {ss}s (netlik {sc})', flush=True)
+        frames = decode(path, ss, need, crop)
         shots.append({'frames': frames, 'nf': nf, 'title': title, 'ramp': ramp, 'beats': beats})
 
+    # Atlanan (düşük çözünürlüklü) sahne olduysa toplam süre yeniden hesaplanır (müzik/video uyumu)
+    total_frames = int(round((intro_beats + sum(sh['beats'] for sh in shots) + outro_beats) * bf)) + len(card_frames)
+    dur = total_frames / FPS
     t_frame = 0
     # ── GİRİŞ: lacivert flipbook (1,5 vuruş) → logo çarpar (2,5 vuruş)
     flip_n = 0 if hook_intro else int(round(1.5 * bf)); slam_n = 0 if hook_intro else int(round(intro_beats * bf)) - flip_n

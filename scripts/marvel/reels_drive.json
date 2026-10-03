@@ -1,5 +1,24 @@
 {
- "crop": {},
+ "crop": {
+  "4": [
+   0,
+   0.12,
+   1,
+   1
+  ],
+  "8": [
+   0,
+   0,
+   1,
+   0.62
+  ],
+  "14": [
+   0,
+   0.15,
+   1,
+   0.7
+  ]
+ },
  "reels": [
   {
    "slug": "13-once-sonra-villa",
@@ -213,6 +232,181 @@
     ]
    ],
    "pace": "orta"
+  },
+  {
+   "music": "house_120_7",
+   "intro": "hook",
+   "pace": "sakin",
+   "sharp": true,
+   "trans": [
+    "dissolve",
+    "dissolve",
+    "zoom",
+    "dissolve",
+    "wipe",
+    "dissolve"
+   ],
+   "slug": "16-mimari-orman-evi",
+   "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
+   "hook": [
+    "ORMANIN İÇİNDE",
+    "MODERN BİR EV"
+   ],
+   "sub": "Mimari detaylar · biten projemiz",
+   "shots": [
+    [
+     4,
+     6.0,
+     3,
+     "AHŞAP CEPHE"
+    ],
+    [
+     4,
+     19.0,
+     3,
+     "MUTFAK"
+    ],
+    [
+     4,
+     32.0,
+     3,
+     "BAHÇE"
+    ],
+    [
+     4,
+     45.0,
+     3,
+     "BANYO"
+    ],
+    [
+     4,
+     58.0,
+     3
+    ],
+    [
+     4,
+     84.0,
+     3,
+     "MANZARA"
+    ],
+    [
+     4,
+     96.0,
+     3
+    ]
+   ]
+  },
+  {
+   "music": "house_120_7",
+   "intro": "hook",
+   "pace": "sakin",
+   "sharp": true,
+   "trans": [
+    "dissolve",
+    "dissolve",
+    "zoom",
+    "dissolve",
+    "wipe",
+    "dissolve"
+   ],
+   "slug": "17-mimari-beyaz-villa",
+   "outro_card": "public/reels/kit/14-kapanis-karti-teklif.mp4",
+   "hook": [
+    "SADE ÇİZGİLER",
+    "GÜÇLÜ YAPI"
+   ],
+   "sub": "Biten villalarımızdan",
+   "shots": [
+    [
+     14,
+     50.0,
+     3,
+     "BEYAZ VİLLA"
+    ],
+    [
+     14,
+     58.0,
+     3
+    ],
+    [
+     14,
+     66.0,
+     3
+    ],
+    [
+     8,
+     55.0,
+     3,
+     "ÇELİKTEN EVE"
+    ],
+    [
+     8,
+     62.0,
+     3
+    ],
+    [
+     8,
+     70.0,
+     3
+    ]
+   ]
+  },
+  {
+   "music": "house_120_7",
+   "intro": "hook",
+   "pace": "sakin",
+   "sharp": true,
+   "trans": [
+    "dissolve",
+    "dissolve",
+    "zoom",
+    "dissolve",
+    "wipe",
+    "dissolve"
+   ],
+   "slug": "18-mimari-isik-tas-ahsap",
+   "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
+   "hook": [
+    "IŞIK, TAŞ",
+    "VE AHŞAP"
+   ],
+   "sub": "Bitmiş villa iç mimarisi",
+   "shots": [
+    [
+     120,
+     1.0,
+     3,
+     "YEMEK ALANI"
+    ],
+    [
+     120,
+     9.5,
+     3,
+     "SALON"
+    ],
+    [
+     121,
+     1.0,
+     3,
+     "GALERİ"
+    ],
+    [
+     122,
+     3.0,
+     3
+    ],
+    [
+     123,
+     1.0,
+     3,
+     "ÇALIŞMA ODASI"
+    ],
+    [
+     121,
+     4.0,
+     3
+    ]
+   ]
   }
  ]
 }

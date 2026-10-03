@@ -34,7 +34,7 @@ jobs:
           cfg = json.load(open('scripts/marvel/reels_drive.json'))
           need = {s[0] for r in cfg['reels'] for s in r['shots']}
           os.makedirs('scripts/marvel/src_drive', exist_ok=True)
-          for it in json.load(open('scripts/marvel/sources_drive.json')):
+          for it in json.load(open('scripts/marvel/sources_drive.json')) + json.load(open('scripts/marvel/sources.json')):
               if it['n'] not in need: continue
               p = f"scripts/marvel/src_drive/{it['n']}.mp4"
               if not os.path.exists(p): urllib.request.urlretrieve(it['url'], p)
