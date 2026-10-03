@@ -517,6 +517,14 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
   const actx = { db, runId: null, actorId: admin?.user_id ?? null, tokens: { in: 0, out: 0 }, agent: null } as unknown as Parameters<typeof aiComplete>[0];
 
   const ORDER = ['instagram', 'facebook', 'youtube', 'tiktok', 'x'];
+  // Öğrenme döngüsü: son 45 günün ölçümlerine göre (beğeni + 3×yorum) en iyi giden konu her gün 1 yer alır (en az 3 ölçüm);
+  // diğer yerler dönüşümlü kalır → yeni konular denenmeye devam eder. Veri azsa varsayılan sıra.
+  const { data: learnRows } = await db.rpc('content_learning', { p_days: 45 });
+  const learn = ((learnRows || []) as Array<{ format: string; pillar: string; n: number; score: number; best_headline: string | null }>);
+  const bestOf = (fmt: string) => learn.find((r) => r.format === fmt && r.n >= 3);
+  const bestKey = (fmt: string) => { const b = bestOf(fmt); return b ? PILLARS.find((pp) => pp.badge === b.pillar)?.key : undefined; };
+  const learnHint = learn.filter((r) => r.n >= 3 && r.best_headline).slice(0, 3)
+    .map((r) => `“${r.best_headline}” (${r.format}, ${r.pillar}: ort. skor ${r.score}, ${r.n} paylaşım)`).join(' · ');
   // Bugün daha önce yapay zekâ görselli banner üretildiyse (yarım kalan üretim) yeniden üretme
   const { count: aiToday } = await db.from('media_library').select('id', { count: 'exact', head: true }).eq('kind', 'banner').gte('created_at', `${day}T00:00:00+03:00`).eq('template->>ai_image', 'true');
   let aiBudget = (aiToday ?? 0) > 0 ? 0 : 1;
@@ -527,12 +535,18 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
     const pIdx0 = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'].indexOf(q.platform);
     const V = Math.max(0, q.video_per_day); const B = Math.max(0, q.image_per_day); const N = V + B;
     // Geçmiş verisi (Instagram 2025): en çok ilgi ve fiyat sorusu 'biten/teslim edilen proje' ve 'çelik villa' videolarına geldi → Reels bunlardan
+    const bR = bestKey('reel'); const bB = bestKey('banner');
     const REEL_KEYS = ['teslim', 'celik', 'villa', 'teslim', 'ev', 'celik', 'santiye'];
     const BANNER_KEYS = [EGITIM_KEYS[di % EGITIM_KEYS.length], 'villa', 'teslim', EGITIM_KEYS[(di + 2) % EGITIM_KEYS.length], 'ev', 'celik', 'tadilat', 'bina'];
     const pillars: Array<typeof PILLARS[number]> = [];
     for (let k = 0; k < N; k++) {
       const keys = k < V ? REEL_KEYS : BANNER_KEYS; let off = 0; let pl: typeof PILLARS[number] | undefined;
-      do { pl = PILLARS.find((pp) => pp.key === keys[(di + pIdx0 * 2 + k + off) % keys.length]); off++; } while (pl && pillars.some((x) => x.key === pl!.key) && off < keys.length);
+      const forced = k === 0 && V > 0 ? bR : k === V ? bB : undefined; // günün ilk Reels'i ve ilk banner'ı: en iyi giden konu
+      if (forced) pl = PILLARS.find((pp) => pp.key === forced);
+      if (!pl || pillars.some((x) => x.key === pl!.key)) {
+        pl = undefined;
+        do { pl = PILLARS.find((pp) => pp.key === keys[(di + pIdx0 * 2 + k + off) % keys.length]); off++; } while (pl && pillars.some((x) => x.key === pl!.key) && off < keys.length);
+      }
       pillars.push(pl ?? PILLARS[k % PILLARS.length]);
     }
     // Reels videoları önceden seçilir: eski başarılı gönderilerimizin (ig_archive) videosu ise gerçek proje bilgisi (konum, m², sistem) metne bağlam olarak verilir
@@ -544,6 +558,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
         `Embay Yapı (Çatalca/İstanbul) için ${q.platform.toUpperCase()} platformunda BUGÜN paylaşılacak ${N} içerik yaz. Amaç: bitmiş villa ve biten proje tanıtımlarıyla "ben de böyle bir ev yaptırmak istiyorum" diyen kişilerin dikkatini çekmek ve keşfete düşmek.`,
         `ÜSLUP (geçmişte en çok ilgi ve fiyat talebi alan gönderilerimizden): kısa ve samimi, emojili bir açılış cümlesi (ör. "SÖZÜMÜZÜN ARKASINDAYIZ 🎉", "Biten İstanbul/Çatalca projemiz sizlerle! 🏡"), ardından "Embay Yapı olarak ..." ile başlayan 2-3 cümlelik güven veren açıklama, sonunda "Fiyat ve detaylı bilgi için DM'den ya da WhatsApp ${brand?.phone ?? '0531 436 29 04'}'ten yazın" çağrısı. Proje adı, m², şehir UYDURMA — yalnızca aşağıda verilen eski gönderi metinlerindeki bilgileri kullan, bilinmiyorsa genel yaz.`,
         ...context,
+        ...(learnHint ? [`GEÇMİŞ PERFORMANS (bizim hesabımızda en çok etkileşim alanlar): ${learnHint}. Bu başlıkların TARZINI (soru mu, sayı mı, duygu mu) örnek al ama kelimesi kelimesine tekrar ETME.`] : []),
         `YASAK: Manitou, iş makinesi, kiralama konusu YAZMA. "150 günde villa" kalıbını ve aşağıdaki son kullanılan başlıkları TEKRAR ETME; her içerik özgün bir açı olsun. Son kullanılan başlıklar: ${[...usedHeads].slice(0, 40).join(' | ') || '—'}`,
         `İlk ${V} içerik format=reel (kısa dikey video: kanca + çekim senaryosu video_script'e), kalan ${B} içerik format=banner (görsel üzerinde büyük başlık "headline" en fazla 5 kelime, "subtitle" en fazla 14 kelime).`,
         `Konular sırasıyla: ${pillars.map((p, i) => `${i + 1}) ${p.topic}`).join(' · ')}`,

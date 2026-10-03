@@ -151,6 +151,7 @@ export function GrowthScreen() {
           <button type="button" onClick={() => run('growth_sync')} disabled={!!busy} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/25 px-3 py-1.5 text-[12px] font-semibold"><Users className="w-3.5 h-3.5" />Takipçiyi ölç</button>
         </div>
       </section>
+      <LearningCard />
 
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
 
@@ -226,5 +227,34 @@ export function GrowthScreen() {
         </aside>
       </div>
     </div>
+  );
+}
+
+
+/** Öğrenme döngüsü: hangi tür/konu bizim hesabımızda ne kadar ilgi gördü (beğeni + 3×yorum). İçerik Fabrikası en iyisine her gün yer ayırır. */
+function LearningCard() {
+  const q = useQuery(async () => unwrap(await db().rpc('content_learning', { p_days: 45 })) as Array<{ format: string; pillar: string; n: number; score: number; best_headline: string | null }>, [], []);
+  const FMT: Record<string, string> = { reel: 'Reels', banner: 'Banner', carousel: 'Kaydırmalı', post: 'Gönderi' };
+  const rows = q.data ?? [];
+  const total = rows.reduce((a, r) => a + r.n, 0);
+  return (
+    <section className="ops-panel p-4 sm:p-5">
+      <div className="flex items-center gap-2 mb-1"><Sparkles className="w-5 h-5 text-[#1E3FA0]" /><h3 className="font-display text-base font-semibold text-ink-100">Ne işe yarıyor? — öğrenme</h3><span className="ml-auto text-[11px] text-ink-400">{total} ölçülmüş paylaşım · son 45 gün</span></div>
+      <p className="text-[12px] text-ink-400 mb-3">Skor = beğeni + 3 × yorum (Instagram). Bir konuda en az 3 ölçüm olunca İçerik Fabrikası her gün o konuya bir yer ayırır ve en iyi başlıkların tarzını örnek alır; diğer konular denenmeye devam eder.</p>
+      {!rows.length ? <StateView kind="empty" compact title="Henüz ölçüm yok" message="Paylaşımların beğeni/yorum sayısı geldikçe burası dolar. Facebook bağlantısını yenilemek ölçümü hızlandırır." /> : (
+        <ul className="space-y-1.5">
+          {rows.slice(0, 8).map((r, i) => (
+            <li key={`${r.format}-${r.pillar}`} className="flex items-center gap-2 text-[12px]">
+              <span className={cx('w-6 text-center font-mono font-bold', i === 0 ? 'text-emerald-600' : 'text-ink-400')}>{i + 1}</span>
+              <span className="rounded-full bg-ink-800 text-ink-300 text-[10px] font-semibold px-2 py-0.5">{FMT[r.format] ?? r.format}</span>
+              <span className="font-semibold text-ink-100 min-w-0 truncate">{r.pillar}</span>
+              <span className="text-ink-400 truncate hidden sm:inline">· en iyi: {r.best_headline}</span>
+              <span className="ml-auto font-mono tabular-nums text-ink-200">{r.score}</span>
+              <span className={cx('text-[10px] rounded-full px-1.5', r.n >= 3 ? 'bg-emerald-100 text-emerald-800' : 'bg-ink-800 text-ink-400')}>{r.n} ölçüm{r.n >= 3 ? ' ✓' : ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
