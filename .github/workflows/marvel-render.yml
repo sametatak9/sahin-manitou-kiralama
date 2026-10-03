@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
     inputs:
       only: { description: 'Yalnızca bu slug ile başlayanlar (boş = hepsi)', required: false, default: '' }
-  push:
-    branches: [main]
-    paths: ['scripts/marvel/reels.json', 'scripts/marvel/marvel.py']
 permissions:
   contents: write
 concurrency:

@@ -2,10 +2,10 @@
 """EMBAY · Marvel tarzı Reels kurgusu (GitHub Actions'ta çalışır).
 
 Bir video grafikerin elle yaptığı kurguyu kare kare üretir:
-  • Giriş: kırmızı tonlu "flipbook" (sayfa çevirme gibi 2 karede bir kesme) → kırmızı kutuda EMBAY YAPI logosu çarpar (sarsıntı + flaş)
+  • Giriş: lacivert tonlu "flipbook" (sayfa çevirme gibi 2 karede bir kesme) → mavi kutuda EMBAY YAPI logosu çarpar (sarsıntı + flaş)
   • Sahneler: müziğin vuruşuna oturan kesmeler, her vuruşta zoom-punch, hızlanıp yavaşlayan çekim (speed ramp)
   • Geçişler: whip-pan (yatay hareket bulanıklığı), zoom-through, spin (dönerek savrulma), RGB glitch, beyaz flaş
-  • Kinetik yazı: başlıklar vuruşta kayarak açılır (kırmızı vurgu kutusu), köşede altın Embay logosu
+  • Kinetik yazı: başlıklar vuruşta kayarak açılır (mavi vurgu kutusu), köşede altın Embay logosu
   • Renk: sinematik teal-orange + kontrast + vinyet, düşük çözünürlüklü kaynaklarda keskinleştirme
   • Ses: müzik + sentezlenmiş whoosh / impact / riser efektleri
   • Kapanış: logo çarpar → "Türkiye'nin 81 iline kurulum" → iki telefon → WhatsApp çağrısı
@@ -22,7 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, 'scripts', 'reels'))
 W, H, FPS = 1080, 1920, 30
-RED, RED_D, GOLD, WHITE, NAVY = (226, 32, 40), (150, 12, 20), (226, 201, 143), (255, 255, 255), (15, 26, 51)
+# Embay kurumsal renkleri (brand_kits): mavi #1E3FA0, lacivert #262A6B, açık mavi #8FC6F2
+RED, RED_D, GOLD, WHITE, NAVY = (30, 63, 160), (38, 42, 107), (143, 198, 242), (255, 255, 255), (38, 42, 107)
 PHONES = '0536 784 62 22  ·  0531 436 29 04'
 SR = 44100
 
@@ -118,7 +119,7 @@ def flash(fr, a):
 
 def red_tint(fr, a=0.85):
     g = cv2.cvtColor(fr, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
-    tint = np.stack([0.35 + 0.65 * g, 0.05 + 0.25 * g, 0.06 + 0.25 * g], -1) * 255
+    tint = np.stack([0.06 + 0.30 * g, 0.10 + 0.40 * g, 0.30 + 0.65 * g], -1) * 255  # lacivert-mavi ton
     return cv2.addWeighted(fr, 1 - a, tint.astype(np.uint8), a, 0)
 
 
@@ -182,7 +183,7 @@ def corner_logo():
 
 
 def logo_box(scale=1.0):
-    """Marvel tarzı kırmızı kutu: EMBAY | YAPI"""
+    """Marvel tarzı mavi kutu: EMBAY | YAPI"""
     f = F(int(210 * scale)); t = 'EMBAY'
     tmp = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
     tw = tmp.textlength(t, font=f); bb = f.getbbox(t)
@@ -323,7 +324,7 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
         shots.append({'frames': frames, 'nf': nf, 'title': title, 'ramp': ramp, 'beats': beats})
 
     t_frame = 0
-    # ── GİRİŞ: kırmızı flipbook (1,5 vuruş) → logo çarpar (2,5 vuruş)
+    # ── GİRİŞ: lacivert flipbook (1,5 vuruş) → logo çarpar (2,5 vuruş)
     flip_n = int(round(1.5 * bf)); slam_n = int(round(intro_beats * bf)) - flip_n
     stills = [grade(sh['frames'][min(len(sh['frames']) - 1, len(sh['frames']) // 2)]) for sh in shots]
     sfx.append((0.0, 'riser', flip_n / FPS))
