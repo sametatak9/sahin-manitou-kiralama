@@ -10,11 +10,13 @@ import { cx } from '../ui';
 interface Todo { key: string; title: string; why: string; steps?: string[]; link?: { label: string; href?: string; route?: Parameters<ReturnType<typeof useRouter>['go']>[0] }; auto?: boolean }
 
 const MANUAL: Todo[] = [
-  { key: 'ads_account', title: 'Meta reklam hesabı açın ve kart ekleyin', why: 'Takipçi getirmenin en garantili yolu reklam. Hesap ve ödeme sizde kalmalı.',
-    steps: ['business.facebook.com → Reklam hesabı oluştur', 'Para birimi TL, saat dilimi İstanbul', 'Ödeme yöntemi ekleyin', 'Instagram hesabını reklam hesabına bağlayın'], link: { label: 'Meta İşletme Paketi', href: 'https://business.facebook.com/' } },
-  { key: 'ads_campaign', title: 'İlk reklam: 14 gün × 50 TL (toplam 700 TL)', why: 'Küçük bir denemeyle takipçi başı maliyeti ölçeriz; iyi giderse günlük 100 TL.',
-    steps: ['Hedef: Etkileşim → Instagram profil ziyareti', 'Videolar: 13 Önce·Sonra, 04 A-frame, 14 İşçilik Detayda (3’ü birden)', 'Kitle: İstanbul (Çatalca, Silivri, Büyükçekmece) + Tekirdağ · 28–60 yaş', 'İlgi: villa, müstakil ev, inşaat, ev dekorasyonu, arsa', 'Günlük bütçe 50 TL · 14 gün'] },
-  { key: 'ads_day7', title: '7. gün kontrolü', why: 'Takipçi başı maliyet pahalıysa kitle veya video değişir; iyiyse bütçe artar. Sonuçları bana yazın, birlikte bakalım.' },
+  { key: 'ads_account', title: 'Reklam ödemesini hazırlayın (500 TL)', why: 'Öne Çıkar için Instagram’ın profesyonel hesap + Facebook sayfası bağlantısı ve kart gerekir. Ödeme sizde kalmalı.',
+    steps: ['Instagram → Profil → ☰ → Reklam araçları (veya business.facebook.com)', 'Para birimi TL, saat dilimi İstanbul', 'Ödeme yöntemi (kart) ekleyin', 'Toplam bütçe: 500 TL (300 takipçi + 200 mesaj)'], link: { label: 'Meta İşletme Paketi', href: 'https://business.facebook.com/' } },
+  { key: 'ads_campaign', title: '1. reklam (takipçi): 13 Önce·Sonra Reels’i öne çıkar — 6 gün × 50 TL = 300 TL', why: 'Instagram uygulamasından “Öne Çıkar” ile; hedef profil ziyareti. Gönderi 4 Ekim 20:00’de yayınlanınca 5 Ekim sabahı başlatın.',
+    steps: ['Instagram’da 13 · Önce·Sonra Reels’ini açın → “Öne Çıkar”', 'Hedef: “Daha fazla profil ziyareti”', 'Kitle: “Kendin oluştur” → Konum: Çatalca + 60 km (Silivri, Büyükçekmece, Arnavutköy, Tekirdağ dahil) · Yaş 30–60 · İlgi: Ev, Gayrimenkul, İç tasarım, Yapı/İnşaat', 'Bütçe: günlük 50 TL · Süre: 6 gün', 'Müzik yüzünden reddedilirse bana yazın; müziksiz/telifsiz sürümünü hazırlarım'] },
+  { key: 'ads_messages', title: '2. reklam (müşteri): mesaj reklamı — 4 gün × 50 TL = 200 TL', why: 'Fiyat isteyenler doğrudan DM/WhatsApp’tan yazar. 1. reklam bittikten sonra (11 Ekim) başlatın; gelen her mesaja aynı gün dönün.',
+    steps: ['Önce·Sonra kaydırmalı gönderisini (5 Ekim 16:30) açın → “Öne Çıkar”', 'Hedef: “Daha fazla mesaj” (Instagram Direct veya WhatsApp)', 'Aynı kitle', 'Hazır karşılama: “Merhaba! Arsanızın yeri ve düşündüğünüz m² nedir? Ücretsiz ön teklif hazırlayalım.”', 'Bütçe: günlük 50 TL · Süre: 4 gün'] },
+  { key: 'ads_day7', title: '3. gün ve sonunda kontrol: sonuçları bana yazın', why: 'Öne Çıkar ekranındaki “Profil ziyareti”, “Takip” ve “Mesaj” sayılarını ve harcanan tutarı yazın. Kişi başı maliyete bakıp devam / değişiklik kararını birlikte veririz.' },
   { key: 'collab', title: 'Bir ev sahibi veya mimarla ortak (Collab) gönderi', why: 'Gönderi onların takipçilerine de görünür — en ucuz büyüme yolu.',
     steps: ['Reels’i paylaşırken “Kişileri etiketle → Ortak çalışan davet et”', 'Bitmiş evin sahibi veya projenin mimarı kabul edince iki hesapta birden yayınlanır'] },
   { key: 'fb_invite', title: 'Facebook: gönderiyi beğenenleri sayfaya davet edin (haftada 1)', why: 'Sayfada 12 takipçi var; beğenen ama takip etmeyenleri tek tıkla davet edebilirsiniz.',
