@@ -814,6 +814,25 @@ Deno.serve(async (req) => {
       if (error) throw error;
       return json(row);
     }
+    // Depodaki hazır slayt/video dosyalarını (yalnızca kendi GitHub depomuzun public/carousel|reels yolu) Supabase deposuna kopyalar.
+    // Panel sitesi yayını gecikse bile paylaşım görselleri erişilebilir kalır. Yalnızca iç gizli anahtarla.
+    if (path.startsWith('/media/mirror') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { sha?: string; paths?: string[] };
+      const sha = String(b.sha || '');
+      if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new HttpError(400, 'sha gerekli');
+      const out: Record<string, string> = {};
+      for (const p of (b.paths || []).slice(0, 60)) {
+        if (!/^(carousel|reels)\/[a-z0-9/_.-]+\.(jpg|png|mp4)$/.test(p) || p.includes('..')) { out[p] = 'reddedildi'; continue; }
+        const r = await fetch(`https://raw.githubusercontent.com/sametatak9/sahin-manitou-kiralama/${sha}/public/${p}`);
+        if (!r.ok) { out[p] = `alınamadı ${r.status}`; continue; }
+        const ct = p.endsWith('.mp4') ? 'video/mp4' : p.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        const up = await db.storage.from('design-exports').upload(`site/${p}`, new Uint8Array(await r.arrayBuffer()), { contentType: ct, upsert: true });
+        out[p] = up.error ? `yüklenemedi: ${up.error.message}` : db.storage.from('design-exports').getPublicUrl(`site/${p}`).data.publicUrl;
+      }
+      return json(out);
+    }
     // Telegram komutları (/bugun /adaylar /durum): Telegram'ın gönderdiği gizli belirteç Vault'takiyle eşleşmeli; yalnızca yönetici sohbetine cevap verilir
     if (path.startsWith('/telegram/webhook') && req.method === 'POST') {
       const { data: ok } = await db.rpc('verify_telegram_secret', { p_secret: req.headers.get('x-telegram-bot-api-secret-token') || '' });
