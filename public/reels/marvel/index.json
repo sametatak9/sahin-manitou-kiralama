@@ -88,5 +88,40 @@
   "slug": "18-mimari-isik-tas-ahsap",
   "dur": 21.5,
   "frames": 645
+ },
+ {
+  "slug": "19-sesli-karkastan-eve",
+  "dur": 20.0,
+  "frames": 600,
+  "narrated": true,
+  "base": "11-karkastan-eve"
+ },
+ {
+  "slug": "20-sesli-once-sonra",
+  "dur": 27.5,
+  "frames": 825,
+  "narrated": true,
+  "base": "13-once-sonra-villa"
+ },
+ {
+  "slug": "21-sesli-iscilik",
+  "dur": 26.43,
+  "frames": 793,
+  "narrated": true,
+  "base": "14-iscilik-detayda"
+ },
+ {
+  "slug": "22-sesli-orman-evi",
+  "dur": 24.5,
+  "frames": 735,
+  "narrated": true,
+  "base": "16-mimari-orman-evi"
+ },
+ {
+  "slug": "23-sesli-isik-tas-ahsap",
+  "dur": 21.5,
+  "frames": 645,
+  "narrated": true,
+  "base": "18-mimari-isik-tas-ahsap"
  }
 ]
