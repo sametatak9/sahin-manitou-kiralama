@@ -1,0 +1,47 @@
+# EMBAY · Drive'daki embay_paket zip'lerini (Reels 01-12, kapanış kartları, Editli Videolar ekranı) repoya açar.
+# Güvenlik: yalnızca izinli klasörlere yazar; reels.json / marvel.py içeren paket reddedilir (Marvel kurgusu tetiklenmesin).
+name: Drive paket içe aktarma
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/drive-zip-import.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IDS: '1fJ08Ff4wyqZ56OGaX2ALzMzisN8ZGTDV 1EnUiD3qWWQ9O0sIrsMRREnwet5IP159m 1ZO6hgQS7NWSjL4wKDv-rPN7H0-cIt432'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zip'leri indir
+        run: |
+          mkdir -p /tmp/pk && i=0
+          for id in $IDS; do i=$((i+1))
+            curl -sSL --fail -o /tmp/pk/p$i.zip "https://drive.usercontent.google.com/download?id=$id&export=download&confirm=t"
+            unzip -tq /tmp/pk/p$i.zip
+          done
+          ls -la /tmp/pk
+      - name: İçeriği denetle
+        run: |
+          for z in /tmp/pk/*.zip; do unzip -Z1 "$z"; done | grep -v '/$' | sort -u | tee /tmp/pk/list.txt
+          bad=$(grep -vE '^(public/reels/marvel/|public/reels/kit/|scripts/marvel/captions\.json$|src/ops/screens/EditedVideos\.tsx$)' /tmp/pk/list.txt || true)
+          if [ -n "$bad" ]; then echo "İzinsiz yol:"; echo "$bad"; exit 1; fi
+          if grep -qE '\.\.|^/' /tmp/pk/list.txt; then echo 'Geçersiz yol'; exit 1; fi
+      - name: Aç
+        run: for z in /tmp/pk/*.zip; do unzip -oq "$z" -d .; done
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - name: Derleme kontrolü
+        run: npm ci && npm run lint && npm run build
+      - name: Kaydet
+        run: |
+          rm -rf dist
+          git config user.name "embay-bot"; git config user.email "bot@embay.local"
+          git add public/reels/marvel public/reels/kit scripts/marvel/captions.json src/ops/screens/EditedVideos.tsx
+          git diff --cached --stat
+          git diff --cached --quiet && { echo "Değişiklik yok"; exit 0; }
+          git commit -qm "Editli Videolar: 12 Reels (01-10 yenilendi, 11-12 eklendi), kapanış kartları, lacivert başlık"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
