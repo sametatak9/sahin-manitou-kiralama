@@ -26,10 +26,10 @@
    "intro": "hook",
    "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
    "hook": [
-    "AYNI SALON",
+    "AYNI VİLLA",
     "ÖNCE · SONRA"
    ],
-   "sub": "Taş şömineli villa · iç mekân",
+   "sub": "Kaba inşaattan anahtar teslime",
    "trans": [
     "wipe",
     "whip",
@@ -97,10 +97,10 @@
    "intro": "hook",
    "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
    "hook": [
-    "İŞÇİLİK",
-    "DETAYDA SAKLI"
+    "BAŞTAN SONA",
+    "BİZİM VİLLAMIZ"
    ],
-   "sub": "Villa iç mekân detayları",
+   "sub": "Çelik yapı · anahtar teslim",
    "trans": [
     "whip",
     "zoom",
@@ -115,26 +115,26 @@
      103,
      0.2,
      4,
-     "TAŞ ŞÖMİNE"
+     "VİLLA İÇ MEKÂN"
     ],
     [
      108,
      0.3,
      4,
-     "FERFORJE KORKULUK",
+     "İKİ KATLI VİLLA",
      "ramp"
     ],
     [
      101,
      4.0,
      4,
-     "GALERİ BOŞLUĞU"
+     "FERAH YAŞAM ALANI"
     ],
     [
      110,
      0.3,
      4,
-     "LACİVERT KİTAPLIK"
+     "YAŞAMAYA HAZIR"
     ],
     [
      112,
@@ -145,7 +145,7 @@
      107,
      0.1,
      4,
-     "AHŞAP DOLAP"
+     "ANAHTAR TESLİM"
     ],
     [
      123,
@@ -252,31 +252,31 @@
     "ORMANIN İÇİNDE",
     "MODERN BİR EV"
    ],
-   "sub": "Mimari detaylar · biten projemiz",
+   "sub": "Çelik yapı · biten projemiz",
    "shots": [
     [
      4,
      6.0,
      3,
-     "AHŞAP CEPHE"
+     "MODERN CEPHE"
     ],
     [
      4,
      19.0,
      3,
-     "MUTFAK"
+     "YAŞAMAYA HAZIR"
     ],
     [
      4,
      32.0,
      3,
-     "BAHÇE"
+     "DOĞANIN İÇİNDE"
     ],
     [
      4,
      45.0,
      3,
-     "BANYO"
+     "ANAHTAR TESLİM"
     ],
     [
      4,
@@ -367,28 +367,28 @@
    "slug": "18-mimari-isik-tas-ahsap",
    "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
    "hook": [
-    "IŞIK, TAŞ",
-    "VE AHŞAP"
+    "HAYALİNİZDEKİ",
+    "VİLLA"
    ],
-   "sub": "Bitmiş villa iç mimarisi",
+   "sub": "Biten villamız · anahtar teslim",
    "shots": [
     [
      120,
      1.0,
      3,
-     "YEMEK ALANI"
+     "FERAH YAŞAM"
     ],
     [
      120,
      9.5,
      3,
-     "SALON"
+     "VİLLA SALONU"
     ],
     [
      121,
      1.0,
      3,
-     "GALERİ"
+     "İKİ KATLI VİLLA"
     ],
     [
      122,
@@ -399,7 +399,7 @@
      123,
      1.0,
      3,
-     "ÇALIŞMA ODASI"
+     "YAŞAMAYA HAZIR"
     ],
     [
      121,
