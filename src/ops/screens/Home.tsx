@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { AlertTriangle, ArrowRight, Bot, Briefcase, CalendarClock, CheckCheck, Cpu, FileText, Film, Gauge, PlugZap, Radar, Sparkles, TrendingUp, UsersRound } from 'lucide-react';
 import { callOps } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
+import { OwnerTodos } from '../components/OwnerTodos';
 import { approvalLabel, approvalTone, connectionLabel, connectionTone, dayKey, fmtDateTime, fmtTime, istanbulHour, platformMeta, relTime, RUN_LABELS, runTone, TONE_DOT, type Tone } from '../lib/format';
 import type { Approval, Bot as BotRow, Draft, OpsStatus, Publication, Run, Task } from '../lib/types';
 import { useRouter, useSession } from '../session';
@@ -139,6 +140,7 @@ export function HomeScreen() {
         </button>
       </div>
 
+      <OwnerTodos />
       <AutopilotCard />
 
       {/* Başlık şeridi */}
