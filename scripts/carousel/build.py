@@ -116,7 +116,7 @@ def slide_sketch(c, total):
     grid = (58, 64, 140)
     for x in range(0, W, 45): d.line([(x, 0), (x, H)], fill=grid, width=1)
     for y in range(0, H, 45): d.line([(0, y), (W, y)], fill=grid, width=1)
-    ox, oy, sc = 40, 150, 1.0
+    ox, oy, sc = 90, 130, 0.9
     P = lambda x, y: (ox + x * sc, oy + y * sc)
     for it in SKETCH[c['sketch']]:
         if it[0] == 'l': d.line([P(*q) for q in it[1]], fill=LIGHT, width=5, joint='curve')
@@ -128,15 +128,17 @@ def slide_sketch(c, total):
     # ölçü çizgisi süsü
     d.line([P(100, 690), P(900, 690)], fill=LIGHT, width=2)
     for x in (100, 900): d.line([P(x, 675), P(x, 705)], fill=LIGHT, width=2)
-    f = font('sub', 26); t = 'MİMARİ ÇİZİM · EMBAY YAPI'; d.text(((W - d.textlength(t, font=f)) / 2, oy + 715), t, font=f, fill=LIGHT)
+    f = font('sub', 26); t = 'MİMARİ ÇİZİM · EMBAY YAPI'; d.text(((W - d.textlength(t, font=f)) / 2, oy + 715 * sc), t, font=f, fill=LIGHT)
     lines = [tr_up(t) for t in c['title']]
-    fh = font('head', 150)
-    for t in lines: fh = fit(d, t, 'head', min(150, fh.size), W - 140)
-    y = H - 300
-    pill(d, 70, y - 100, c.get('kicker', 'EMBAY YAPI'), BLUE + (255,), 34)
-    for i, t in enumerate(lines):
-        b = fh.getbbox(t); d.text((70, y - b[1]), t, font=fh, fill=LIGHT if i == len(lines) - 1 else WHITE); y += (b[3] - b[1]) + 20
-    fs = font('sub', 42); d.text((72, y + 10), c['sub'], font=fs, fill=WHITE)
+    fh = font('head', 130)
+    for t in lines: fh = fit(d, t, 'head', min(130, fh.size), W - 140)
+    boxes = [fh.getbbox(t) for t in lines]; fs = font('sub', 42); sb = fs.getbbox(c['sub'])
+    # alttan yukarı: alt yazı → başlık satırları → etiket (yazı tipi ne olursa olsun taşmaz)
+    y = H - 90 - (sb[3] - sb[1]) - 26 - sum(b[3] - b[1] for b in boxes) - 18 * (len(lines) - 1)
+    pill(d, 70, y - 96, c.get('kicker', 'EMBAY YAPI'), BLUE + (255,), 34)
+    for i, (t, b) in enumerate(zip(lines, boxes)):
+        d.text((70, y - b[1]), t, font=fh, fill=LIGHT if i == len(lines) - 1 else WHITE); y += (b[3] - b[1]) + 18
+    d.text((72, y + 8 - sb[1]), c['sub'], font=fs, fill=WHITE)
     corner_logo(img); counter(d, 1, total)
     return img
 
