@@ -1,7 +1,7 @@
 // Yayın Kuyruğu: telefondan görsel/video yükle → platform + format + tarih/saat seç → bot o saatte resmi API ile paylaşır.
 // Başarı yalnızca platform API yanıtıyla (social_publications.external_post_id) gösterilir.
 import { useMemo, useRef, useState } from 'react';
-import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Share2, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Share2, Sparkles, Upload, X } from 'lucide-react';
 import { callOps, errorCode, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDateTime, istanbulToIso, relTime, type Tone } from '../lib/format';
@@ -11,6 +11,7 @@ import { shareToPhone } from '../lib/share';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
 import { PoolPicker } from '../components/Pools';
+import { DraftActionButtons, DraftEditModal } from '../components/DraftActions';
 
 const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Kısa video', story: 'Hikâye', short: 'Shorts', video: 'Video', banner: 'Banner' };
 const ALL_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'] as const;
@@ -238,14 +239,7 @@ export function QueueScreen() {
     const done = ['published', 'failed', 'cancelled', 'rejected'].includes(d.workflow_status);
     return tab === 'done' ? done : !done;
   });
-  const cancel = async (id: string) => {
-    setBusy(id);
-    try {
-      const { error } = await db().from('social_drafts').update({ workflow_status: 'cancelled', status: 'iptal' }).eq('id', id);
-      if (error) throw error;
-      setMsg({ tone: 'ok', text: 'İptal edildi.' }); q.reload();
-    } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
-  };
+  const [editing, setEditing] = useState<Draft | null>(null);
   const publishNow = async (id: string) => {
     setBusy(id);
     try {
@@ -262,6 +256,7 @@ export function QueueScreen() {
       {admin && <QuotaPanel onChanged={() => q.reload()} />}
       <Composer status={status.data} onDone={(t) => { setMsg({ tone: 'ok', text: t }); q.reload(); }} />
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
+      {editing && <DraftEditModal key={editing.id} draft={editing} onClose={() => setEditing(null)} onSaved={(t) => { setEditing(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
       <Tabs value={tab} onChange={setTab} items={[{ id: 'upcoming', label: 'Sıradakiler' }, { id: 'done', label: 'Tamamlanan' }]} />
       {q.loading && !q.data.drafts.length ? <StateView kind="loading" /> : q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : rows.length === 0 ? (
         <StateView kind="empty" title={tab === 'upcoming' ? 'Sırada paylaşım yok' : 'Henüz tamamlanan yok'} message="Yukarıdan görsel yükleyip planlayın veya Onay Merkezi’nden onaylayın." />
@@ -292,9 +287,7 @@ export function QueueScreen() {
                   {admin && tab === 'upcoming' && ['scheduled', 'approved'].includes(d.workflow_status) && (
                     <Button variant="subtle" loading={busy === d.id} onClick={() => publishNow(d.id)} icon={<Send className="w-3.5 h-3.5" />}>Şimdi</Button>
                   )}
-                  {tab === 'upcoming' && !['published', 'processing'].includes(d.workflow_status) && (
-                    <Button variant="ghost" loading={busy === d.id} onClick={() => cancel(d.id)} icon={<Trash2 className="w-3.5 h-3.5" />}>İptal</Button>
-                  )}
+                  <DraftActionButtons draft={d} onEdit={() => setEditing(d)} onDone={(m) => { setMsg(m); q.reload(); }} />
                   {pub?.external_url && <a href={pub.external_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-green"><ExternalLink className="w-3.5 h-3.5" />Aç</a>}
                 </div>
               </li>
