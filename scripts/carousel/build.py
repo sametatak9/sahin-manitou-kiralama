@@ -242,7 +242,7 @@ def slide_cta(kind, i, total):
     f1 = font('sub', 38); t1 = 'ÇELİK YAPI  •  ANAHTAR TESLİM VİLLA'; d.text(((W - d.textlength(t1, font=f1)) / 2, 560), t1, font=f1, fill=LIGHT)
     head = {'proje': 'KENDİ PROJENİZ İÇİN', 'sahip': 'SİZ DE SAHİP OLMAK İSTERSENİZ'}.get(kind, 'EVİNİZ İÇİN TEKLİF')
     f2 = fit(d, head, 'head', 96, W - 140); d.text(((W - d.textlength(head, font=f2)) / 2, 650), head, font=f2, fill=WHITE)
-    btn = {'proje': "DM'den PROJE yazın", 'sahip': "DM'den EV yazın"}.get(kind, "DM'den TEKLİF yazın")
+    btn = {'proje': "DM'den PROJE yazın", 'sahip': "Bize DM atın"}.get(kind, "DM'den TEKLİF yazın")
     fb = font('sub', 48); bw = d.textlength(btn, font=fb)
     d.rounded_rectangle([(W - bw) / 2 - 50, 800, (W + bw) / 2 + 50, 900], radius=50, fill=LIGHT)
     d.text(((W - bw) / 2, 818), btn, font=fb, fill=NAVY)
