@@ -34,7 +34,7 @@ export async function restoreDraft(d: EditableDraft) {
   if (error) throw error;
 }
 
-export function DraftEditModal({ draft, onClose, onSaved }: { draft: EditableDraft | null; onClose: () => void; onSaved: (msg: string) => void }) {
+export function DraftEditModal({ draft, onClose, onSaved, ids }: { draft: EditableDraft | null; onClose: () => void; onSaved: (msg: string) => void; ids?: string[] }) {
   const d = draft;
   const [headline, setHeadline] = useState(d?.headline ?? d?.title ?? '');
   const [caption, setCaption] = useState(d?.caption ?? d?.body ?? '');
@@ -52,7 +52,7 @@ export function DraftEditModal({ draft, onClose, onSaved }: { draft: EditableDra
       const hashtags = tags.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean).map((t) => (t.startsWith('#') ? t : `#${t}`));
       const patch: Record<string, unknown> = { headline: headline.trim() || null, caption, body: caption, hashtags, scheduled_at: at, error: null };
       if (canRestore(d)) { patch.workflow_status = 'scheduled'; patch.status = 'planlandi'; }
-      const { error } = await db().from('social_drafts').update(patch).eq('id', d.id).not('workflow_status', 'in', '(published,processing)');
+      const { error } = await db().from('social_drafts').update(patch).in('id', ids?.length ? ids : [d.id]).not('workflow_status', 'in', '(published,processing)');
       if (error) throw error;
       onSaved(canRestore(d) ? 'Kaydedildi ve yeniden planlandı.' : 'Değişiklikler kaydedildi.');
     } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
@@ -83,7 +83,8 @@ export function DraftEditModal({ draft, onClose, onSaved }: { draft: EditableDra
 }
 
 /** Liste satırı için düğme grubu: Düzenle · İptal / Yeniden planla · Sil */
-export function DraftActionButtons({ draft, onEdit, onDone, compact = false }: { draft: EditableDraft; onEdit: () => void; onDone: (msg: { tone: 'ok' | 'error'; text: string }) => void; compact?: boolean }) {
+export function DraftActionButtons({ draft, onEdit, onDone, compact = false, twins }: { draft: EditableDraft; onEdit: () => void; onDone: (msg: { tone: 'ok' | 'error'; text: string }) => void; compact?: boolean; twins?: EditableDraft[] }) {
+  const all = twins?.length ? twins : [draft];
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (k: string, fn: () => Promise<void>, ok: string) => {
     setBusy(k);
@@ -96,18 +97,18 @@ export function DraftActionButtons({ draft, onEdit, onDone, compact = false }: {
       {canEdit(draft) && <Button variant="ghost" onClick={onEdit} icon={<Pencil className={sz} />}>Düzenle</Button>}
       {canCancel(draft) && (
         <Button variant="ghost" loading={busy === 'c'} icon={<XCircle className={sz} />}
-          onClick={() => window.confirm('Bu paylaşım iptal edilsin mi? (Sonra “Yeniden planla” ile geri alabilirsiniz)') && run('c', () => cancelDraft(draft.id), 'İptal edildi — bot bu gönderiyi paylaşmayacak.')}>İptal</Button>
+          onClick={() => window.confirm('Bu paylaşım iptal edilsin mi? (Sonra “Yeniden planla” ile geri alabilirsiniz)') && run('c', async () => { for (const x of all) if (canCancel(x)) await cancelDraft(x.id); }, 'İptal edildi — bot bu gönderiyi paylaşmayacak.')}>İptal</Button>
       )}
       {canRestore(draft) && (
         <Button variant="ghost" loading={busy === 'r'} icon={<RotateCcw className={sz} />}
-          onClick={() => run('r', () => restoreDraft(draft), draft.workflow_status === 'draft' ? 'Havuzdan alındı ve planlandı.' : 'Yeniden planlandı.')}>{draft.workflow_status === 'draft' ? 'Planla' : 'Yeniden planla'}</Button>
+          onClick={() => run('r', async () => { for (const x of all) if (canRestore(x)) await restoreDraft(x); }, draft.workflow_status === 'draft' ? 'Havuzdan alındı ve planlandı.' : 'Yeniden planlandı.')}>{draft.workflow_status === 'draft' ? 'Planla' : 'Yeniden planla'}</Button>
       )}
       {draft.workflow_status !== 'processing' && (
         <Button variant="ghost" loading={busy === 'd'} icon={<Trash2 className={sz} />}
           onClick={() => window.confirm(published
             ? 'Bu kayıt panel listesinden kaldırılsın mı?\n\nNot: Instagram/Facebook’taki yayınlanmış gönderi SİLİNMEZ; onu uygulamadan silmeniz gerekir.'
             : 'Bu gönderi silinsin mi? Bot paylaşmaz ve listeden kalkar (kayıt arşivde saklanır).')
-            && run('d', async () => { if (canCancel(draft)) await cancelDraft(draft.id); await archiveDraft(draft.id); }, published ? 'Listeden kaldırıldı (platformdaki gönderi duruyor).' : 'Silindi — bot paylaşmayacak.')}>Sil</Button>
+            && run('d', async () => { for (const x of all) { if (x.workflow_status === 'processing') continue; if (canCancel(x)) await cancelDraft(x.id); await archiveDraft(x.id); } }, published ? 'Listeden kaldırıldı (platformdaki gönderi duruyor).' : 'Silindi — bot paylaşmayacak.')}>Sil</Button>
       )}
     </>
   );

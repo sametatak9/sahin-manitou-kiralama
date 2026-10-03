@@ -42,7 +42,7 @@ import { PoolsScreen } from './screens/Pools';
 function Screens() {
   const { state } = useRouter();
   switch (state.route) {
-    case 'approvals': return <ApprovalsScreen />;
+    case 'approvals': return <QueueScreen initialTab="approval" />;
     case 'bots': return <BotsScreen />;
     case 'planner': return <PlannerScreen />;
     case 'studio': return <StudioScreen />;
@@ -55,7 +55,7 @@ function Screens() {
     case 'reports': return <ReportsScreen />;
     case 'growth': return <GrowthScreen />;
     case 'clients': return <ClientsScreen />;
-    case 'reels': return <EditedVideosScreen />;
+    case 'reels': return <QueueScreen initialTab="content" />;
     case 'portfolio': return <PortfolioScreen />;
     case 'queue': return <QueueScreen />;
     case 'videos': return <PoolsScreen />;

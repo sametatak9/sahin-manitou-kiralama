@@ -12,36 +12,33 @@ import { ClientSwitcher, useClient } from './client';
 interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
 /** Reklam ajansı menüsü: üstte seçili müşteri (işletme); tüm ekranlar o müşteri için çalışır. */
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
-  { title: 'Ajans', items: [
-    { id: 'clients', label: 'Müşteriler', icon: Users, hint: 'İşletmeler · hesaplar' },
-    { id: 'growth', label: 'Büyüme Merkezi', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
+  { title: 'Ana', items: [
+    { id: 'home', label: 'Ana Sayfa', icon: Gauge, hint: 'Bugün · yapılacaklar · sonuçlar' },
+    { id: 'queue', label: 'Yayın Merkezi', icon: CalendarClock, hint: 'Takvim · içerikler · havuz · onay' },
+    { id: 'leads', label: 'Müşteri Adayları', icon: Inbox, hint: 'Fiyat soranlar · başvurular' },
+    { id: 'growth', label: 'Büyüme', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
   ] },
-  { title: 'Günlük İş', items: [
-    { id: 'home', label: 'Genel Bakış', icon: Gauge, hint: 'Bugün ne oluyor' },
-    { id: 'approvals', label: 'Onay Merkezi', icon: CheckCheck, hint: 'Bekleyen paylaşımlar' },
-    { id: 'queue', label: 'Yayın Kuyruğu', icon: CalendarClock, hint: 'Zamanlanmış paylaşımlar' },
-    { id: 'reels', label: 'Editli İçerikler', icon: Clapperboard, hint: 'Reels + kaydırmalı gönderiler' },
-    { id: 'videos', label: 'İçerik Havuzu', icon: Film, hint: 'Video · banner · metin' },
-  ] },
-  { title: 'Botlar & İçerik', items: [
-    { id: 'bots', label: 'Bot Merkezi', icon: Bot, hint: 'Görev ver · yetenek' },
+  { title: 'İş', items: [
+    { id: 'construction', label: 'Müşteriler', icon: Building2, hint: 'Görüşme · teklif · sözleşme' },
+    { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'İş ortakları · hatırlatma' },
     { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
-    { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
-    { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
-    { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
+    { id: 'bots', label: 'Botlar', icon: Bot, hint: 'Görev ver · zamanla' },
   ] },
-  { title: 'Müşteri & Sistem', items: [
-    { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'Arşiv · hatırlatma' },
-    { id: 'construction', label: 'İnşaat Müşterileri', icon: Building2, hint: 'Villa · tadilat · dönüşüm' },
-    { id: 'leads', label: 'Gelen Talepler', icon: Inbox, hint: 'Web formu + bot' },
-    { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
+  { title: 'Diğer', items: [
+    { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
+    { id: 'videos', label: 'Medya Havuzu', icon: Film, hint: 'Ham foto · video' },
+    { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
+    { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
+    { id: 'clients', label: 'Ajans Müşterileri', icon: Users, hint: 'İşletmeler · hesaplar' },
     { id: 'skills', label: 'Yetenekler', icon: Blocks, hint: 'Skill kütüphanesi' },
+    { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'growth', 'reels', 'queue', 'clients'];
+const MOBILE: Route[] = ['home', 'queue', 'leads', 'growth'];
 const MOBILE_LABEL: Partial<Record<Route, string>> = {
-  home: 'Genel',
+  home: 'Ana',
+  leads: 'Adaylar',
   growth: 'Büyüme',
   reels: 'İçerikler',
   clients: 'Müşteri',

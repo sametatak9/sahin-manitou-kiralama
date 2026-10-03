@@ -4,12 +4,14 @@ import { useMemo, useRef, useState } from 'react';
 import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Share2, Sparkles, Upload, X } from 'lucide-react';
 import { callOps, errorCode, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
-import { dayKey, fmtDateTime, istanbulToIso, relTime, type Tone } from '../lib/format';
+import { dayKey, fmtDateTime, istanbulToIso, relTime, timeOf, type Tone } from '../lib/format';
 import type { Draft, OpsStatus, Publication } from '../lib/types';
 import { TARGETS, uploadMedia } from '../lib/media';
 import { shareToPhone } from '../lib/share';
 import { useRouter, useSession } from '../session';
-import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
+import { Button, cx, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, StateView, Tabs } from '../ui';
+import { EditedVideosScreen } from './EditedVideos';
+import { ApprovalsScreen } from './Approvals';
 import { PoolPicker } from '../components/Pools';
 import { DraftActionButtons, DraftEditModal } from '../components/DraftActions';
 
@@ -216,95 +218,167 @@ function Composer({ status, onDone }: { status: OpsStatus | null; onDone: (msg: 
   );
 }
 
-export function QueueScreen() {
+type CenterTab = 'calendar' | 'content' | 'pool' | 'approval' | 'done';
+type Group = { key: string; day: string; at: string | null; items: Draft[] };
+const dayLabel = (key: string) => {
+  const today = dayKey(new Date()); const tomorrow = dayKey(new Date(Date.now() + 86400_000));
+  const nice = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${key}T12:00:00+03:00`));
+  return key === today ? `Bugün · ${nice}` : key === tomorrow ? `Yarın · ${nice}` : nice;
+};
+/** Aynı içeriğin Instagram + Facebook kopyaları tek satır; günlere göre gruplu */
+function groupDrafts(rows: Draft[], desc = false) {
+  const m = new Map<string, Group>();
+  for (const d of rows) {
+    const k = `${d.format}|${d.video_url || d.media_urls?.[0] || d.headline || d.id}|${d.scheduled_at ?? ''}`;
+    const g = m.get(k) ?? { key: k, day: d.scheduled_at ? dayKey(d.scheduled_at) : '—', at: d.scheduled_at, items: [] };
+    g.items.push(d); m.set(k, g);
+  }
+  const groups = [...m.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)) * (desc ? -1 : 1));
+  const days = new Map<string, Group[]>();
+  for (const g of groups) days.set(g.day, [...(days.get(g.day) ?? []), g]);
+  return [...days.entries()];
+}
+
+export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTab }) {
   const session = useSession();
-  const { go } = useRouter();
   const admin = session.role === 'admin';
-  const [tab, setTab] = useState<'upcoming' | 'pool' | 'done'>('upcoming');
+  const [tab, setTab] = useState<CenterTab>(initialTab);
   const [fmt, setFmt] = useState<'all' | 'reel' | 'carousel' | 'banner'>('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [composer, setComposer] = useState(false);
+  const [quota, setQuota] = useState(false);
+  const [editing, setEditing] = useState<Group | null>(null);
   const status = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
   const q = useQuery(async () => {
     const s = db();
+    const since = new Date(Date.now() - 21 * 86400_000).toISOString();
     const [drafts, pubs] = await Promise.all([
       s.from('social_drafts').select('*').in('primary_platform', [...ALL_PLATFORMS]).neq('archive_status', 'archived')
-        .not('scheduled_at', 'is', null).order('scheduled_at', { ascending: true }).limit(300),
-      s.from('social_publications').select('id,content_id,platform,status,external_url,published_at,error,external_post_id,scheduled_at,created_at').order('created_at', { ascending: false }).limit(200),
+        .not('scheduled_at', 'is', null).gte('scheduled_at', since).order('scheduled_at', { ascending: true }).limit(500),
+      s.from('social_publications').select('id,content_id,platform,status,external_url,published_at,error,external_post_id,scheduled_at,created_at').order('created_at', { ascending: false }).limit(300),
     ]);
     return { drafts: unwrap(drafts) as Draft[], pubs: unwrap(pubs) as Publication[] };
   }, { drafts: [] as Draft[], pubs: [] as Publication[] }, [], ['social_drafts', 'social_publications']);
   const pubBy = useMemo(() => { const m = new Map<string, Publication>(); q.data.pubs.forEach((p) => p.content_id && !m.has(p.content_id) && m.set(p.content_id, p)); return m; }, [q.data.pubs]);
-  const now = Date.now();
-  const rows = q.data.drafts.filter((d) => {
-    const done = ['published', 'failed', 'cancelled', 'rejected'].includes(d.workflow_status);
-    if (fmt !== 'all' && (fmt === 'reel' ? !['reel', 'short'].includes(d.format ?? '') : d.format !== fmt)) return false;
-    if (tab === 'pool') return d.workflow_status === 'draft';
-    return tab === 'done' ? done : !done && d.workflow_status !== 'draft';
-  });
-  const [editing, setEditing] = useState<Draft | null>(null);
-  const publishNow = async (id: string) => {
-    setBusy(id);
+  const fmtOk = (d: Draft) => fmt === 'all' || (fmt === 'reel' ? ['reel', 'short'].includes(d.format ?? '') : d.format === fmt);
+  const DONE = ['published', 'failed', 'cancelled', 'rejected'];
+  const lists = useMemo(() => ({
+    calendar: q.data.drafts.filter((d) => !DONE.includes(d.workflow_status) && !['draft', 'pending_approval'].includes(d.workflow_status)),
+    pool: q.data.drafts.filter((d) => d.workflow_status === 'draft'),
+    approval: q.data.drafts.filter((d) => d.workflow_status === 'pending_approval'),
+    done: q.data.drafts.filter((d) => DONE.includes(d.workflow_status)),
+  }), [q.data.drafts]);
+  const weekEnd = Date.now() + 7 * 86400_000;
+  const weekCount = new Set(lists.calendar.filter((d) => d.scheduled_at && new Date(d.scheduled_at).getTime() < weekEnd).map((d) => `${d.format}|${d.video_url || d.media_urls?.[0] || d.headline}|${d.scheduled_at}`)).size;
+  const groupsOf = (rows: Draft[]) => new Set(rows.map((d) => `${d.format}|${d.video_url || d.media_urls?.[0] || d.headline}|${d.scheduled_at}`)).size;
+  const publishNow = async (g: Group) => {
+    setBusy(g.key);
     try {
-      await callOps('publish_content', { content_id: id });
+      for (const d of g.items) if (['scheduled', 'approved'].includes(d.workflow_status)) await callOps('publish_content', { content_id: d.id });
       setMsg({ tone: 'ok', text: 'Yayın isteği gönderildi.' }); q.reload();
     } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-xl font-semibold text-ink-100">Yayın Kuyruğu</h2>
-        <p className="text-xs text-ink-400">Embay Yapı inşaat paylaşımları — görsel yükle, saat seç; bot zamanında paylaşır. Manitou içeriği yok.</p>
-      </div>
-      {admin && <QuotaPanel onChanged={() => q.reload()} />}
-      <Composer status={status.data} onDone={(t) => { setMsg({ tone: 'ok', text: t }); q.reload(); }} />
-      {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
-      <div className="flex flex-wrap gap-1.5">
-        {([['all', 'Hepsi'], ['reel', 'Reels'], ['carousel', 'Kaydırmalı'], ['banner', 'Banner']] as const).map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setFmt(k)} className={cx('ops-chip', fmt === k && '!bg-[#262A6B] !text-white !ring-transparent')}>{l}</button>
+  const newestFirst = async () => {
+    setBusy('newest');
+    try {
+      const { data, error } = await db().rpc('reorder_newest_first');
+      if (error) throw error;
+      setMsg({ tone: 'ok', text: data ? `Yeni tarz öne alındı: ${data} paylaşımın saati değişti (saatler aynı, sıra en yeniden eskiye).` : 'Sıra zaten en yeniden eskiye.' }); q.reload();
+    } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+  };
+
+  const renderGroups = (rows: Draft[], mode: CenterTab) => {
+    const data = groupDrafts(rows.filter(fmtOk), mode === 'done');
+    if (q.loading && !q.data.drafts.length) return <StateView kind="loading" />;
+    if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
+    if (!data.length) return <StateView kind="empty" title={mode === 'pool' ? 'Havuz boş' : mode === 'approval' ? 'Onay bekleyen yok' : mode === 'done' ? 'Henüz yayınlanan yok' : 'Takvim boş'} />;
+    return (
+      <div className="space-y-4">
+        {data.map(([day, groups]) => (
+          <section key={day}>
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">{day === '—' ? 'Tarihsiz' : dayLabel(day)} <span className="font-mono font-normal">· {groups.length}</span></h4>
+            <ul className="space-y-1.5">
+              {groups.map((g) => {
+                const d = g.items[0];
+                const wf = WF[d.workflow_status] ?? WF.draft;
+                const media = d.design_url || d.media_urls?.[0] || d.video_url;
+                const pubs = g.items.map((x) => pubBy.get(x.id)).filter(Boolean) as Publication[];
+                const err = g.items.find((x) => x.error)?.error;
+                return (
+                  <li key={g.key} className="ops-panel p-2.5 flex items-center gap-3">
+                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-ink-900 shrink-0">
+                      {(d.media_urls?.length ?? 0) > 1 && d.format === 'carousel' && <span className="absolute top-0.5 right-0.5 z-10 rounded-full bg-[#262A6B] text-white text-[9px] font-bold px-1">{d.media_urls.length}</span>}
+                      {media ? (isVideoUrl(media) ? <video src={`${media}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={media} alt="" loading="lazy" className="w-full h-full object-cover" />) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[12px] font-mono font-semibold text-ink-100">{g.at ? timeOf(g.at) : '—'}</span>
+                        <span className="rounded-full bg-ink-800 text-ink-300 text-[10px] font-semibold px-2 py-0.5">{FORMAT_LABEL[d.format ?? ''] ?? d.format}</span>
+                        {g.items.map((x) => <PlatformBadge key={x.id} platform={x.primary_platform} />)}
+                        {mode !== 'calendar' && <Pill tone={wf.tone}>{wf.label}</Pill>}
+                      </div>
+                      <div className="text-[13px] font-semibold text-ink-100 line-clamp-1 mt-0.5">{d.headline || d.title}</div>
+                      {err && <div className="text-[11px] text-rose-600 line-clamp-1" title={err}>Hata: {err}</div>}
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1 shrink-0 max-w-[50%]">
+                      {admin && mode === 'calendar' && <Button variant="subtle" loading={busy === g.key} onClick={() => publishNow(g)} icon={<Send className="w-3.5 h-3.5" />}>Şimdi</Button>}
+                      <DraftActionButtons draft={d} twins={g.items} onEdit={() => setEditing(g)} onDone={(m) => { setMsg(m); q.reload(); }} />
+                      {pubs.filter((p) => p.external_url).map((p) => <a key={p.id} href={p.external_url!} target="_blank" rel="noreferrer" className="ops-chip"><ExternalLink className="w-3.5 h-3.5" />{p.platform === 'facebook' ? 'FB' : 'IG'}</a>)}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         ))}
       </div>
-      {tab === 'pool' && <Notice tone="info">Havuz: üretilmiş ama paylaşılmayacak içerikler (günde 1 banner sınırı). Beğendiğinizi “Planla” ile önerilen saatine, “Düzenle” ile istediğiniz saate alın.</Notice>}
-      {editing && <DraftEditModal key={editing.id} draft={editing} onClose={() => setEditing(null)} onSaved={(t) => { setEditing(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
-      <Tabs value={tab} onChange={setTab} items={[{ id: 'upcoming', label: 'Sıradakiler' }, { id: 'pool', label: `Havuz (${q.data.drafts.filter((d) => d.workflow_status === 'draft').length})` }, { id: 'done', label: 'Tamamlanan' }]} />
-      {q.loading && !q.data.drafts.length ? <StateView kind="loading" /> : q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : rows.length === 0 ? (
-        <StateView kind="empty" title={tab === 'upcoming' ? 'Sırada paylaşım yok' : tab === 'pool' ? 'Havuz boş' : 'Henüz tamamlanan yok'} message="Yukarıdan görsel yükleyip planlayın veya Onay Merkezi’nden onaylayın." />
-      ) : (
-        <ul className="space-y-2">
-          {rows.map((d) => {
-            const pub = pubBy.get(d.id);
-            const wf = WF[d.workflow_status] ?? WF.draft;
-            const media = d.media_urls?.[0] || d.video_url || d.design_url;
-            const past = d.scheduled_at && new Date(d.scheduled_at).getTime() < now;
-            return (
-              <li key={d.id} className="ops-panel p-3 flex flex-col sm:flex-row gap-3">
-                <div className="relative w-full sm:w-20 h-20 rounded-xl overflow-hidden bg-ink-900 shrink-0">
-                  {(d.media_urls?.length ?? 0) > 1 && <span className="absolute top-1 right-1 z-10 rounded-full bg-[#262A6B] text-white text-[10px] font-bold px-1.5 py-0.5">+{d.media_urls.length - 1}</span>}
-                  {media ? (isVideoUrl(media) ? <video src={`${media}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={media} alt="" className="w-full h-full object-cover" />) : <div className="w-full h-full grid place-items-center text-[10px] text-ink-500">görsel yok</div>}
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PlatformBadge platform={d.primary_platform || d.platform_targets?.[0]} />
-                    <Pill tone={wf.tone}>{wf.label}</Pill>
-                    <span className="text-[11px] font-mono text-ink-400">{FORMAT_LABEL[d.format ?? ''] ?? d.format}</span>
-                    {past && tab === 'upcoming' && <span className="text-[10px] text-amber-700">saat geçti</span>}
-                  </div>
-                  <div className="text-sm font-semibold text-ink-100 line-clamp-1">{d.title || d.headline}</div>
-                  <div className="text-[11px] text-ink-400 line-clamp-2">{d.caption || d.body}</div>
-                  <div className="text-[11px] font-mono text-ink-500">{d.scheduled_at ? fmtDateTime(d.scheduled_at) : '—'}{pub?.external_post_id ? ` · API: ${pub.external_post_id}` : ''}{pub?.error ? ` · ${pub.error}` : ''}</div>
-                </div>
-                <div className="flex sm:flex-col gap-1.5 shrink-0">
-                  {admin && tab === 'upcoming' && ['scheduled', 'approved'].includes(d.workflow_status) && (
-                    <Button variant="subtle" loading={busy === d.id} onClick={() => publishNow(d.id)} icon={<Send className="w-3.5 h-3.5" />}>Şimdi</Button>
-                  )}
-                  <DraftActionButtons draft={d} onEdit={() => setEditing(d)} onDone={(m) => { setMsg(m); q.reload(); }} />
-                  {pub?.external_url && <a href={pub.external_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-green"><ExternalLink className="w-3.5 h-3.5" />Aç</a>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-3xl bg-gradient-to-br from-[#141A4F] via-[#1E2470] to-[#2E3192] text-white p-4 sm:p-5">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex-1 min-w-[14rem]">
+            <div className="text-[10px] font-mono tracking-[0.2em] text-[#8FC1F0]">YAYIN MERKEZİ</div>
+            <h2 className="font-display text-xl font-semibold mt-0.5">Ne, ne zaman paylaşılıyor?</h2>
+            <p className="text-[12px] text-[#D6E4F7] mt-1">Takvim, editli içerikler, havuz ve onaylar tek yerde. Günde 1 Reels + 1 banner paylaşılır; yeni tarz her gece öne alınır.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy === 'newest'} onClick={newestFirst} className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-[12px] font-semibold"><Sparkles className="w-4 h-4" />{busy === 'newest' ? 'Sıralanıyor…' : 'Yenileri öne al'}</button>
+            <button type="button" onClick={() => setComposer(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#8FC6F2] text-[#141A4F] px-3 py-2 text-[12px] font-bold"><Upload className="w-4 h-4" />Yeni gönderi</button>
+            {admin && <button type="button" onClick={() => setQuota(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-[12px]"><Film className="w-4 h-4" />Üretim</button>}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          {[[weekCount, '7 günde paylaşım'], [groupsOf(lists.pool), 'havuzda bekleyen'], [groupsOf(lists.approval), 'onay bekleyen']].map(([n, l]) => (
+            <div key={String(l)} className="rounded-2xl bg-white/10 px-3 py-2"><div className="text-xl font-display font-bold tabular-nums">{n}</div><div className="text-[11px] text-[#D6E4F7]">{l}</div></div>
+          ))}
+        </div>
+      </section>
+      {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
+      <Tabs value={tab} onChange={setTab} items={[
+        { id: 'calendar', label: 'Takvim' }, { id: 'content', label: 'Editli içerikler' }, { id: 'pool', label: 'Havuz', count: groupsOf(lists.pool) },
+        { id: 'approval', label: 'Onay', count: groupsOf(lists.approval) }, { id: 'done', label: 'Yayınlanan' }]} />
+      {['calendar', 'pool', 'approval', 'done'].includes(tab) && (
+        <div className="flex flex-wrap gap-1.5">
+          {([['all', 'Hepsi'], ['reel', 'Reels'], ['carousel', 'Kaydırmalı'], ['banner', 'Banner']] as const).map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setFmt(k)} className={cx('ops-chip', fmt === k && '!bg-[#262A6B] !text-white !ring-transparent')}>{l}</button>
+          ))}
+        </div>
       )}
+      {tab === 'pool' && <Notice tone="info">Üretilmiş ama paylaşılmayan içerikler (günde 1 Reels + 1 banner sınırı). Beğendiğinizi “Planla” ile önerilen saatine, “Düzenle” ile istediğiniz saate alın.</Notice>}
+      {editing && <DraftEditModal key={editing.key} draft={editing.items[0]} ids={editing.items.map((x) => x.id)} onClose={() => setEditing(null)} onSaved={(t) => { setEditing(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
+      {tab === 'content' ? <EditedVideosScreen embedded />
+        : tab === 'approval' ? <>{renderGroups(lists.approval, 'approval')}<details className="ops-panel p-3"><summary className="text-[12px] font-semibold text-ink-300 cursor-pointer">Diğer onaylar (mesaj, ilan, teklif)</summary><div className="mt-3"><ApprovalsScreen /></div></details></>
+        : renderGroups(tab === 'calendar' ? lists.calendar : tab === 'pool' ? lists.pool : lists.done, tab)}
+      <Modal open={composer} onClose={() => setComposer(false)} title="Yeni gönderi" wide>
+        <Composer status={status.data} onDone={(t) => { setComposer(false); setMsg({ tone: 'ok', text: t }); q.reload(); }} />
+      </Modal>
+      <Modal open={quota} onClose={() => setQuota(false)} title="Günlük üretim" wide>
+        <QuotaPanel onChanged={() => q.reload()} />
+      </Modal>
     </div>
   );
 }
