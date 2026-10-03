@@ -1,22 +1,218 @@
 {
-  "crop": {},
-  "reels": [
-    {"slug": "13-once-sonra-villa", "music": "house_120_7", "intro": "hook", "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
-     "hook": ["AYNI SALON", "ÖNCE · SONRA"], "sub": "Taş şömineli villa · iç mekân",
-     "trans": ["wipe", "whip", "wipe", "zoom", "wipe", "whip", "flash"],
-     "shots": [[105, 1.0, 4, "ÖNCE"], [120, 9.0, 4, "SONRA"], [113, 1.0, 4, "ÖNCE"], [121, 1.0, 4, "SONRA"],
-               [104, 6.5, 4, "ÖNCE"], [120, 1.0, 4, "SONRA", "ramp"], [108, 0.5, 4], [122, 2.0, 4, "ANAHTAR TESLİM"]]},
-    {"slug": "14-iscilik-detayda", "music": "phonk_125_8", "intro": "hook", "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
-     "hook": ["İŞÇİLİK", "DETAYDA SAKLI"], "sub": "Villa iç mekân detayları",
-     "trans": ["whip", "zoom", "glitch", "whip", "spin", "zoom", "wipe"],
-     "shots": [[103, 0.2, 4, "TAŞ ŞÖMİNE"], [108, 0.3, 4, "FERFORJE KORKULUK", "ramp"], [101, 4.0, 4, "GALERİ BOŞLUĞU"],
-               [110, 0.3, 4, "LACİVERT KİTAPLIK"], [112, 2.5, 4], [107, 0.1, 4, "AHŞAP DOLAP"],
-               [123, 0.3, 4, "SONUÇ", "ramp"], [121, 3.0, 4]]},
-    {"slug": "15-dis-cephe-tamam", "music": "trap_140_1", "intro": "hook", "outro_card": "public/reels/kit/14-kapanis-karti-teklif.mp4",
-     "hook": ["DIŞ CEPHE", "TAMAM"], "sub": "Sıra peyzajda",
-     "trans": ["whip", "zoom", "spin", "whip", "glitch", "zoom", "flash"],
-     "shots": [[117, 0.3, 4, "İKİ KATLI VİLLA", "ramp"], [115, 0.5, 4, "ÜÇGEN CEPHE"], [116, 0.5, 4, "BAHÇE DUVARI"],
-               [118, 4.6, 4, "TEK KATLI VİLLA"], [119, 0.5, 4], [114, 0.5, 4, "YARI AÇIK TERAS"],
-               [117, 4.2, 4], [118, 0.5, 4, "TESLİME HAZIRLIK", "ramp"]]}
-  ]
+ "crop": {},
+ "reels": [
+  {
+   "slug": "13-once-sonra-villa",
+   "music": "house_120_7",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
+   "hook": [
+    "AYNI SALON",
+    "ÖNCE · SONRA"
+   ],
+   "sub": "Taş şömineli villa · iç mekân",
+   "trans": [
+    "wipe",
+    "whip",
+    "wipe",
+    "zoom",
+    "wipe",
+    "whip",
+    "flash"
+   ],
+   "shots": [
+    [
+     105,
+     1.0,
+     4,
+     "ÖNCE"
+    ],
+    [
+     120,
+     9.0,
+     4,
+     "SONRA"
+    ],
+    [
+     113,
+     1.0,
+     4,
+     "ÖNCE"
+    ],
+    [
+     121,
+     1.0,
+     4,
+     "SONRA"
+    ],
+    [
+     104,
+     6.5,
+     4,
+     "ÖNCE"
+    ],
+    [
+     120,
+     1.0,
+     4,
+     "SONRA",
+     "ramp"
+    ],
+    [
+     108,
+     0.5,
+     4
+    ],
+    [
+     122,
+     2.0,
+     4,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta"
+  },
+  {
+   "slug": "14-iscilik-detayda",
+   "music": "phonk_125_8",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/13-kapanis-karti-proje.mp4",
+   "hook": [
+    "İŞÇİLİK",
+    "DETAYDA SAKLI"
+   ],
+   "sub": "Villa iç mekân detayları",
+   "trans": [
+    "whip",
+    "zoom",
+    "glitch",
+    "whip",
+    "spin",
+    "zoom",
+    "wipe"
+   ],
+   "shots": [
+    [
+     103,
+     0.2,
+     4,
+     "TAŞ ŞÖMİNE"
+    ],
+    [
+     108,
+     0.3,
+     4,
+     "FERFORJE KORKULUK",
+     "ramp"
+    ],
+    [
+     101,
+     4.0,
+     4,
+     "GALERİ BOŞLUĞU"
+    ],
+    [
+     110,
+     0.3,
+     4,
+     "LACİVERT KİTAPLIK"
+    ],
+    [
+     112,
+     2.5,
+     4
+    ],
+    [
+     107,
+     0.1,
+     4,
+     "AHŞAP DOLAP"
+    ],
+    [
+     123,
+     0.3,
+     4,
+     "SONUÇ",
+     "ramp"
+    ],
+    [
+     121,
+     3.0,
+     4
+    ]
+   ],
+   "pace": "orta"
+  },
+  {
+   "slug": "15-dis-cephe-tamam",
+   "music": "trap_140_1",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/14-kapanis-karti-teklif.mp4",
+   "hook": [
+    "DIŞ CEPHE",
+    "TAMAM"
+   ],
+   "sub": "Sıra peyzajda",
+   "trans": [
+    "whip",
+    "zoom",
+    "spin",
+    "whip",
+    "glitch",
+    "zoom",
+    "flash"
+   ],
+   "shots": [
+    [
+     117,
+     0.3,
+     4,
+     "İKİ KATLI VİLLA",
+     "ramp"
+    ],
+    [
+     115,
+     0.5,
+     4,
+     "ÜÇGEN CEPHE"
+    ],
+    [
+     116,
+     0.5,
+     4,
+     "BAHÇE DUVARI"
+    ],
+    [
+     118,
+     4.6,
+     4,
+     "TEK KATLI VİLLA"
+    ],
+    [
+     119,
+     0.5,
+     4
+    ],
+    [
+     114,
+     0.5,
+     4,
+     "YARI AÇIK TERAS"
+    ],
+    [
+     117,
+     4.2,
+     4
+    ],
+    [
+     118,
+     0.5,
+     4,
+     "TESLİME HAZIRLIK",
+     "ramp"
+    ]
+   ],
+   "pace": "orta"
+  }
+ ]
 }

@@ -42,6 +42,13 @@ jobs:
           PY
       - name: Kurgu
         run: python3 scripts/marvel/marvel.py --config reels_drive.json --src scripts/marvel/src_drive --out public/reels/marvel --only "${{ github.event.inputs.only }}"
+      - name: Instagram için sıkıştır (kalite korunur)
+        run: |
+          for s in $(python3 -c "import json;print(' '.join(r['slug'] for r in json.load(open('scripts/marvel/reels_drive.json'))['reels']))"); do
+            f="public/reels/marvel/$s.mp4"; [ -f "$f" ] || continue
+            ffmpeg -v error -y -i "$f" -c:v libx264 -preset slow -crf 22 -maxrate 7M -bufsize 14M -pix_fmt yuv420p -profile:v high -c:a copy -movflags +faststart "/tmp/$s.mp4" && mv "/tmp/$s.mp4" "$f"
+            ls -la "$f"
+          done
       - name: Depoya yaz (yalnızca yeni Reels + index)
         run: |
           git config user.name "embay-reels-bot"

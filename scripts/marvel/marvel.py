@@ -318,7 +318,13 @@ def transition(kind, A, B, rng):
     return out
 
 
+# Tempo: 'hizli' = ilk kurgular; 'orta' = daha sakin (geçiş 0,4 sn, sahne ~1,5 kat uzun, yumuşak zoom/sarsıntı)
+PACE = {'hizli': {'T': 6, 'scale': 1.0, 'punch': 0.09, 'shake': 12}, 'orta': {'T': 12, 'scale': 1.5, 'punch': 0.045, 'shake': 5}}
+
+
 def render_reel(cfg, crops, src_dir, out_dir, music_dir):
+    pace = PACE.get(cfg.get('pace', 'hizli'), PACE['hizli'])
+    cfg = {**cfg, 'shots': [[s[0], s[1], s[2] * pace['scale'], *s[3:]] for s in cfg['shots']]}
     slug = cfg['slug']; bpm = int(cfg['music'].split('_')[1]); beat = 60.0 / bpm
     bf = beat * FPS  # vuruş başına kare
     rng = np.random.default_rng(abs(hash(slug)) % (2 ** 32))
@@ -379,7 +385,7 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
     t_frame = flip_n + slam_n
 
     # ── SAHNELER
-    T = 6  # geçiş kare sayısı (yarısı önceki sahneden, yarısı yenisinden)
+    T = pace['T']  # geçiş kare sayısı (yarısı önceki sahneden, yarısı yenisinden)
     tail = None; prev_last = None
     for i, sh in enumerate(shots):
         src = sh['frames']; nf = sh['nf']; L = len(src)
@@ -390,14 +396,14 @@ def render_reel(cfg, crops, src_dir, out_dir, music_dir):
             if sh['ramp']:
                 f = u + 0.55 * math.sin(2 * math.pi * u) / (2 * math.pi)   # hızlı-yavaş-hızlı
                 idx = int(f * (L - 1))
-            else:
-                idx = min(L - 1, k)
+            else:  # kaynak kısa ise donmak yerine hafif ağır çekimle yayılır
+                idx = int(k * (L - 1) / max(1, nf - 1)) if L < nf else min(L - 1, k)
             fr = grade(src[idx])
             kb = k % bf
-            z = 1.03 + 0.06 * u + 0.09 * math.exp(-kb / 2.6)   # her vuruşta zoom-punch
+            z = 1.03 + 0.06 * u + pace['punch'] * math.exp(-kb / 2.6)   # her vuruşta zoom-punch
             shake = (0, 0)
             if k < 6 and i % 3 == 0:
-                shake = tuple(rng.integers(-1, 2, 2) * 12 * (1 - k / 6))
+                shake = tuple(rng.integers(-1, 2, 2) * pace['shake'] * (1 - k / 6))
             fr = zoom(fr, z, dx=shake[0], dy=shake[1])
             if title is not None:
                 a_in = ease_out(min(1, max(0, (k - 3) / 7)))
