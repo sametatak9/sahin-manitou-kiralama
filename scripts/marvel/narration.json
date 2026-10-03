@@ -1,0 +1,16 @@
+{
+ "_not": "Sesli anlatımlı Reels: mevcut gerçek çekimli Reels'in üstüne sunucu sesi (Google Gemini TTS, resmi API) + altyazı + kısık müzik. Metinler yalnızca videodaki gerçek işi anlatır; fiyat/süre gibi doğrulanmamış bilgi yok.",
+ "voice": "Charon",
+ "items": [
+  {"slug": "19-sesli-karkastan-eve", "base": "11-karkastan-eve",
+   "text": "Bu çelik iskelet, gördüğünüz eve dönüştü. Şantiyeden iç mekâna kadar her aşama bizim işimiz. Arsanız için Embay Yapı'ya yazın."},
+  {"slug": "20-sesli-once-sonra", "base": "13-once-sonra-villa",
+   "text": "Aynı salon, iki farklı an. Kolilerin arasından, taş şömineli ve galeri boşluklu bir yaşam alanına. Kaba inşaattan anahtar teslime, her detay özenle tamamlandı. Kendi projeniz için Embay Yapı'ya yazın."},
+  {"slug": "21-sesli-iscilik", "base": "14-iscilik-detayda",
+   "text": "İşçilik detayda saklı. Taş şömine, ferforje korkuluklar, lacivert kitaplık ve ahşap dolaplar. Bir villayı villa yapan, bu özenli dokunuşlardır. Hayalinizdeki ev için Embay Yapı yanınızda."},
+  {"slug": "22-sesli-orman-evi", "base": "16-mimari-orman-evi",
+   "text": "Ormanın içinde modern bir ev. Ahşap cephe, sade bir mutfak ve ferah bir banyo. Siz de böyle bir eve sahip olmak isterseniz, Embay Yapı'ya yazın."},
+  {"slug": "23-sesli-isik-tas-ahsap", "base": "18-mimari-isik-tas-ahsap",
+   "text": "Işık, taş ve ahşap. Yemek alanından şömineli salona, galeriden çalışma odasına. Kendi projeniz için Embay Yapı'ya yazın."}
+ ]
+}

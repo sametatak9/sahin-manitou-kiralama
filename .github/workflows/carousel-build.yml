@@ -6,7 +6,7 @@ on:
       only: { description: 'Yalnızca bu slug ile başlayanlar (boş = hepsi)', required: false, default: '' }
   push:
     branches: [main]
-    paths: ['scripts/carousel/carousels.json', 'scripts/carousel/build.py']
+    paths: ['scripts/carousel/carousels.json', 'scripts/carousel/build.py', 'scripts/carousel/ev_tarzlari.json']
 permissions:
   contents: write
 concurrency:

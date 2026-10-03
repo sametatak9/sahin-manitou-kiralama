@@ -1,0 +1,41 @@
+# EMBAY · Sesli anlatımlı Reels: mevcut Reels + sunucu sesi (Gemini TTS, depodan) + altyazı + kısık müzik. narration.json değişince çalışır.
+name: Sesli Reels
+on:
+  workflow_dispatch:
+    inputs:
+      only: { description: 'Yalnızca bu slug ile başlayanlar (boş = hepsi)', required: false, default: '' }
+  push:
+    branches: [main]
+    paths: ['scripts/marvel/narration.json', 'scripts/marvel/narrate.py']
+permissions:
+  contents: write
+concurrency:
+  group: marvel-narrate
+  cancel-in-progress: true
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 1 }
+      - name: Araçlar
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          pip install -q pillow
+          mkdir -p scripts/marvel/fonts
+          curl -sSfL -o scripts/marvel/fonts/Oswald-VF.ttf "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf"
+      - run: python3 scripts/marvel/narrate.py --only "${{ github.event.inputs.only }}"
+      - name: Depoya yaz
+        run: |
+          git config user.name "embay-reels-bot"
+          git config user.email "embay-reels-bot@users.noreply.github.com"
+          python3 - <<'PY'
+          import json, subprocess
+          slugs = [i['slug'] for i in json.load(open('scripts/marvel/narration.json'))['items']]
+          files = [f'public/reels/marvel/{s}.{e}' for s in slugs for e in ('mp4', 'jpg')] + ['public/reels/marvel/index.json']
+          subprocess.run(['git', 'add', '--'] + [f for f in files if __import__('os').path.exists(f)], check=True)
+          PY
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Sesli Reels ($(date -u +%Y-%m-%dT%H:%MZ))"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done

@@ -280,27 +280,30 @@
    "title_tr": "Tek Katlı Bahçeli Ev"
   },
   {
-   "slug": "et08-kutuk-ev",
+   "slug": "et08-klasik-villa",
    "name": [
-    "AHŞAP",
-    "KÜTÜK EV"
+    "KLASİK",
+    "VİLLA"
    ],
-   "sub": "Doğal malzeme · sıcak yuva",
-   "a": "log house made of large round timber logs, covered porch, stone chimney, mountain forest setting, autumn colors, warm light",
-   "b": "log cabin interior, timber log walls, stone fireplace, wooden furniture, warm cozy lighting, winter evening",
+   "sub": "Taş · ahşap · ferforje",
+   "title_tr": "Klasik Villa",
+   "a_real": 63,
+   "b_real": 73,
+   "b_label": "Taş duvarlı çalışma odası",
+   "real": {
+    "n": 61,
+    "label": "Embay projesi · Taş şömineli salon"
+   },
    "traits": [
-    "Masif ahşap doğal yalıtım sağlar",
-    "Taş şömine ve sundurma",
-    "Yayla, dağ ve orman arsalarına yakışır",
-    "Doğru bakımla uzun ömürlü"
+    "Taş şömine ve doğal taş duvarlar",
+    "Galeri boşluklu, yüksek tavanlı salon",
+    "Ferforje korkuluklar ve ahşap dolaplar",
+    "İki katlı, geniş aileler için ferah plan"
    ],
-   "b_label": "Şömineli salon",
-   "sketch": "kutuk",
-   "caption": "Ev Tarzları 8/10 · Ahşap Kütük Ev\n\nMasif ahşabın doğal yalıtımı, taş şömine ve sundurma: kütük ev tam bir sıcak yuva 🔥\n\n✔️ Masif ahşap doğal yalıtım sağlar\n✔️ Taş şömine ve sundurma\n✔️ Yayla, dağ ve orman arsalarına yakışır\n✔️ Doğru bakımla uzun ömürlü\n\nSiz de böyle bir eve sahip olmak isterseniz arsanıza anahtar teslim yapalım. DM'den EV yazın 👇\n📞 0531 436 29 04 · embayyapi.com.tr\n\nYarın yeni bir tarz! Hangisini merak ediyorsunuz? Yorumlara yazın 👇\n\n📐 Kapaktaki çizim tarzı anlatan temsili bir mimari çizimdir.",
    "hashtags": [
-    "#kütükev",
-    "#ahşapev",
-    "#logcabin",
+    "#klasikvilla",
+    "#taşşömine",
+    "#galeriboşluğu",
     "#evtarzları",
     "#mimari",
     "#architecture",
@@ -315,7 +318,7 @@
     "#keşfet"
    ],
    "day": "2026-10-11",
-   "title_tr": "Ahşap Kütük Ev"
+   "caption": "Ev Tarzları 8/10 · Klasik Villa\n\nTaş şömine, galeri boşluğu, ferforje korkuluklar… Bu gönderideki tüm kareler kendi bitirdiğimiz villadan 🏛️\n\n✔️ Taş şömine ve doğal taş duvarlar\n✔️ Galeri boşluklu, yüksek tavanlı salon\n✔️ Ferforje korkuluklar ve ahşap dolaplar\n✔️ İki katlı, geniş aileler için ferah plan\n\nSiz de böyle bir eve sahip olmak isterseniz arsanıza anahtar teslim yapalım. DM'den EV yazın 👇\n📞 0531 436 29 04 · embayyapi.com.tr\n\nYarın yeni bir tarz! Hangisini merak ediyorsunuz? Yorumlara yazın 👇\n\n📷 Tüm görseller gerçek Embay projesidir."
   },
   {
    "slug": "et09-kubik-modern",
