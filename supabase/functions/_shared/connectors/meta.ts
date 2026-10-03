@@ -98,7 +98,15 @@ export async function instagramPublish(account: AccountRow, token: string, input
   const host = igHost(account);
   const container = await call('POST', `${account.external_account_id}/media`, params, host);
   await waitForContainer(container.id, token, video ? 40 : 10, host);
-  const published = await call('POST', `${account.external_account_id}/media_publish`, { creation_id: container.id, access_token: token }, host);
+  // Meta bazen kapsayıcı FINISHED olduktan hemen sonra "Media ID is not available" döner → kısa bekleyip yeniden dene
+  let published: { id: string };
+  for (let i = 0; ; i++) {
+    try { published = await call('POST', `${account.external_account_id}/media_publish`, { creation_id: container.id, access_token: token }, host); break; }
+    catch (e) {
+      if (i >= 3 || !/media id is not available|not ready|9007/i.test(`${(e as Error).message} ${JSON.stringify((e as ConnectorError).raw ?? '')}`)) throw e;
+      await new Promise((r) => setTimeout(r, 4000 * (i + 1)));
+    }
+  }
   const info = await call('GET', published.id, { fields: 'permalink,timestamp', access_token: token }, host).catch(() => ({}));
   return { externalPostId: published.id, externalUrl: info.permalink ?? null, raw: { container, published, info } };
 }

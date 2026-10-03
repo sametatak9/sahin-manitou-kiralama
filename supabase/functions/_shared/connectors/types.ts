@@ -69,7 +69,8 @@ export function resolveStatus(def: ConnectorDef, account?: Pick<AccountRow, 'con
   if (!def.implemented) return 'config_required';
   if (def.authType === 'oauth') {
     if (!account || account.connection_status === 'not_connected' || account.connection_status === 'oauth_required') return 'oauth_required';
-    if (account.token_expires_at && new Date(account.token_expires_at).getTime() < Date.now()) return 'expired';
+    // Canva erişim anahtarı birkaç saatte dolar ama kullanımda yenileme anahtarıyla otomatik yenilenir → süresi doldu sayılmaz
+    if (def.key !== 'canva' && account.token_expires_at && new Date(account.token_expires_at).getTime() < Date.now()) return 'expired';
     return account.connection_status;
   }
   return account?.connection_status === 'error' ? 'error' : 'connected';

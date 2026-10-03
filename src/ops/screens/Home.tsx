@@ -11,7 +11,7 @@ import { AutopilotCard } from '../components/AutopilotCard';
 interface HomeData {
   bots: BotRow[]; tasks: Task[]; runs: Run[]; approvals: Approval[]; pendingCount: number; drafts: Draft[]; pubs: Publication[];
   counts: { construction: number; rental: number; web: number; constructionToday: number; rentalToday: number; webToday: number };
-  failedTasks: Task[]; failedApprovals: number;
+  failedTasks: Task[]; failedApprovals: number; queuedReplies: number; queuedNeedsPermission: boolean; failedDrafts: number;
 }
 
 function dayStartIso() { return new Date(`${dayKey(new Date())}T00:00:00+03:00`).toISOString(); }
@@ -22,7 +22,7 @@ async function loadHome(): Promise<HomeData> {
   const end = new Date(new Date(start).getTime() + 86400_000).toISOString();
   const week = new Date(Date.now() + 7 * 86400_000).toISOString();
   const head = { count: 'exact' as const, head: true };
-  const [bots, tasks, runs, approvals, pending, drafts, pubs, cAll, rAll, wAll, cToday, rToday, wToday, failedTasks, failedAp] = await Promise.all([
+  const [bots, tasks, runs, approvals, pending, drafts, pubs, cAll, rAll, wAll, cToday, rToday, wToday, failedTasks, failedAp, queuedReplies, failedDrafts] = await Promise.all([
     s.from('automation_bots').select('*').neq('status', 'archived'),
     s.from('automation_tasks').select('*').eq('enabled', true).is('archived_at', null).gte('next_run_at', start).lt('next_run_at', end).order('next_run_at'),
     s.from('social_bot_runs').select('*').gte('created_at', start).order('created_at', { ascending: false }).limit(60),
@@ -38,15 +38,20 @@ async function loadHome(): Promise<HomeData> {
     s.from('lead_inbox').select('id', head).gte('created_at', start),
     s.from('automation_tasks').select('*').in('status', ['dead_letter', 'failed']).is('archived_at', null).limit(5),
     s.from('approval_requests').select('id', head).eq('status', 'failed'),
+    s.from('social_inbox').select('reply_source').eq('replied', false).like('reply_source', 'kuyruk%').limit(200),
+    s.from('social_drafts').select('id', head).eq('workflow_status', 'failed').is('archived_at', null).gte('scheduled_at', new Date(Date.now() - 7 * 86400_000).toISOString()),
   ]);
+  const queued = (unwrap(queuedReplies) as Array<{ reply_source: string | null }>);
   return {
     bots: unwrap(bots), tasks: unwrap(tasks), runs: unwrap(runs), approvals: unwrap(approvals), pendingCount: pending.count ?? 0, drafts: unwrap(drafts), pubs: unwrap(pubs),
     counts: { construction: cAll.count ?? 0, rental: rAll.count ?? 0, web: wAll.count ?? 0, constructionToday: cToday.count ?? 0, rentalToday: rToday.count ?? 0, webToday: wToday.count ?? 0 },
     failedTasks: unwrap(failedTasks), failedApprovals: failedAp.count ?? 0,
+    queuedReplies: queued.length, queuedNeedsPermission: queued.some((r) => /permission|izni|izin/i.test(r.reply_source ?? '')),
+    failedDrafts: failedDrafts.count ?? 0,
   };
 }
 
-const EMPTY: HomeData = { bots: [], tasks: [], runs: [], approvals: [], pendingCount: 0, drafts: [], pubs: [], counts: { construction: 0, rental: 0, web: 0, constructionToday: 0, rentalToday: 0, webToday: 0 }, failedTasks: [], failedApprovals: 0 };
+const EMPTY: HomeData = { bots: [], tasks: [], runs: [], approvals: [], pendingCount: 0, drafts: [], pubs: [], counts: { construction: 0, rental: 0, web: 0, constructionToday: 0, rentalToday: 0, webToday: 0 }, failedTasks: [], failedApprovals: 0, queuedReplies: 0, queuedNeedsPermission: false, failedDrafts: 0 };
 
 interface TimelineItem { key: string; at: string; bot?: BotRow; title: string; detail: string; tone: Tone; label: string; kind: 'planned' | 'run' }
 
@@ -97,6 +102,10 @@ export function HomeScreen() {
   d.failedTasks.forEach((t) => alerts.push({ tone: 'stop', text: `${t.title || t.task_type}: ${t.status === 'dead_letter' ? 'DEAD LETTER' : 'BAŞARISIZ'} — ${t.last_error ?? ''}`, action: () => go('bots', t.bot_id) }));
   if (d.failedApprovals) alerts.push({ tone: 'stop', text: `${d.failedApprovals} onaylı işlem yürütülürken başarısız oldu`, action: () => go('approvals') });
   d.runs.filter((r) => r.status === 'blocked').slice(0, 3).forEach((r) => alerts.push({ tone: 'wait', text: `${botById.get(r.bot_id || '')?.name ?? 'Bot'} engellendi: ${r.error}` }));
+  if (d.queuedReplies) alerts.push({ tone: d.queuedNeedsPermission ? 'stop' : 'wait', text: d.queuedNeedsPermission
+    ? `${d.queuedReplies} yorum cevabı bekliyor — Meta yorum izni eksik. Facebook'u yeniden bağlayın (izinleri onaylayın), cevaplar kendiliğinden gider.`
+    : `${d.queuedReplies} yorum cevabı gönderim sırasında`, action: () => go('connections') });
+  if (d.failedDrafts) alerts.push({ tone: 'stop', text: `${d.failedDrafts} gönderi yayınlanamadı (son 7 gün) — Yayın Kuyruğu'nda hatayı görün`, action: () => go('queue') });
   status.data?.connectors.filter((c) => c.status === 'expired').forEach((c) => alerts.push({ tone: 'stop', text: `${c.name} token süresi doldu — yeniden bağlanın`, action: () => go('connections') }));
 
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
