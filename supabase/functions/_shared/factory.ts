@@ -465,14 +465,15 @@ function fallbackItems(p: Platform, pillars: typeof PILLARS[number][], di: numbe
 }
 
 // Sunucu CPU sınırı (istek başına ~2 sn): fotoğraflı banner çizimi ağır → her çağrıda en fazla 1 banner çizilir; worker dakikada bir kaldığı yerden sürdürür.
-/** Günlük banner yayın sınırı (platform başına). Üretim sürer; sınırı aşan banner tarihsiz taslak olarak HAVUZDA bekler
- *  (Yayın Kuyruğu → Havuz sekmesinden tek tıkla planlanır). Gerekçe: günde 3-4 banner etkileşimi düşürüyordu (0-5 beğeni). */
-export const BANNER_PER_DAY = 1;
-async function bannerDayFull(db: Db, platform: string, day: string) {
+/** Günlük yayın sınırı (platform başına): 1 banner + 1 Reels. Üretim sürer; sınırı aşan içerik taslak olarak HAVUZDA bekler
+ *  (önerilen saati korunur; Yayın Kuyruğu → Havuz sekmesinden tek tıkla planlanır). Gerekçe: günde 3-4 banner etkileşimi düşürüyordu (0-5 beğeni). */
+export const DAILY_LIMIT: Record<string, { formats: string[]; max: number }> = { banner: { formats: ['banner'], max: 1 }, reel: { formats: ['reel', 'short'], max: 1 } };
+async function dayFull(db: Db, platform: string, day: string, format: string) {
+  const lim = DAILY_LIMIT[format]; if (!lim) return false;
   const start = `${day}T00:00:00+03:00`; const end = new Date(new Date(start).getTime() + 86400_000).toISOString();
-  const { count } = await db.from('social_drafts').select('id', { count: 'exact', head: true }).eq('primary_platform', platform).eq('format', 'banner').is('archived_at', null)
+  const { count } = await db.from('social_drafts').select('id', { count: 'exact', head: true }).eq('primary_platform', platform).in('format', lim.formats).is('archived_at', null)
     .in('workflow_status', ['scheduled', 'approved', 'pending_approval', 'processing', 'published']).gte('scheduled_at', start).lt('scheduled_at', end);
-  return (count ?? 0) >= BANNER_PER_DAY;
+  return (count ?? 0) >= lim.max;
 }
 
 export async function runContentFactory(db: Db, opts: { force?: boolean; maxBanners?: number } = {}) {
@@ -605,7 +606,7 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
         }
         if (aiUsed) it.caption = `${it.caption}\n\n📌 Görsel temsilidir (yapay zekâ ile hazırlanmıştır).`;
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
-        const toPool = it.format === 'banner' && await bannerDayFull(db, q.platform, day);
+        const toPool = await dayFull(db, q.platform, day, it.format);
         const { error } = await db.from('social_drafts').insert({
           brand: it.brand, title: `${q.platform.toUpperCase()} · ${it.format === 'reel' ? 'Kısa video' : 'Banner'} · ${it.headline}`.slice(0, 200), body,
           caption: it.caption, headline: it.headline, hashtags: it.hashtags, cta: it.cta, format: it.format, networks: [q.platform], platform_targets: [q.platform], primary_platform: q.platform,
@@ -739,7 +740,7 @@ export async function planTick(db: Db) {
           if (vid) { video_url = vid.url; mediaUrls = [vid.url, ...ordered.filter((m) => m.kind === 'video' && m.id !== vid.id).map((m) => m.url)]; design = vid.cover_url; }
           else { mediaUrls = ordered.map((m) => m.url); design = mediaUrls[0] ?? null; }
         }
-        const toPool = r.format === 'banner' && await bannerDayFull(db, p, r.day);
+        const toPool = await dayFull(db, p, r.day, r.format);
         const { data: ins, error } = await db.from('social_drafts').insert({
           brand: 'Embay Yapı', title: `${p.toUpperCase()} · ${r.format === 'reel' ? 'Reels' : 'Banner'} · ${r.headline}`.slice(0, 200), body: `${r.caption}\n\n${r.hashtags.join(' ')}`,
           caption: r.caption, headline: r.headline, hashtags: r.hashtags, cta: r.cta, format: r.format, networks: [p], platform_targets: [p], primary_platform: p,

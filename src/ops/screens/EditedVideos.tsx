@@ -4,7 +4,8 @@ import { CalendarClock, CheckCircle2, Clapperboard, Copy, Pencil, Play, RotateCc
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { callOps } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
-import { cx, Notice, PlatformBadge, StateView } from '../ui';
+import { cx, Notice, PlatformBadge, StateView, Tabs } from '../ui';
+import { CarouselsPanel } from './Carousels';
 import { archiveDraft, cancelDraft, canCancel, canEdit, canRestore, DraftEditModal, restoreDraft } from '../components/DraftActions';
 import { errorText } from '../lib/api';
 
@@ -21,6 +22,7 @@ export function EditedVideosScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [editing, setEditing] = useState<Dr | null>(null);
+  const [kind, setKind] = useState<'reels' | 'carousel'>('reels');
   const act = async (fn: () => Promise<void>, ok: string, ask?: string) => {
     if (ask && !window.confirm(ask)) return;
     try { await fn(); setMsg({ tone: 'ok', text: ok }); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); }
@@ -45,10 +47,12 @@ export function EditedVideosScreen() {
   return (
     <div className="space-y-4">
       <section className="rounded-3xl bg-gradient-to-br from-[#141A4F] via-[#1E2470] to-[#2E3192] text-white p-4 sm:p-5">
-        <div className="text-[10px] font-mono tracking-[0.2em] text-[#8FC1F0]">EDİTLİ VİDEOLAR · GERÇEK ÇEKİM KURGU</div>
-        <h2 className="font-display text-xl font-semibold mt-0.5 inline-flex items-center gap-2"><Clapperboard className="w-5 h-5" />{vids.data.length} hazır Reels</h2>
+        <div className="text-[10px] font-mono tracking-[0.2em] text-[#8FC1F0]">EDİTLİ İÇERİKLER · GERÇEK ÇEKİM KURGU</div>
+        <h2 className="font-display text-xl font-semibold mt-0.5 inline-flex items-center gap-2"><Clapperboard className="w-5 h-5" />{vids.data.length} hazır Reels · kaydırmalı gönderiler</h2>
         <p className="text-[12px] text-[#D6E4F7] mt-1 max-w-2xl">Gerçek proje videolarımızdan kurgulandı: ilk saniyede dikkat çeken başlık, ritme oturan kesmeler, whip-pan / zoom / glitch geçişleri, ses efektleri ve lacivert Embay kapanış kartı (DM çağrısı + telefon). Her videonun Instagram + Facebook paylaşım saati aşağıda.</p>
       </section>
+      <Tabs value={kind} onChange={setKind} items={[{ id: 'reels', label: `Reels (${vids.data.length})` }, { id: 'carousel', label: 'Kaydırmalı' }]} />
+      {kind === 'carousel' ? <CarouselsPanel /> : <>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {editing && <DraftEditModal key={editing.id} draft={editing} onClose={() => setEditing(null)} onSaved={(t) => { setEditing(null); setMsg({ tone: 'ok', text: t }); drafts.reload(); }} />}
       {!vids.data.length ? <StateView kind="empty" title="Henüz editli video yok" /> : (
@@ -101,6 +105,7 @@ export function EditedVideosScreen() {
           })}
         </ul>
       )}
+      </>}
     </div>
   );
 }

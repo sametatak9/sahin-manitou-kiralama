@@ -221,6 +221,7 @@ export function QueueScreen() {
   const { go } = useRouter();
   const admin = session.role === 'admin';
   const [tab, setTab] = useState<'upcoming' | 'pool' | 'done'>('upcoming');
+  const [fmt, setFmt] = useState<'all' | 'reel' | 'carousel' | 'banner'>('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const status = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
@@ -237,6 +238,7 @@ export function QueueScreen() {
   const now = Date.now();
   const rows = q.data.drafts.filter((d) => {
     const done = ['published', 'failed', 'cancelled', 'rejected'].includes(d.workflow_status);
+    if (fmt !== 'all' && (fmt === 'reel' ? !['reel', 'short'].includes(d.format ?? '') : d.format !== fmt)) return false;
     if (tab === 'pool') return d.workflow_status === 'draft';
     return tab === 'done' ? done : !done && d.workflow_status !== 'draft';
   });
@@ -257,6 +259,11 @@ export function QueueScreen() {
       {admin && <QuotaPanel onChanged={() => q.reload()} />}
       <Composer status={status.data} onDone={(t) => { setMsg({ tone: 'ok', text: t }); q.reload(); }} />
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
+      <div className="flex flex-wrap gap-1.5">
+        {([['all', 'Hepsi'], ['reel', 'Reels'], ['carousel', 'Kaydırmalı'], ['banner', 'Banner']] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setFmt(k)} className={cx('ops-chip', fmt === k && '!bg-[#262A6B] !text-white !ring-transparent')}>{l}</button>
+        ))}
+      </div>
       {tab === 'pool' && <Notice tone="info">Havuz: üretilmiş ama paylaşılmayacak içerikler (günde 1 banner sınırı). Beğendiğinizi “Planla” ile önerilen saatine, “Düzenle” ile istediğiniz saate alın.</Notice>}
       {editing && <DraftEditModal key={editing.id} draft={editing} onClose={() => setEditing(null)} onSaved={(t) => { setEditing(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
       <Tabs value={tab} onChange={setTab} items={[{ id: 'upcoming', label: 'Sıradakiler' }, { id: 'pool', label: `Havuz (${q.data.drafts.filter((d) => d.workflow_status === 'draft').length})` }, { id: 'done', label: 'Tamamlanan' }]} />
