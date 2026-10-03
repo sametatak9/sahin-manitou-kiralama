@@ -842,9 +842,9 @@ Deno.serve(async (req) => {
         const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) wav[o + i] = s.charCodeAt(i); };
         w(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
         dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, pcm.length, true); wav.set(pcm, 44);
-        const up = await db.storage.from('design-exports').upload(`tts/${key}.wav`, wav, { contentType: 'audio/wav', upsert: true });
+        const up = await db.storage.from('audio').upload(`tts/${key}.wav`, wav, { contentType: 'audio/wav', upsert: true });
         if (up.error) throw up.error;
-        return json({ url: db.storage.from('design-exports').getPublicUrl(`tts/${key}.wav`).data.publicUrl, model, seconds: Math.round(pcm.length / 2 / rate * 10) / 10 });
+        return json({ url: db.storage.from('audio').getPublicUrl(`tts/${key}.wav`).data.publicUrl, model, seconds: Math.round(pcm.length / 2 / rate * 10) / 10 });
       }
       throw new HttpError(502, `seslendirme üretilemedi — ${lastErr}`);
     }
