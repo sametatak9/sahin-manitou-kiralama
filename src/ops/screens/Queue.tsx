@@ -13,7 +13,7 @@ import { Button, cx, ErrorState, Field, Notice, Panel, Pill, PlatformBadge, Stat
 import { PoolPicker } from '../components/Pools';
 import { DraftActionButtons, DraftEditModal } from '../components/DraftActions';
 
-const FORMAT_LABEL: Record<string, string> = { post: 'Gönderi', reel: 'Kısa video', story: 'Hikâye', short: 'Shorts', video: 'Video', banner: 'Banner' };
+const FORMAT_LABEL: Record<string, string> = { carousel: 'Kaydırmalı', post: 'Gönderi', reel: 'Kısa video', story: 'Hikâye', short: 'Shorts', video: 'Video', banner: 'Banner' };
 const ALL_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'] as const;
 const P_NAME: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', x: 'X' };
 
@@ -269,7 +269,8 @@ export function QueueScreen() {
             const past = d.scheduled_at && new Date(d.scheduled_at).getTime() < now;
             return (
               <li key={d.id} className="ops-panel p-3 flex flex-col sm:flex-row gap-3">
-                <div className="w-full sm:w-20 h-20 rounded-xl overflow-hidden bg-ink-900 shrink-0">
+                <div className="relative w-full sm:w-20 h-20 rounded-xl overflow-hidden bg-ink-900 shrink-0">
+                  {(d.media_urls?.length ?? 0) > 1 && <span className="absolute top-1 right-1 z-10 rounded-full bg-[#262A6B] text-white text-[10px] font-bold px-1.5 py-0.5">+{d.media_urls.length - 1}</span>}
                   {media ? (isVideoUrl(media) ? <video src={`${media}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={media} alt="" className="w-full h-full object-cover" />) : <div className="w-full h-full grid place-items-center text-[10px] text-ink-500">görsel yok</div>}
                 </div>
                 <div className="min-w-0 flex-1 space-y-1">
