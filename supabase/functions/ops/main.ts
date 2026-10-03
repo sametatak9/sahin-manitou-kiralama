@@ -862,8 +862,9 @@ Deno.serve(async (req) => {
         const r = await fetch(`https://raw.githubusercontent.com/sametatak9/sahin-manitou-kiralama/${sha}/public/${p}`);
         if (!r.ok) { out[p] = `alınamadı ${r.status}`; continue; }
         const ct = p.endsWith('.mp4') ? 'video/mp4' : p.endsWith('.png') ? 'image/png' : 'image/jpeg';
-        const up = await db.storage.from('design-exports').upload(`site/${p}`, new Uint8Array(await r.arrayBuffer()), { contentType: ct, upsert: true });
-        out[p] = up.error ? `yüklenemedi: ${up.error.message}` : db.storage.from('design-exports').getPublicUrl(`site/${p}`).data.publicUrl;
+        const bucket = ct === 'video/mp4' ? 'media-uploads' : 'design-exports'; // görseller design-exports, videolar media-uploads (tür izinleri)
+        const up = await db.storage.from(bucket).upload(`site/${p}`, new Uint8Array(await r.arrayBuffer()), { contentType: ct, upsert: true });
+        out[p] = up.error ? `yüklenemedi: ${up.error.message}` : db.storage.from(bucket).getPublicUrl(`site/${p}`).data.publicUrl;
       }
       return json(out);
     }
