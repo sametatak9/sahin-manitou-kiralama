@@ -16,7 +16,7 @@ import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, ca
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { inboxReply, inboxTick } from '../_shared/inbox.ts';
 import { archiveTick, growthTick, radarDigest, radarTick } from '../_shared/radar.ts';
-import { aiImage, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
+import { aiImage, aiImageLastError, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
@@ -784,7 +784,7 @@ Deno.serve(async (req) => {
       const { data: had } = await db.from('media_library').select('id,url').eq('url', pub).maybeSingle();
       if (had) return json({ ...had, cached: true });
       const img = await aiImage(`${b.prompt}, photorealistic, high detail, professional architectural photography, no text, no watermark, no logo, no people`, b.w ?? 1080, b.h ?? 1350, 1);
-      if (!img) throw new HttpError(502, 'görsel üretilemedi (Gemini)');
+      if (!img) throw new HttpError(502, `görsel üretilemedi (Gemini) — ${aiImageLastError}`);
       const ct = img[0] === 0x89 ? 'image/png' : 'image/jpeg';
       const up = await db.storage.from('media-uploads').upload(path2, img, { contentType: ct, upsert: true });
       if (up.error) throw up.error;

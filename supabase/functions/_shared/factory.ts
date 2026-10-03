@@ -313,11 +313,12 @@ function aiPrompt(pillar: string, di: number) {
   const list = AI_SCENES[pillar] ?? AI_SCENES.ev;
   return `${list[di % list.length]}, photorealistic, high detail, professional real estate photography, 35mm, no text, no watermark, no logo, no people faces`;
 }
+export let aiImageLastError = '';
 export async function aiImage(prompt: string, w: number, h: number, _seed: number): Promise<Uint8Array | null> {
   // Google Gemini görsel modeli (panelde kayıtlı Gemini anahtarı; Google AI Studio'da faturalandırma açık olmalı).
   // Başarısızsa null → banner gerçek fotoğrafımızla çizilir (filigranlı / düşük kaliteli ücretsiz servis KULLANILMAZ).
   const key = await getAiKey('gemini');
-  if (!key) return null;
+  if (!key) { aiImageLastError = 'Gemini anahtarı yok'; return null; }
   const r0 = w / h; const ratios: Array<[string, number]> = [['1:1', 1], ['4:5', 0.8], ['9:16', 0.5625], ['16:9', 1.778], ['3:4', 0.75], ['4:3', 1.333]];
   const aspectRatio = ratios.reduce((best, cur) => (Math.abs(cur[1] - r0) < Math.abs(best[1] - r0) ? cur : best))[0];
   for (const model of ['gemini-3.1-flash-image', 'gemini-2.5-flash-image']) {
@@ -327,15 +328,15 @@ export async function aiImage(prompt: string, w: number, h: number, _seed: numbe
         headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio } } }),
       });
-      if (!r.ok) continue;
+      if (!r.ok) { aiImageLastError = `${model}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`; continue; }
       const j = await r.json();
       // deno-lint-ignore no-explicit-any
       const part = (j?.candidates?.[0]?.content?.parts ?? []).find((p: any) => p?.inlineData?.data);
-      if (!part) continue;
+      if (!part) { aiImageLastError = `${model}: görsel dönmedi (${j?.candidates?.[0]?.finishReason ?? j?.promptFeedback?.blockReason ?? '?'})`; continue; }
       const bin = atob(part.inlineData.data); const out = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
       if (out.length > 20_000) return out;
-    } catch { /* sonraki model */ }
+    } catch (e) { aiImageLastError = `${model}: ${(e as Error).message}`; /* sonraki model */ }
   }
   return null;
 }
