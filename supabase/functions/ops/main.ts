@@ -771,6 +771,27 @@ Deno.serve(async (req) => {
       let bin = ''; for (let i = 0; i < jpg.length; i += 0x8000) bin += String.fromCharCode(...jpg.subarray(i, i + 0x8000));
       return json({ ai: Boolean(photo), bytes: jpg.length, b64: btoa(bin) });
     }
+    // Seri görseli (yalnızca iç gizli anahtarla): yapay zekâ görselini üretir, havuza "temsilî" notuyla kaydeder, herkese açık adresini döndürür.
+    // Örn. "Ev Tarzları" kaydırmalı serisi; slaytlar GitHub Actions'ta bu adreslerden çizilir. Aynı yol varsa yeniden üretmez.
+    if (path.startsWith('/ai-image') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { prompt?: string; key?: string; title?: string; pillar?: string; w?: number; h?: number };
+      const key = String(b.key || '').replace(/[^a-z0-9/_-]/gi, '').slice(0, 80);
+      if (!key || !b.prompt) throw new HttpError(400, 'key ve prompt gerekli');
+      const path2 = `series/${key}.png`;
+      const pub = db.storage.from('media-uploads').getPublicUrl(path2).data.publicUrl;
+      const { data: had } = await db.from('media_library').select('id,url').eq('url', pub).maybeSingle();
+      if (had) return json({ ...had, cached: true });
+      const img = await aiImage(`${b.prompt}, photorealistic, high detail, professional architectural photography, no text, no watermark, no logo, no people`, b.w ?? 1080, b.h ?? 1350, 1);
+      if (!img) throw new HttpError(502, 'görsel üretilemedi (Gemini)');
+      const ct = img[0] === 0x89 ? 'image/png' : 'image/jpeg';
+      const up = await db.storage.from('media-uploads').upload(path2, img, { contentType: ct, upsert: true });
+      if (up.error) throw up.error;
+      const { data: row, error } = await db.from('media_library').insert({ kind: 'image', source: 'ai', title: (b.title || 'Yapay zekâ konsept görseli').slice(0, 120), url: pub, mime: ct, pillar: b.pillar ?? null, status: 'pool', notes: 'Yapay zekâ ile üretildi (Gemini) — temsilî görsel' }).select('id,url').single();
+      if (error) throw error;
+      return json(row);
+    }
     // Dış görseli (ör. Canva'da üretilen yapay zekâ görseli dışa aktarımı) havuza alır — yalnızca iç gizli anahtarla; yalnızca Canva indirme alan adları
     if (path.startsWith('/media/import-url') && req.method === 'POST') {
       const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
