@@ -151,6 +151,10 @@ export async function syncMetrics(db: Db = serviceClient(), limit = 5, onlyPubli
     if (!onlyPublicationId) {
       const { data: last } = await db.from('social_post_metrics').select('fetched_at').eq('publication_id', p.id).order('fetched_at', { ascending: false }).limit(1).maybeSingle();
       if (last && Date.now() - new Date(last.fetched_at).getTime() < 6 * 3600_000) continue;
+      // Başarısız denemeden sonra da 6 saat bekle (silinmiş gönderi / izin eksikliği her dakika tekrar denenmesin)
+      const { data: fail } = await db.from('connector_activity').select('at').eq('action', 'metrics_sync').eq('status', 'failed').eq('ref_id', p.id)
+        .gte('at', new Date(Date.now() - 6 * 3600_000).toISOString()).limit(1).maybeSingle();
+      if (fail) continue;
     }
     const def = connectorByKey(p.platform);
     if (!def?.fetchMetrics || !p.account_id) continue;

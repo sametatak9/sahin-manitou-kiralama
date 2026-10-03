@@ -143,9 +143,13 @@ export async function instagramMetrics(account: AccountRow, token: string, media
 }
 
 export async function facebookMetrics(_account: AccountRow, token: string, postId: string): Promise<MetricsOutput> {
-  const d = await call('GET', postId, { fields: 'reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares', access_token: token });
+  // Video (Reels) yayınında dönen kimlik bir video nesnesidir: "reactions/shares" alanı yoktur → likes/comments ile sor
+  const d = await call('GET', postId, { fields: 'reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares', access_token: token })
+    .catch((e) => /nonexisting field/i.test(String((e as Error).message))
+      ? call('GET', postId, { fields: 'likes.summary(true).limit(0),comments.summary(true).limit(0)', access_token: token })
+      : Promise.reject(e));
   return {
-    likes: d.reactions?.summary?.total_count ?? null, comments: d.comments?.summary?.total_count ?? null, shares: d.shares?.count ?? null,
+    likes: d.reactions?.summary?.total_count ?? d.likes?.summary?.total_count ?? null, comments: d.comments?.summary?.total_count ?? null, shares: d.shares?.count ?? null,
     reach: null, impressions: null, saves: null, clicks: null, video_views: null, raw: d,
   };
 }
