@@ -78,7 +78,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
   const NavLink = ({ item, compact = false }: { item: NavItem; compact?: boolean }) => {
     const active = state.route === item.id;
     const Icon = item.icon;
-    const badge = item.id === 'approvals' ? badges.data.approvals : item.id === 'bots' ? badges.data.alerts : 0;
+    const badge = item.id === 'queue' ? badges.data.approvals : item.id === 'bots' ? badges.data.alerts : 0;
     return (
       <button onClick={() => { go(item.id); setDrawer(false); }}
         className={cx('group relative w-full flex items-center gap-3 rounded-xl px-3 py-2 text-left transition',
@@ -86,7 +86,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         {active && <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-brand-green" />}
         <Icon className={cx('w-4 h-4 shrink-0', active ? 'text-brand-green' : 'text-ink-400 group-hover:text-ink-200')} />
         {!compact && <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold truncate">{item.label}</span><span className="block text-[10px] text-ink-500 truncate">{item.hint}</span></span>}
-        {badge > 0 && <span className={cx('font-mono text-[10px] font-bold rounded-full px-1.5 py-0.5', item.id === 'approvals' ? 'bg-amber-400 text-white' : 'bg-rose-500 text-white')}>{badge}</span>}
+        {badge > 0 && <span className={cx('font-mono text-[10px] font-bold rounded-full px-1.5 py-0.5', item.id === 'queue' ? 'bg-amber-400 text-white' : 'bg-rose-500 text-white')}>{badge}</span>}
       </button>
     );
   };
@@ -149,7 +149,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               {g.items.map((item) => {
                 const Icon = item.icon;
                 const active = state.route === item.id;
-                const badge = item.id === 'approvals' ? badges.data.approvals : 0;
+                const badge = item.id === 'queue' ? badges.data.approvals : 0;
                 return (
                   <button
                     key={item.id}
@@ -214,7 +214,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
             return (
               <button key={id} onClick={() => go(id)} className={cx('relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold', active ? 'text-brand-green' : 'text-ink-400')}>
                 <Icon className="w-5 h-5" />{MOBILE_LABEL[id] ?? item.label.split(' ')[0]}
-                {id === 'approvals' && badges.data.approvals > 0 && <span className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full bg-amber-400" />}
+                {id === 'queue' && badges.data.approvals > 0 && <span className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full bg-amber-400" />}
               </button>
             );
           })}
