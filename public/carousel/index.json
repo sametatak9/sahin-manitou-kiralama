@@ -1,0 +1,42 @@
+[
+ {
+  "slug": "c1-once-sonra",
+  "files": [
+   "c1-once-sonra/01.jpg",
+   "c1-once-sonra/02.jpg",
+   "c1-once-sonra/03.jpg",
+   "c1-once-sonra/04.jpg",
+   "c1-once-sonra/05.jpg",
+   "c1-once-sonra/06.jpg",
+   "c1-once-sonra/07.jpg",
+   "c1-once-sonra/08.jpg"
+  ]
+ },
+ {
+  "slug": "c2-villa-turu",
+  "files": [
+   "c2-villa-turu/01.jpg",
+   "c2-villa-turu/02.jpg",
+   "c2-villa-turu/03.jpg",
+   "c2-villa-turu/04.jpg",
+   "c2-villa-turu/05.jpg",
+   "c2-villa-turu/06.jpg",
+   "c2-villa-turu/07.jpg",
+   "c2-villa-turu/08.jpg",
+   "c2-villa-turu/09.jpg",
+   "c2-villa-turu/10.jpg"
+  ]
+ },
+ {
+  "slug": "c3-dis-mekan",
+  "files": [
+   "c3-dis-mekan/01.jpg",
+   "c3-dis-mekan/02.jpg",
+   "c3-dis-mekan/03.jpg",
+   "c3-dis-mekan/04.jpg",
+   "c3-dis-mekan/05.jpg",
+   "c3-dis-mekan/06.jpg",
+   "c3-dis-mekan/07.jpg"
+  ]
+ }
+]
