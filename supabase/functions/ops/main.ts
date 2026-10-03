@@ -16,6 +16,7 @@ import { canvaAuthorizeUrl, canvaCreateDesign, canvaExchange, canvaExportPng, ca
 import { telegramSend } from '../_shared/connectors/messaging.ts';
 import { inboxReply, inboxTick } from '../_shared/inbox.ts';
 import { archiveTick, growthTick, radarDigest, radarTick } from '../_shared/radar.ts';
+import { morningBrief, notifyPublished, telegramSetupWebhook, telegramWebhook } from '../_shared/telegram.ts';
 import { aiImage, aiImageLastError, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
@@ -63,6 +64,9 @@ async function runWorker(db: Db, workerId: string) {
   const { data: ap } = await db.rpc('autopilot_state');
   const autopilot = (ap ?? { enabled: true, active: true }) as { enabled: boolean; active: boolean };
   const content = autopilot.active ? await publishDueContent(db, workerId) : { skipped: autopilot.enabled ? 'mesai dışı' : 'otopilot kapalı' };
+  // Telegram: paylaşım olunca tek mesaj; sabah 08:00–11:00 arası günlük özet
+  if (Array.isArray(content) && content.length) await notifyPublished(db, content as Array<Record<string, unknown>>).catch(() => null);
+  const morning = await morningBrief(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const metrics = await syncMetrics(db, 3);
   const factory = autopilot.enabled ? await factoryTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) })) : { skipped: 'otopilot kapalı' };
   const drive = await driveTick(db, background).catch((e) => ({ error: String(e).slice(0, 200) }));
@@ -74,7 +78,7 @@ async function runWorker(db: Db, workerId: string) {
   const growth = await growthTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const archive = await archiveTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const digest = await radarDigest(db).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, autopilot };
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, morning, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
@@ -809,6 +813,20 @@ Deno.serve(async (req) => {
       const { data: row, error } = await db.from('media_library').insert({ kind: 'image', source: 'ai', title: (b.title || 'Yapay zekâ konsept görseli').slice(0, 120), url: pub, mime: ct, pillar: b.pillar ?? null, status: 'pool', notes: 'Yapay zekâ ile üretildi (Canva) — temsilî görsel' }).select('id,url').single();
       if (error) throw error;
       return json(row);
+    }
+    // Telegram komutları (/bugun /adaylar /durum): Telegram'ın gönderdiği gizli belirteç Vault'takiyle eşleşmeli; yalnızca yönetici sohbetine cevap verilir
+    if (path.startsWith('/telegram/webhook') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_telegram_secret', { p_secret: req.headers.get('x-telegram-bot-api-secret-token') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      return json(await telegramWebhook(db, await req.json().catch(() => ({}))));
+    }
+    // Telegram webhook kurulumu ve sabah özeti testi (yalnızca iç gizli anahtarla)
+    if (path.startsWith('/telegram/setup') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { brief?: boolean };
+      const hook = await telegramSetupWebhook(db, `${REDIRECT_URI().replace(/\/oauth\/callback$/, '')}/telegram/webhook`);
+      return json({ hook, brief: b.brief ? await morningBrief(db, true).catch((e) => ({ error: String(e) })) : null });
     }
     if (path.startsWith('/reels/queue') && req.method === 'GET') return json(await reelQueue(db));
     if (path.startsWith('/reels/attach') && req.method === 'POST') return json(await reelAttach(db, await req.json().catch(() => ({}))));
