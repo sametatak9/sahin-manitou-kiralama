@@ -28,7 +28,7 @@ async function loadHome(): Promise<HomeData> {
     s.from('social_bot_runs').select('*').gte('created_at', start).order('created_at', { ascending: false }).limit(60),
     s.from('approval_requests').select('*').eq('status', 'pending_approval').order('created_at', { ascending: false }).limit(6),
     s.from('approval_requests').select('id', head).eq('status', 'pending_approval'),
-    s.from('social_drafts').select('*').gte('scheduled_at', new Date().toISOString()).lte('scheduled_at', week).neq('workflow_status', 'cancelled').order('scheduled_at').limit(8),
+    s.from('social_drafts').select('*').gte('scheduled_at', new Date().toISOString()).lte('scheduled_at', week).not('workflow_status', 'in', '(cancelled,draft)').is('archived_at', null).order('scheduled_at').limit(8),
     s.from('social_publications').select('*').gte('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()).order('created_at', { ascending: false }).limit(20),
     s.from('construction_customers').select('id', head).is('archived_at', null),
     s.from('rental_customers').select('id', head).is('archived_at', null),

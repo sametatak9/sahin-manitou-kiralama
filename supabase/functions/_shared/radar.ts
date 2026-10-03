@@ -9,8 +9,20 @@ import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 // Hedef kitle etiketleri (Instagram: 7 günde en fazla 30 farklı etiket aranabilir → günde 7 etiket döner)
-export const RADAR_TAGS = ['müstakilev', 'bahçeliev', 'evyaptırmak', 'çelikvilla', 'villa', 'arsaüzerineev', 'hayalimdekiev',
-  'çelikev', 'hafifçelik', 'prefabrikev', 'evimizyapılıyor', 'villaprojesi', 'köyevi', 'taşev', 'anahtarteslim', 'bungalov', 'ağırçelik', 'dağevi', 'yazlıkev', 'bahçe'];
+// Ekim 2026 düzeltmesi: #villa/#dağevi/#bahçe yabancı otel, manzara ve rakip reklamı getiriyordu → çıkarıldı.
+// Öncelik: kendi evini yaptıran kişilerin kullandığı "süreç" etiketleri (birinci ağızdan paylaşım).
+export const RADAR_TAGS = ['evimizyapılıyor', 'evyaptırmak', 'arsaüzerineev', 'müstakilev', 'hayalimdekiev', 'evinşaatı', 'kendievimiz',
+  'yuvamızyapılıyor', 'temelattık', 'kabainşaat', 'evyapımı', 'bahçeliev', 'köyevi', 'taşev', 'çelikev', 'çelikvilla', 'hafifçelik', 'yeniyuva', 'müstakilevhayali', 'evimizinhikayesi'];
+
+/** Türkçe mi? (yabancı otel/tatil gönderileri elenir) */
+export function isTurkish(caption: string) {
+  return /[çğışöüÇĞİŞÖÜ]/.test(caption) || /\b(ve|bir|bu|çok|için|ile|evimiz|evi|yeni|hayırlı)\b/i.test(caption);
+}
+/** Firma / ilan / rakip reklamı mı? (bunlara yorum yapmak takipçi getirmez) */
+export function isBusinessPost(caption: string) {
+  const t = caption.toLocaleLowerCase('tr-TR');
+  return /0?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}|\+90|https?:\/\/|www\.|\.com|ilan no|ilan linki|eids|satılık|kiralık|₺|\btl\b|projelerimiz|firmamız|şirketimiz|detaylı bilgi|bilgi için|iletişim|whatsapp|dm['’]?den|teklif al|fiyat|kampanya|inşaat ltd|yapı ltd|a\.ş\.|ltd\.? ?şti/.test(t);
+}
 
 export interface ClientRow { id: string; slug: string; name: string; sector: string | null; growth_tags: string[] | null; status: string }
 
@@ -41,7 +53,7 @@ type Cat = 'ev_yaptiran' | 'rakip_talepli' | 'hayalperest' | 'arsa' | 'kitle';
 export function categorize(caption: string, comments: number, sector = 'insaat'): Cat {
   const t = caption.toLocaleLowerCase('tr-TR');
   if (sector !== 'insaat') return comments >= 10 ? 'rakip_talepli' : /yaptır|arıyorum|öneri|tavsiye|lazım|ihtiyac/.test(t) ? 'ev_yaptiran' : 'kitle';
-  if (/yaptırıyoruz|yaptırmak istiyor|evimiz yapılıyor|yuvamız|temelimiz|inşaatımız|kendi evimiz|arsamıza|evimizin inşaat|evimiz yükseliyor|ev yaptırdık/.test(t)) return 'ev_yaptiran';
+  if (/yaptırıyoruz|yaptırmak istiyor|evimiz yapılıyor|yuvamız|temelimiz|inşaatımız|kendi evimiz|arsamıza|evimizin|evimiz yükseliyor|ev yaptırdık|temel attık|temeli attık|taşındık|anahtarı aldık|ev yapıyoruz|evimizi yapıyoruz|kaba inşaatımız|çatımız|hayalimiz gerçek|yeni evimiz|yeni yuvamız/.test(t)) return 'ev_yaptiran';
   if (comments >= 10 && /anahtar teslim|m²|m2|fiyat|kampanya|teklif|inşaat|prefabrik|çelik|müteahhit|yapı/.test(t)) return 'rakip_talepli';
   if (/satılık arsa|arsa |imarlı|parsel|dönüm/.test(t)) return 'arsa';
   if (/bahçe|müstakil|villa|huzur|doğa|köy evi|taş ev|yuva/.test(t)) return 'hayalperest';
@@ -92,6 +104,8 @@ async function scanTags(db: Db, c: ClientRow, a: { igId: string; token: string }
           const ts = m.timestamp ? new Date(m.timestamp).getTime() : 0;
           if (!ts || Date.now() - ts > 60 * 86400000) continue; // yalnızca son 60 gün — eski gönderiye yorum ilgi çekmez
           if (own.test(m.caption ?? '')) continue; // kendi gönderimiz
+          // Yabancı dil, firma/ilan/rakip reklamı → kart açılmaz (yorum yapmak takipçi getirmez)
+          if (sector === 'insaat' && (!isTurkish(m.caption ?? '') || isBusinessPost(m.caption ?? ''))) continue;
           const cat = categorize(m.caption ?? '', m.comments_count ?? 0, sector);
           const recency = Math.max(0, 30 - Math.floor((Date.now() - ts) / (2 * 86400000)));
           const score = WEIGHT[cat] + Math.min(60, (m.comments_count ?? 0) * 2) + Math.min(20, Math.floor((m.like_count ?? 0) / 50)) + recency;

@@ -220,7 +220,7 @@ export function QueueScreen() {
   const session = useSession();
   const { go } = useRouter();
   const admin = session.role === 'admin';
-  const [tab, setTab] = useState<'upcoming' | 'done'>('upcoming');
+  const [tab, setTab] = useState<'upcoming' | 'pool' | 'done'>('upcoming');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const status = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
@@ -237,7 +237,8 @@ export function QueueScreen() {
   const now = Date.now();
   const rows = q.data.drafts.filter((d) => {
     const done = ['published', 'failed', 'cancelled', 'rejected'].includes(d.workflow_status);
-    return tab === 'done' ? done : !done;
+    if (tab === 'pool') return d.workflow_status === 'draft';
+    return tab === 'done' ? done : !done && d.workflow_status !== 'draft';
   });
   const [editing, setEditing] = useState<Draft | null>(null);
   const publishNow = async (id: string) => {
@@ -256,10 +257,11 @@ export function QueueScreen() {
       {admin && <QuotaPanel onChanged={() => q.reload()} />}
       <Composer status={status.data} onDone={(t) => { setMsg({ tone: 'ok', text: t }); q.reload(); }} />
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
+      {tab === 'pool' && <Notice tone="info">Havuz: üretilmiş ama paylaşılmayacak içerikler (günde 1 banner sınırı). Beğendiğinizi “Planla” ile önerilen saatine, “Düzenle” ile istediğiniz saate alın.</Notice>}
       {editing && <DraftEditModal key={editing.id} draft={editing} onClose={() => setEditing(null)} onSaved={(t) => { setEditing(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
-      <Tabs value={tab} onChange={setTab} items={[{ id: 'upcoming', label: 'Sıradakiler' }, { id: 'done', label: 'Tamamlanan' }]} />
+      <Tabs value={tab} onChange={setTab} items={[{ id: 'upcoming', label: 'Sıradakiler' }, { id: 'pool', label: `Havuz (${q.data.drafts.filter((d) => d.workflow_status === 'draft').length})` }, { id: 'done', label: 'Tamamlanan' }]} />
       {q.loading && !q.data.drafts.length ? <StateView kind="loading" /> : q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : rows.length === 0 ? (
-        <StateView kind="empty" title={tab === 'upcoming' ? 'Sırada paylaşım yok' : 'Henüz tamamlanan yok'} message="Yukarıdan görsel yükleyip planlayın veya Onay Merkezi’nden onaylayın." />
+        <StateView kind="empty" title={tab === 'upcoming' ? 'Sırada paylaşım yok' : tab === 'pool' ? 'Havuz boş' : 'Henüz tamamlanan yok'} message="Yukarıdan görsel yükleyip planlayın veya Onay Merkezi’nden onaylayın." />
       ) : (
         <ul className="space-y-2">
           {rows.map((d) => {

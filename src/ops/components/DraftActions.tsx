@@ -14,8 +14,8 @@ export interface EditableDraft {
 
 const LOCKED = ['published', 'processing'];
 export const canEdit = (d: EditableDraft) => !LOCKED.includes(d.workflow_status);
-export const canCancel = (d: EditableDraft) => ['scheduled', 'approved', 'pending_approval', 'draft'].includes(d.workflow_status);
-export const canRestore = (d: EditableDraft) => ['cancelled', 'failed', 'rejected'].includes(d.workflow_status);
+export const canCancel = (d: EditableDraft) => ['scheduled', 'approved', 'pending_approval'].includes(d.workflow_status);
+export const canRestore = (d: EditableDraft) => ['cancelled', 'failed', 'rejected', 'draft'].includes(d.workflow_status);
 
 export async function cancelDraft(id: string) {
   const { error } = await db().from('social_drafts').update({ workflow_status: 'cancelled', status: 'iptal' }).eq('id', id).not('workflow_status', 'in', '(published,processing)');
@@ -30,7 +30,7 @@ export async function archiveDraft(id: string) {
 export async function restoreDraft(d: EditableDraft) {
   // Saati geçmişse 1 saat sonrasına alınır (bot geçmiş saatli gönderiyi hemen paylaşmasın)
   const at = d.scheduled_at && new Date(d.scheduled_at).getTime() > Date.now() + 5 * 60_000 ? d.scheduled_at : new Date(Date.now() + 3600_000).toISOString();
-  const { error } = await db().from('social_drafts').update({ workflow_status: 'scheduled', status: 'planlandi', error: null, scheduled_at: at }).eq('id', d.id).in('workflow_status', ['cancelled', 'failed', 'rejected']);
+  const { error } = await db().from('social_drafts').update({ workflow_status: 'scheduled', status: 'planlandi', error: null, scheduled_at: at }).eq('id', d.id).in('workflow_status', ['cancelled', 'failed', 'rejected', 'draft']);
   if (error) throw error;
 }
 
@@ -100,7 +100,7 @@ export function DraftActionButtons({ draft, onEdit, onDone, compact = false }: {
       )}
       {canRestore(draft) && (
         <Button variant="ghost" loading={busy === 'r'} icon={<RotateCcw className={sz} />}
-          onClick={() => run('r', () => restoreDraft(draft), 'Yeniden planlandı.')}>Yeniden planla</Button>
+          onClick={() => run('r', () => restoreDraft(draft), draft.workflow_status === 'draft' ? 'Havuzdan alındı ve planlandı.' : 'Yeniden planlandı.')}>{draft.workflow_status === 'draft' ? 'Planla' : 'Yeniden planla'}</Button>
       )}
       {draft.workflow_status !== 'processing' && (
         <Button variant="ghost" loading={busy === 'd'} icon={<Trash2 className={sz} />}

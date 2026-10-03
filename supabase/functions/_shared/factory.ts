@@ -465,6 +465,16 @@ function fallbackItems(p: Platform, pillars: typeof PILLARS[number][], di: numbe
 }
 
 // Sunucu CPU sınırı (istek başına ~2 sn): fotoğraflı banner çizimi ağır → her çağrıda en fazla 1 banner çizilir; worker dakikada bir kaldığı yerden sürdürür.
+/** Günlük banner yayın sınırı (platform başına). Üretim sürer; sınırı aşan banner tarihsiz taslak olarak HAVUZDA bekler
+ *  (Yayın Kuyruğu → Havuz sekmesinden tek tıkla planlanır). Gerekçe: günde 3-4 banner etkileşimi düşürüyordu (0-5 beğeni). */
+export const BANNER_PER_DAY = 1;
+async function bannerDayFull(db: Db, platform: string, day: string) {
+  const start = `${day}T00:00:00+03:00`; const end = new Date(new Date(start).getTime() + 86400_000).toISOString();
+  const { count } = await db.from('social_drafts').select('id', { count: 'exact', head: true }).eq('primary_platform', platform).eq('format', 'banner').is('archived_at', null)
+    .in('workflow_status', ['scheduled', 'approved', 'pending_approval', 'processing', 'published']).gte('scheduled_at', start).lt('scheduled_at', end);
+  return (count ?? 0) >= BANNER_PER_DAY;
+}
+
 export async function runContentFactory(db: Db, opts: { force?: boolean; maxBanners?: number } = {}) {
   const maxBanners = opts.maxBanners ?? 1; let rendered = 0; let partial = false;
   const { label: day } = istanbulDayRange();
@@ -595,12 +605,14 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
         }
         if (aiUsed) it.caption = `${it.caption}\n\n📌 Görsel temsilidir (yapay zekâ ile hazırlanmıştır).`;
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
+        const toPool = it.format === 'banner' && await bannerDayFull(db, q.platform, day);
         const { error } = await db.from('social_drafts').insert({
           brand: it.brand, title: `${q.platform.toUpperCase()} · ${it.format === 'reel' ? 'Kısa video' : 'Banner'} · ${it.headline}`.slice(0, 200), body,
           caption: it.caption, headline: it.headline, hashtags: it.hashtags, cta: it.cta, format: it.format, networks: [q.platform], platform_targets: [q.platform], primary_platform: q.platform,
           media_urls: media, video_url, design_url: it.format === 'banner' ? media[0] : reelCover, design_brief: it.video_script ? `Çekim senaryosu: ${it.video_script}` : null,
-          image_brief: note || null, scheduled_at: slotIso(day, slot), status: autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
-          ...(autoPublish ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
+          image_brief: note || null, scheduled_at: slotIso(day, slot), // havuzdakiler de önerilen saati taşır (günlük kota sayımı için); yayın yalnızca scheduled/approved alır
+          status: toPool ? 'taslak' : autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: toPool ? 'draft' : autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
+          ...(autoPublish && !toPool ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
           bot_id: bot?.id ?? null, content_pillar: it.badge, campaign_name: `Günlük içerik ${day}`, created_by: admin?.user_id ?? null,
           kvkk_basis: autoPublish ? 'İçerik Fabrikası; yönetici otomatik yayını açtı (otopilot).' : 'İçerik Fabrikası taslağı; yayın öncesi insan onayı zorunlu.',
         });
@@ -727,12 +739,13 @@ export async function planTick(db: Db) {
           if (vid) { video_url = vid.url; mediaUrls = [vid.url, ...ordered.filter((m) => m.kind === 'video' && m.id !== vid.id).map((m) => m.url)]; design = vid.cover_url; }
           else { mediaUrls = ordered.map((m) => m.url); design = mediaUrls[0] ?? null; }
         }
+        const toPool = r.format === 'banner' && await bannerDayFull(db, p, r.day);
         const { data: ins, error } = await db.from('social_drafts').insert({
           brand: 'Embay Yapı', title: `${p.toUpperCase()} · ${r.format === 'reel' ? 'Reels' : 'Banner'} · ${r.headline}`.slice(0, 200), body: `${r.caption}\n\n${r.hashtags.join(' ')}`,
           caption: r.caption, headline: r.headline, hashtags: r.hashtags, cta: r.cta, format: r.format, networks: [p], platform_targets: [p], primary_platform: p,
           media_urls: mediaUrls, video_url, design_url: design, scheduled_at: slotIso(r.day, r.slot),
-          status: autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
-          ...(autoPublish ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
+          status: toPool ? 'taslak' : autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: toPool ? 'draft' : autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
+          ...(autoPublish && !toPool ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
           bot_id: bot?.id ?? null, content_pillar: r.badge, campaign_name: `Haftalık plan ${r.day}`, created_by: admin?.user_id ?? null,
           kvkk_basis: 'Haftalık içerik planı (görseller gözle etiketlendi, metin görsele göre yazıldı).',
         }).select('id').single();
