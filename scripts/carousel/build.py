@@ -33,8 +33,10 @@ def tr_up(s):
 
 _cache = {}
 def photo(n, urls):
+    # n: havuz numarası (gerçek proje fotoğrafı) veya doğrudan adres (seri görselleri)
     if n not in _cache:
-        with urllib.request.urlopen(urls[n], timeout=60) as r:
+        src = n if isinstance(n, str) and n.startswith('http') else urls[n]
+        with urllib.request.urlopen(src, timeout=60) as r:
             _cache[n] = ImageOps.exif_transpose(Image.open(io.BytesIO(r.read()))).convert('RGB')
     return _cache[n]
 
@@ -81,7 +83,66 @@ def corner_logo(img):
     l = logo(110); img.alpha_composite(l, (36, 30))
 
 
+def temsili(d, t='TEMSİLİ GÖRSEL · YAPAY ZEKÂ', fill=(0, 0, 0, 150)):
+    # Yapay zekâ görseli → açık etiket (yanıltmamak için her slaytta); gerçek proje fotoğrafında 'GERÇEK EMBAY PROJESİ'
+    f = font('sub', 26); tw = d.textlength(t, font=f)
+    d.rounded_rectangle([W - tw - 64, 108, W - 30, 152], radius=22, fill=fill)
+    d.text((W - tw - 47, 113), t, font=f, fill=WHITE)
+
+
+# Görseli henüz olmayan tarzlar için mimari çizim (blueprint) — fotoğraf taklidi değil, açıkça çizim.
+# Koordinatlar 1000x700'lük çizim alanında; her öğe ('l', [(x,y)...]) çoklu çizgi / ('r', x0,y0,x1,y1) / ('a', x0,y0,x1,y1) kemer.
+SKETCH = {
+  'ege': [('r', 160, 300, 760, 640), ('r', 560, 200, 860, 640), ('l', [(140, 300), (780, 300)]), ('l', [(540, 200), (880, 200)]),
+          ('a', 330, 430, 430, 640), ('r', 210, 380, 290, 460), ('r', 470, 380, 530, 440), ('r', 640, 290, 720, 370), ('r', 640, 460, 720, 540),
+          ('l', [(560, 160), (560, 200)]), ('l', [(600, 170), (860, 170)]), ('l', [(600, 170), (600, 200)]), ('l', [(860, 170), (860, 200)])],
+  'barnhouse': [('l', [(100, 640), (100, 360), (500, 140), (900, 360), (900, 640), (100, 640)]), ('l', [(60, 380), (500, 120), (940, 380)]),
+                ('r', 300, 430, 700, 640), ('l', [(400, 430), (400, 640)]), ('l', [(500, 430), (500, 640)]), ('l', [(600, 430), (600, 640)]),
+                ('r', 450, 260, 550, 360)] + [('l', [(x, 640), (x, 600)]) for x in range(130, 900, 40)],
+  'celik': [('l', [(120, 640), (120, 330), (500, 130), (880, 330), (880, 640)]), ('l', [(80, 640), (920, 640)])]
+           + [('l', [(x, 640), (x, 330 - (x - 120) * 0.526 if x <= 500 else 130 + (x - 500) * 0.526)]) for x in range(180, 880, 60)]
+           + [('l', [(120, 640), (500, 330)]), ('l', [(880, 640), (500, 330)]), ('l', [(120, 330), (880, 330)]), ('l', [(120, 480), (880, 480)])],
+  'kutuk': [('l', [(140, 640), (140, 360), (500, 150), (860, 360), (860, 640)]), ('l', [(100, 380), (500, 130), (900, 380)]),
+            ('r', 680, 160, 740, 300)] + [('l', [(140, y), (860, y)]) for y in range(390, 640, 30)]
+           + [('r', 440, 470, 560, 640), ('r', 220, 430, 340, 530), ('r', 660, 430, 780, 530), ('l', [(60, 640), (940, 640)])],
+  'kubik': [('r', 120, 400, 640, 640), ('r', 360, 200, 900, 400), ('l', [(60, 640), (940, 640)])]
+           + [('l', [(x, 220), (x, 380)]) for x in range(420, 880, 70)] + [('l', [(400, 300), (880, 300)])]
+           + [('r', 160, 440, 360, 620), ('l', [(260, 440), (260, 620)]), ('r', 420, 460, 600, 640)],
+}
+
+
+def slide_sketch(c, total):
+    img = Image.new('RGBA', (W, H), NAVY + (255,)); d = ImageDraw.Draw(img)
+    grid = (58, 64, 140)
+    for x in range(0, W, 45): d.line([(x, 0), (x, H)], fill=grid, width=1)
+    for y in range(0, H, 45): d.line([(0, y), (W, y)], fill=grid, width=1)
+    ox, oy, sc = 40, 150, 1.0
+    P = lambda x, y: (ox + x * sc, oy + y * sc)
+    for it in SKETCH[c['sketch']]:
+        if it[0] == 'l': d.line([P(*q) for q in it[1]], fill=LIGHT, width=5, joint='curve')
+        elif it[0] == 'r': d.rectangle([P(it[1], it[2]), P(it[3], it[4])], outline=LIGHT, width=5)
+        elif it[0] == 'a':
+            x0, y0, x1, y1 = it[1:]; r = (x1 - x0) / 2
+            d.arc([P(x0, y0), P(x1, y0 + 2 * r)], 180, 360, fill=LIGHT, width=5)
+            d.line([P(x0, y0 + r), P(x0, y1)], fill=LIGHT, width=5); d.line([P(x1, y0 + r), P(x1, y1)], fill=LIGHT, width=5)
+    # ölçü çizgisi süsü
+    d.line([P(100, 690), P(900, 690)], fill=LIGHT, width=2)
+    for x in (100, 900): d.line([P(x, 675), P(x, 705)], fill=LIGHT, width=2)
+    f = font('sub', 26); t = 'MİMARİ ÇİZİM · EMBAY YAPI'; d.text(((W - d.textlength(t, font=f)) / 2, oy + 715), t, font=f, fill=LIGHT)
+    lines = [tr_up(t) for t in c['title']]
+    fh = font('head', 150)
+    for t in lines: fh = fit(d, t, 'head', min(150, fh.size), W - 140)
+    y = H - 300
+    pill(d, 70, y - 100, c.get('kicker', 'EMBAY YAPI'), BLUE + (255,), 34)
+    for i, t in enumerate(lines):
+        b = fh.getbbox(t); d.text((70, y - b[1]), t, font=fh, fill=LIGHT if i == len(lines) - 1 else WHITE); y += (b[3] - b[1]) + 20
+    fs = font('sub', 42); d.text((72, y + 10), c['sub'], font=fs, fill=WHITE)
+    corner_logo(img); counter(d, 1, total)
+    return img
+
+
 def slide_cover(c, urls, total):
+    if c.get('sketch'): return slide_sketch(c, total)
     img = grade(cover_fit(photo(c['cover'], urls), W, H)).convert('RGBA')
     shade = Image.new('RGBA', (W, H), (12, 14, 40, 0)); shade.putalpha(gradient(W, H, 30, 215)); img.alpha_composite(shade)
     d = ImageDraw.Draw(img)
@@ -96,7 +157,7 @@ def slide_cover(c, urls, total):
     bottom = H - 220
     sub_h = fs.getbbox(c['sub'])[3] - fs.getbbox(c['sub'])[1]
     y = bottom - sub_h - 34 - block
-    pill(d, 70, y - 96, 'EMBAY YAPI', NAVY + (235,), 34)
+    pill(d, 70, y - 96, c.get('kicker', 'EMBAY YAPI'), NAVY + (235,), 34)
     for i, (t, b) in enumerate(zip(lines, boxes)):
         d.text((70, y - b[1]), t, font=f, fill=LIGHT if i == len(lines) - 1 else WHITE)
         y += (b[3] - b[1]) + gap
@@ -110,6 +171,8 @@ def slide_cover(c, urls, total):
     d.line([(ax, ay), (ax + 46, ay)], fill=WHITE, width=6)
     d.polygon([(ax + 56, ay), (ax + 38, ay - 14), (ax + 38, ay + 14)], fill=WHITE)
     corner_logo(img); counter(d, 1, total)
+    if c.get('temsili'): temsili(d)
+    elif c.get('real'): temsili(d, 'GERÇEK EMBAY PROJESİ', BLUE + (235,))
     return img
 
 
@@ -137,8 +200,36 @@ def slide_photo(s, urls, i, total):
     f = fit(d, tr_up(lab), 'head', 84, W - 160)
     d.rectangle([48, H - 168, 60, H - 168 + f.getbbox(tr_up(lab))[3] + 6], fill=LIGHT)
     d.text((80, H - 176), tr_up(lab), font=f, fill=WHITE)
+    if s.get('real'):  # gerçek iş olduğunu belirt
+        pill(d, 80, H - 250, 'GERÇEK EMBAY PROJESİ', BLUE + (240,), 30)
     corner_logo(img); counter(d, i, total)
+    if s.get('temsili'): temsili(d)
     return img
+
+
+def slide_info(s, urls, i, total):
+    # Tarzın öne çıkan özellikleri: bulanık + koyulaştırılmış arka plan üstünde madde listesi
+    bg = cover_fit(photo(s['bg'], urls), W, H).filter(ImageFilter.GaussianBlur(14)).convert('RGBA')
+    bg.alpha_composite(Image.new('RGBA', (W, H), NAVY + (205,)))
+    d = ImageDraw.Draw(bg)
+    pill(d, 70, 190, s.get('kicker', 'ÖNE ÇIKANLAR'), BLUE + (255,), 34)
+    ft = fit(d, tr_up(s['title']), 'head', 110, W - 140); tb = ft.getbbox(tr_up(s['title']))
+    d.text((70, 290 - tb[1]), tr_up(s['title']), font=ft, fill=WHITE)
+    y = 290 + (tb[3] - tb[1]) + 80; fb = font('sub', 44)
+    for t in s['items']:
+        words = t.split(); lines = ['']
+        for w_ in words:
+            cand = (lines[-1] + ' ' + w_).strip()
+            if d.textlength(cand, font=fb) > W - 260 and lines[-1]: lines.append(w_)
+            else: lines[-1] = cand
+        cx_, cy_ = 100, y + 28
+        d.ellipse([cx_ - 24, cy_ - 24, cx_ + 24, cy_ + 24], fill=LIGHT)
+        d.line([(cx_ - 11, cy_), (cx_ - 3, cy_ + 9), (cx_ + 12, cy_ - 9)], fill=NAVY, width=6)
+        for ln in lines:
+            bb = fb.getbbox(ln); d.text((150, y + 4 - bb[1] + 6), ln, font=fb, fill=WHITE); y += 62
+        y += 34
+    corner_logo(bg); counter(d, i, total)
+    return bg
 
 
 def slide_cta(kind, i, total):
@@ -147,9 +238,9 @@ def slide_cta(kind, i, total):
         t = y / H; d.line([(0, y), (W, y)], fill=tuple(int(NAVY[k] + (BLUE[k] - NAVY[k]) * t * 0.6) for k in range(3)) + (255,))
     l = logo(330); img.alpha_composite(l, ((W - l.width) // 2, 170))
     f1 = font('sub', 38); t1 = 'ÇELİK YAPI  •  ANAHTAR TESLİM VİLLA'; d.text(((W - d.textlength(t1, font=f1)) / 2, 560), t1, font=f1, fill=LIGHT)
-    head = 'KENDİ PROJENİZ İÇİN' if kind == 'proje' else 'EVİNİZ İÇİN TEKLİF'
+    head = {'proje': 'KENDİ PROJENİZ İÇİN', 'sahip': 'SİZ DE SAHİP OLMAK İSTERSENİZ'}.get(kind, 'EVİNİZ İÇİN TEKLİF')
     f2 = fit(d, head, 'head', 96, W - 140); d.text(((W - d.textlength(head, font=f2)) / 2, 650), head, font=f2, fill=WHITE)
-    btn = "DM'den PROJE yazın" if kind == 'proje' else "DM'den TEKLİF yazın"
+    btn = {'proje': "DM'den PROJE yazın", 'sahip': "DM'den EV yazın"}.get(kind, "DM'den TEKLİF yazın")
     fb = font('sub', 48); bw = d.textlength(btn, font=fb)
     d.rounded_rectangle([(W - bw) / 2 - 50, 800, (W + bw) / 2 + 50, 900], radius=50, fill=LIGHT)
     d.text(((W - bw) / 2, 818), btn, font=fb, fill=NAVY)
@@ -164,7 +255,7 @@ def build(c, urls, out_root):
     total = 1 + len(c['slides']) + 1
     slides = [slide_cover(c, urls, total)]
     for k, s in enumerate(c['slides'], start=2):
-        slides.append(slide_pair(s, urls, k, total) if s['type'] == 'pair' else slide_photo(s, urls, k, total))
+        slides.append(slide_pair(s, urls, k, total) if s['type'] == 'pair' else slide_info(s, urls, k, total) if s['type'] == 'info' else slide_photo(s, urls, k, total))
     slides.append(slide_cta(c.get('cta', 'proje'), total, total))
     files = []
     for k, im in enumerate(slides, start=1):
@@ -173,11 +264,31 @@ def build(c, urls, out_root):
     return {'slug': c['slug'], 'files': files}
 
 
+def series_carousels():
+    # 10 günlük 'Ev Tarzları': kapak → iç mekân/detay → özellikler → [gerçek Embay projesi] → 'Siz de sahip olmak isterseniz'
+    # Görsel kaynağı (öncelik): gerçek Embay fotoğrafı (a_real/b_real) > yapay zekâ görseli (a_url/b_url, 'TEMSİLİ' etiketli) > mimari çizim (sketch)
+    out = []
+    styles = json.load(open(os.path.join(HERE, 'ev_tarzlari.json')))['styles']
+    for k, st in enumerate(styles, start=1):
+        a = st.get('a_real') or st.get('a_url'); a_ai = not st.get('a_real') and bool(st.get('a_url'))
+        b = st.get('b_real') or st.get('b_url'); b_ai = not st.get('b_real') and bool(st.get('b_url'))
+        slides = []
+        if b: slides.append({'type': 'photo', 'n': b, 'label': st['b_label'], 'temsili': b_ai, 'real': bool(st.get('b_real'))})
+        slides.append({'type': 'info', 'bg': a or b or st.get('real', {}).get('n') or 61, 'title': ' '.join(st['name']), 'items': st['traits']})
+        if st.get('real'): slides.append({'type': 'photo', 'n': st['real']['n'], 'label': st['real']['label'].split('·')[-1].strip(), 'real': True})
+        c = {'slug': st['slug'], 'title': st['name'], 'sub': st['sub'], 'kicker': f'EV TARZLARI · {k}/{len(styles)}', 'slides': slides, 'cta': 'sahip'}
+        if a: c.update(cover=a, temsili=a_ai, real=bool(st.get('a_real')))
+        else: c['sketch'] = st['sketch']
+        out.append(c)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--only', default=''); ap.add_argument('--out', default=os.path.join(ROOT, 'public', 'carousel'))
     a = ap.parse_args()
     urls = {it['n']: it['url'] for it in json.load(open(os.path.join(ROOT, 'scripts', 'media-sheets', 'list.json')))}
     cfg = json.load(open(os.path.join(HERE, 'carousels.json')))
+    cfg['carousels'] += series_carousels()
     res = [build(c, urls, a.out) for c in cfg['carousels'] if c['slug'].startswith(a.only)]
     idx = os.path.join(a.out, 'index.json'); old = json.load(open(idx)) if os.path.exists(idx) else []
     done = {r['slug'] for r in res}

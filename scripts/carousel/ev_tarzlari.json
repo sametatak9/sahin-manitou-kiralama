@@ -1,0 +1,198 @@
+{
+ "_not": "10 günlük 'Ev Tarzları' serisi. Görsel önceliği: a_real/b_real (gerçek Embay fotoğrafı, media-sheets no) > a_url/b_url (yapay zekâ — slaytta 'TEMSİLİ GÖRSEL' etiketi) > sketch (mimari çizim). a/b alanları yeni yapay zekâ görseli üretilirse kullanılacak istemlerdir.",
+ "styles": [
+  {
+   "slug": "et01-a-frame",
+   "name": [
+    "A-FRAME",
+    "EV"
+   ],
+   "sub": "Üçgen çatı · doğayla iç içe",
+   "a": "A-frame cabin house with steep triangular roof, full glass gable facade, dark timber cladding, pine forest, warm interior lights at dusk",
+   "b": "interior of an A-frame house, double-height living room under sloped wooden ceiling, large triangular window to the forest, fireplace",
+   "traits": [
+    "Dik üçgen çatı kar ve yağmuru kolay atar",
+    "Ön cephe camla açılır, manzara salona girer",
+    "Yüksek tavanlı galeri + çatı katında yatak odası",
+    "Bahçe, dağ ve orman arsaları için ideal"
+   ],
+   "real": {
+    "n": 41,
+    "label": "Embay projesi · Üçgen cepheli villa"
+   },
+   "b_label": "Galeri boşluklu salon",
+   "a_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626128-cb96d5ff.jpg",
+   "b_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626150-4543c12c.jpg"
+  },
+  {
+   "slug": "et02-iskandinav",
+   "name": [
+    "İSKANDİNAV",
+    "EV"
+   ],
+   "sub": "Sade · aydınlık · sıcak",
+   "a": "Scandinavian style detached house, white board-and-batten facade, black window frames, simple gable roof, lawn, soft daylight",
+   "b": "Scandinavian interior, white walls, light oak floor, large windows, minimal furniture, soft natural light, cozy living room",
+   "traits": [
+    "Beyaz/açık renk cephe, siyah doğrama",
+    "Büyük pencereler: gün ışığı en üst düzeyde",
+    "Açık meşe zemin, sade ve ferah iç mekân",
+    "Az eşya, çok yaşam alanı"
+   ],
+   "b_label": "İçeriden bir bakış",
+   "a_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626203-6c6aed1b.jpg",
+   "b_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626203-3b6afebc.jpg"
+  },
+  {
+   "slug": "et03-tas-ev",
+   "name": [
+    "TAŞ",
+    "EV"
+   ],
+   "sub": "Kuşaktan kuşağa dayanıklı",
+   "a": "natural stone house with rough stone walls, wooden shutters, terracotta roof tiles, olive trees, golden hour, Aegean countryside",
+   "b": "interior of a stone house, exposed natural stone wall, wooden ceiling beams, warm lighting, rustic modern living room",
+   "traits": [
+    "Doğal taş duvar: yazın serin, kışın sıcak",
+    "Ahşap kiriş ve doğramayla sıcak görünüm",
+    "Bakım ihtiyacı düşük, ömrü uzun",
+    "Taş kaplama betonarme üzerine de yapılabilir"
+   ],
+   "real": {
+    "n": 43,
+    "label": "Embay projesi · Taş kaplamalı yapı"
+   },
+   "b_label": "Taş duvarlı salon",
+   "a_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626206-cd179566.jpg",
+   "b_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626124-419e52f4.jpg"
+  },
+  {
+   "slug": "et04-ege-evi",
+   "name": [
+    "EGE",
+    "EVİ"
+   ],
+   "sub": "Beyaz badana · mavi detay",
+   "a": "Aegean Mediterranean style white house, whitewashed walls, blue wooden doors and shutters, bougainvillea, flat roof terrace, sea in background, bright sun",
+   "b": "Mediterranean courtyard with white walls, blue door, terracotta pots, pergola with shade, outdoor dining table, summer light",
+   "traits": [
+    "Beyaz badana güneşi yansıtır, ev serin kalır",
+    "Mavi kapı ve pancurlar, begonvil",
+    "Teras ve gölgeli avlu: dışarıda yaşam",
+    "Sahil ve sıcak iklim arsalarına uygun"
+   ],
+   "b_label": "Avlu ve teras",
+   "sketch": "ege"
+  },
+  {
+   "slug": "et05-barnhouse",
+   "name": [
+    "BARNHOUSE",
+    "EV"
+   ],
+   "sub": "Modern çiftlik evi",
+   "a": "modern barnhouse with long gable roof, dark metal standing seam roof and black vertical wood cladding, large glass sliding doors, countryside meadow, sunset",
+   "b": "modern barnhouse interior, open plan kitchen and living room under high gabled ceiling, exposed beams, concrete floor, large windows",
+   "traits": [
+    "Uzun beşik çatı, sade çizgiler",
+    "Koyu ahşap veya metal cephe kaplaması",
+    "Yüksek tavanlı açık plan: mutfak + salon bir arada",
+    "Geniş arazili köy ve çiftlik arsaları için"
+   ],
+   "b_label": "Açık plan yaşam alanı",
+   "sketch": "barnhouse"
+  },
+  {
+   "slug": "et06-hafif-celik",
+   "name": [
+    "HAFİF ÇELİK",
+    "EV"
+   ],
+   "sub": "Hızlı · depreme dayanıklı",
+   "a": "modern two-storey light gauge steel frame house finished with white render and wood cladding accents, flat roof, landscaped garden, clear sky",
+   "b": "light gauge steel frame house under construction, galvanized steel studs and trusses, clean site, blue sky",
+   "traits": [
+    "Hafif yapı: deprem yükü daha düşük",
+    "Fabrikada ölçülü kesim, şantiyede hızlı montaj",
+    "Yalıtımla birlikte enerji verimli",
+    "Her cephe kaplamasıyla bitirilebilir"
+   ],
+   "b_label": "Çelik iskelet aşaması",
+   "sketch": "celik"
+  },
+  {
+   "slug": "et07-tek-katli",
+   "name": [
+    "TEK KATLI",
+    "BAHÇELİ EV"
+   ],
+   "sub": "Merdivensiz rahat yaşam",
+   "a": "single storey modern bungalow house, hipped roof, wide covered veranda, stone and plaster facade, large garden lawn, warm evening light",
+   "b": "single storey house open living room connected to garden through glass doors, veranda, garden view, bright interior",
+   "traits": [
+    "Merdiven yok: çocuklu ve yaşlı aileler için rahat",
+    "Her odadan bahçeye kolay çıkış",
+    "Geniş veranda, gölgeli oturma alanı",
+    "Yapımı ve bakımı daha kolay"
+   ],
+   "b_label": "İçeriden bahçe manzarası",
+   "a_real": 45,
+   "b_real": 9
+  },
+  {
+   "slug": "et08-kutuk-ev",
+   "name": [
+    "AHŞAP",
+    "KÜTÜK EV"
+   ],
+   "sub": "Doğal malzeme · sıcak yuva",
+   "a": "log house made of large round timber logs, covered porch, stone chimney, mountain forest setting, autumn colors, warm light",
+   "b": "log cabin interior, timber log walls, stone fireplace, wooden furniture, warm cozy lighting, winter evening",
+   "traits": [
+    "Masif ahşap doğal yalıtım sağlar",
+    "Taş şömine ve sundurma",
+    "Yayla, dağ ve orman arsalarına yakışır",
+    "Doğru bakımla uzun ömürlü"
+   ],
+   "b_label": "Şömineli salon",
+   "sketch": "kutuk"
+  },
+  {
+   "slug": "et09-kubik-modern",
+   "name": [
+    "KÜBİK",
+    "MODERN EV"
+   ],
+   "sub": "Düz çatı · geniş cam",
+   "a": "cubic modern house with flat roof, white and anthracite volumes, floor to ceiling glass, cantilevered upper floor, minimalist landscaping, dusk lighting",
+   "b": "modern minimalist interior with floor to ceiling windows, polished concrete floor, open plan, sleek kitchen island, evening city lights",
+   "traits": [
+    "Düz çatı: teras veya güneş paneli için alan",
+    "Yerden tavana camlar",
+    "Çıkmalı kütleler, net geometrik çizgi",
+    "Şehir içi ve yeni yerleşim arsalarına uygun"
+   ],
+   "b_label": "İçeriden bir bakış",
+   "sketch": "kubik"
+  },
+  {
+   "slug": "et10-havuzlu-villa",
+   "name": [
+    "HAVUZLU",
+    "VİLLA"
+   ],
+   "sub": "Bahçede tatil hissi",
+   "a": "luxury modern villa with infinity pool, natural stone walls, large glass facade, wooden pergola, olive trees, dusk with warm interior lights",
+   "b": "pool terrace of a modern villa, sun loungers, wooden deck, outdoor kitchen, garden lights, summer evening",
+   "traits": [
+    "Havuz ve teras evin bir parçası olarak tasarlanır",
+    "Taş, ahşap ve cam bir arada",
+    "Dış mutfak ve pergola ile bahçe yaşamı",
+    "Havuz yalıtımı ve tesisatı yapımla birlikte planlanır"
+   ],
+   "b_label": "Pergolalı teras",
+   "a_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626126-c1ebad0c.jpg",
+   "b_url": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/ai/1791047626152-bc796ea3.jpg"
+  }
+ ]
+}
