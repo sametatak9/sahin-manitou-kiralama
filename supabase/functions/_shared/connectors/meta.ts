@@ -89,6 +89,30 @@ export async function instagramPublish(account: AccountRow, token: string, input
   const media = input.mediaUrls[0];
   if (!media) throw new ConnectorError('Instagram API görselsiz/videosuz gönderi kabul etmez; önce medya yükleyin veya Design Studio’dan PNG dışa aktarın.', 'IG_MEDIA_REQUIRED');
   const video = isVideo(media);
+  const host0 = igHost(account);
+  // Kaydırmalı gönderi (carousel): 2-10 görsel/video → her biri alt kapsayıcı, sonra CAROUSEL kapsayıcısı
+  if (input.format === 'carousel' && input.mediaUrls.length > 1) {
+    const items = input.mediaUrls.slice(0, 10);
+    const children: string[] = [];
+    for (const u of items) {
+      const v = isVideo(u);
+      const c = await call('POST', `${account.external_account_id}/media`, { access_token: token, is_carousel_item: 'true', ...(v ? { media_type: 'VIDEO', video_url: u } : { image_url: u }) }, host0);
+      await waitForContainer(c.id, token, v ? 40 : 10, host0);
+      children.push(c.id);
+    }
+    const album = await call('POST', `${account.external_account_id}/media`, { access_token: token, media_type: 'CAROUSEL', children: children.join(','), caption: input.caption }, host0);
+    await waitForContainer(album.id, token, 15, host0);
+    let pubd: { id: string };
+    for (let i = 0; ; i++) {
+      try { pubd = await call('POST', `${account.external_account_id}/media_publish`, { creation_id: album.id, access_token: token }, host0); break; }
+      catch (e) {
+        if (i >= 3 || !/media id is not available|not ready|9007/i.test(`${(e as Error).message} ${JSON.stringify((e as ConnectorError).raw ?? '')}`)) throw e;
+        await new Promise((r) => setTimeout(r, 4000 * (i + 1)));
+      }
+    }
+    const info = await call('GET', pubd.id, { fields: 'permalink,timestamp', access_token: token }, host0).catch(() => ({}));
+    return { externalPostId: pubd.id, externalUrl: info.permalink ?? null, raw: { children, album, published: pubd, info } };
+  }
   const params: Record<string, string> = { access_token: token };
   if (input.format === 'story') { params.media_type = 'STORIES'; params[video ? 'video_url' : 'image_url'] = media; }
   else if (video || input.format === 'reel') {
@@ -114,6 +138,20 @@ export async function instagramPublish(account: AccountRow, token: string, input
 export async function facebookPublish(account: AccountRow, token: string, input: PublishInput): Promise<PublishOutput> {
   if (!account.external_account_id) throw new ConnectorError('Facebook sayfa kimliği yok', 'FB_NO_PAGE');
   const media = input.mediaUrls[0];
+  // Çoklu fotoğraf: önce yayınlanmamış fotoğraf olarak yükle, sonra tek gönderide birleştir
+  const photos = input.mediaUrls.filter((u) => !isVideo(u)).slice(0, 10);
+  if (input.format === 'carousel' && photos.length > 1) {
+    const ids: string[] = [];
+    for (const u of photos) {
+      const ph = await call('POST', `${account.external_account_id}/photos`, { url: u, published: 'false', access_token: token });
+      ids.push(ph.id);
+    }
+    const params: Record<string, string> = { message: input.caption, access_token: token };
+    ids.forEach((id, i) => { params[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id }); });
+    const post = await call('POST', `${account.external_account_id}/feed`, params);
+    const info = await call('GET', post.id, { fields: 'permalink_url', access_token: token }).catch(() => ({}));
+    return { externalPostId: post.id, externalUrl: info.permalink_url ?? null, raw: { photos: ids, post, info } };
+  }
   const res = media && isVideo(media)
     ? await call('POST', `${account.external_account_id}/videos`, { file_url: media, description: input.caption, access_token: token })
     : media
