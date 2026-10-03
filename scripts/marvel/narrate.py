@@ -14,7 +14,7 @@ W, H = 1080, 1920
 NAVY, WHITE = (38, 42, 107), (255, 255, 255)
 LEAD = 0.7          # anlatım videonun 0,7. saniyesinde başlar
 OUTRO = 2.6         # son ~2,6 sn kapanış kartı: altyazı yok, müzik geri açılır
-SUB_Y = 1330        # altyazı kutusunun üst kenarı (başlık ortada, oda etiketleri en altta)
+SUB_Y = 1220        # altyazı kutusunun üst kenarı (3 satırda bile alttaki etiketlere binmez)
 
 
 def run(cmd):
