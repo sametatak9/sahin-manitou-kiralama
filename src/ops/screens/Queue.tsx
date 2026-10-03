@@ -278,15 +278,20 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
     setBusy(g.key);
     try {
       for (const d of g.items) if (['scheduled', 'approved'].includes(d.workflow_status)) await callOps('publish_content', { content_id: d.id });
-      setMsg({ tone: 'ok', text: 'Yayın isteği gönderildi.' }); q.reload();
+      // Erken yayın → boşalan gün kalmasın: sonraki Reels'ler birer gün öne kayar
+      const moved = ['reel', 'short'].includes(g.items[0].format ?? '') ? (await db().rpc('compact_reel_calendar')).data : 0;
+      setMsg({ tone: 'ok', text: `Yayınlandı.${moved ? ' Boşalan gün dolduruldu: sonraki Reels’ler bir gün öne alındı.' : ''}` }); q.reload();
     } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
   const newestFirst = async () => {
     setBusy('newest');
     try {
-      const { data, error } = await db().rpc('reorder_newest_first');
-      if (error) throw error;
-      setMsg({ tone: 'ok', text: data ? `Yeni tarz öne alındı: ${data} paylaşımın saati değişti (saatler aynı, sıra en yeniden eskiye).` : 'Sıra zaten en yeniden eskiye.' }); q.reload();
+      const a = await db().rpc('reorder_newest_first', { p_formats: ['carousel'] });
+      if (a.error) throw a.error;
+      const b = await db().rpc('compact_reel_calendar');
+      if (b.error) throw b.error;
+      const n = (a.data ?? 0) + (b.data ?? 0);
+      setMsg({ tone: 'ok', text: n ? `Takvim toparlandı: ${n} paylaşım yeniden yerleşti (boş gün yok, en yeni üretim önce).` : 'Takvim zaten düzenli.' }); q.reload();
     } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
 
@@ -345,10 +350,10 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
           <div className="flex-1 min-w-[14rem]">
             <div className="text-[10px] font-mono tracking-[0.2em] text-[#8FC1F0]">YAYIN MERKEZİ</div>
             <h2 className="font-display text-xl font-semibold mt-0.5">Ne, ne zaman paylaşılıyor?</h2>
-            <p className="text-[12px] text-[#D6E4F7] mt-1">Takvim, editli içerikler, havuz ve onaylar tek yerde. Günde 1 Reels + 1 banner paylaşılır; yeni tarz her gece öne alınır.</p>
+            <p className="text-[12px] text-[#D6E4F7] mt-1">Takvim, editli içerikler, havuz ve onaylar tek yerde. Günde 1 Reels + 1 banner paylaşılır. Bir Reels erken yayınlanırsa boşalan gün kendiliğinden dolar; her gece takvim toparlanır (en yeni üretim önce).</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={busy === 'newest'} onClick={newestFirst} className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-[12px] font-semibold"><Sparkles className="w-4 h-4" />{busy === 'newest' ? 'Sıralanıyor…' : 'Yenileri öne al'}</button>
+            <button type="button" disabled={busy === 'newest'} onClick={newestFirst} className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-[12px] font-semibold"><Sparkles className="w-4 h-4" />{busy === 'newest' ? 'Toparlanıyor…' : 'Takvimi toparla'}</button>
             <button type="button" onClick={() => setComposer(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#8FC6F2] text-[#141A4F] px-3 py-2 text-[12px] font-bold"><Upload className="w-4 h-4" />Yeni gönderi</button>
             {admin && <button type="button" onClick={() => setQuota(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-[12px]"><Film className="w-4 h-4" />Üretim</button>}
           </div>

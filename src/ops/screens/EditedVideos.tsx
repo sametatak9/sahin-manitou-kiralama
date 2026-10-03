@@ -39,7 +39,8 @@ export function EditedVideosScreen({ embedded = false }: { embedded?: boolean })
       try { await callOps('publish_content', { content_id: d.id, platform: d.primary_platform }); done.push(d.primary_platform ?? ''); }
       catch (e) { errs.push(`${d.primary_platform}: ${(e as Error).message}`); }
     }
-    setMsg(errs.length ? { tone: 'error', text: `${done.length ? `Yayınlandı: ${done.join(', ')}. ` : ''}Hata: ${errs.join(' · ')}` } : { tone: 'ok', text: `Yayınlandı: ${done.join(', ')} 🎉` });
+    const moved = done.length ? (await db().rpc('compact_reel_calendar')).data : 0;
+    setMsg(errs.length ? { tone: 'error', text: `${done.length ? `Yayınlandı: ${done.join(', ')}. ` : ''}Hata: ${errs.join(' · ')}` } : { tone: 'ok', text: `Yayınlandı: ${done.join(', ')} 🎉${moved ? ' Boşalan gün dolduruldu: sonraki Reels’ler bir gün öne alındı.' : ''}` });
     setBusy(null); await drafts.reload();
   };
 
