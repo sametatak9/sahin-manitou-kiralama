@@ -36,10 +36,10 @@ export function EditedVideosScreen() {
   if (vids.loading && !vids.data.length) return <StateView kind="loading" />;
   return (
     <div className="space-y-4">
-      <section className="rounded-3xl bg-gradient-to-br from-[#2A0A0E] via-[#5A1018] to-[#0F1A33] text-white p-4 sm:p-5">
-        <div className="text-[10px] font-mono tracking-[0.2em] text-[#F3B6B9]">EDİTLİ VİDEOLAR · MARVEL TARZI KURGU</div>
+      <section className="rounded-3xl bg-gradient-to-br from-[#141A4F] via-[#1E2470] to-[#2E3192] text-white p-4 sm:p-5">
+        <div className="text-[10px] font-mono tracking-[0.2em] text-[#8FC1F0]">EDİTLİ VİDEOLAR · GERÇEK ÇEKİM KURGU</div>
         <h2 className="font-display text-xl font-semibold mt-0.5 inline-flex items-center gap-2"><Clapperboard className="w-5 h-5" />{vids.data.length} hazır Reels</h2>
-        <p className="text-[12px] text-[#F1D5D7] mt-1 max-w-2xl">Gerçek proje videolarımızdan kurgulandı: kırmızı flipbook giriş, logo çarpması, ritme oturan kesmeler, whip-pan / zoom / glitch geçişleri, ses efektleri ve telefonlu kapanış. Her videonun Instagram + Facebook paylaşım saati aşağıda.</p>
+        <p className="text-[12px] text-[#D6E4F7] mt-1 max-w-2xl">Gerçek proje videolarımızdan kurgulandı: ilk saniyede dikkat çeken başlık, ritme oturan kesmeler, whip-pan / zoom / glitch geçişleri, ses efektleri ve lacivert Embay kapanış kartı (DM çağrısı + telefon). Her videonun Instagram + Facebook paylaşım saati aşağıda.</p>
       </section>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {!vids.data.length ? <StateView kind="empty" title="Henüz editli video yok" /> : (
