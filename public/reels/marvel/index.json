@@ -61,17 +61,32 @@
  },
  {
   "slug": "13-once-sonra-villa",
-  "dur": 19.5,
-  "frames": 585
+  "dur": 27.5,
+  "frames": 825
  },
  {
   "slug": "14-iscilik-detayda",
-  "dur": 18.87,
-  "frames": 569
+  "dur": 26.53,
+  "frames": 793
  },
  {
   "slug": "15-dis-cephe-tamam",
-  "dur": 17.2,
-  "frames": 513
+  "dur": 24.07,
+  "frames": 721
+ },
+ {
+  "slug": "16-mimari-orman-evi",
+  "dur": 24.5,
+  "frames": 735
+ },
+ {
+  "slug": "17-mimari-beyaz-villa",
+  "dur": 21.5,
+  "frames": 645
+ },
+ {
+  "slug": "18-mimari-isik-tas-ahsap",
+  "dur": 21.5,
+  "frames": 645
  }
 ]
