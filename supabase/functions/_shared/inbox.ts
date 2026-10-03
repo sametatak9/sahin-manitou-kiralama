@@ -117,7 +117,7 @@ export async function inboxTick(db: Db, force = false) {
   if (fresh.length) {
     await loadAppSecrets(db);
     if (appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID'))
-      await telegramSend([`💬 Instagram'da ${fresh.length} yeni soru/talep`, '', ...fresh.slice(0, 10), '', 'Panel → Raporlar → Gelen sorular'].join('\n')).catch(() => null);
+      await telegramSend([`💬 Instagram'da ${fresh.length} yeni soru/talep`, '', ...fresh.slice(0, 10), '', 'Panel → Müşteri Adayları → Fiyat soranlar (hazır DM metni)'].join('\n')).catch(() => null);
   }
   return { found, replied };
 }

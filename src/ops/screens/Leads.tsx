@@ -4,6 +4,7 @@ import { errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime } from '../lib/format';
 import { useRouter } from '../session';
+import { Prospects } from '../components/Prospects';
 import { Button, ErrorState, Field, Modal, Notice, Pill, PlatformBadge, StateView, Tabs } from '../ui';
 
 interface Inbox { id: string; created_at: string; full_name: string | null; phone: string; email: string | null; ilce: string | null; mahalle: string | null; address: string | null; demand: string; budget_range: string | null; timeline: string | null; note: string | null; status: string; offer_match: string | null; ticari_ileti_izni: boolean; kvkk_aydinlatma_onay: boolean }
@@ -46,7 +47,7 @@ function initials(name: string | null | undefined) {
 
 export function LeadsScreen() {
   const { go } = useRouter();
-  const [tab, setTab] = useState<'inbox' | 'companies' | 'prospects'>('inbox');
+  const [tab, setTab] = useState<'askers' | 'inbox' | 'companies' | 'prospects'>('askers');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<Prospect | null>(null);
@@ -85,14 +86,14 @@ export function LeadsScreen() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div><h2 className="font-display text-xl font-semibold text-ink-100">Lead Gelen Kutusu</h2><p className="text-xs text-ink-400">Web formu (KVKK onaylı), onaylı araştırma kaynaklı firma adayları ve sosyal aday listeleri. Otomatik ticari mesaj gönderilmez.</p></div>
+        <div><h2 className="font-display text-xl font-semibold text-ink-100">Müşteri Adayları</h2><p className="text-xs text-ink-400">Web formu (KVKK onaylı), onaylı araştırma kaynaklı firma adayları ve sosyal aday listeleri. Otomatik ticari mesaj gönderilmez.</p></div>
         <div className="flex flex-wrap gap-2">
-          <Tabs value={tab} onChange={setTab} items={[{ id: 'inbox', label: 'Web başvuruları', count: q.data.inbox.filter((i) => !q.data.converted.has(i.id)).length }, { id: 'companies', label: 'Firma adayları', count: q.data.companies.length }, { id: 'prospects', label: 'Sosyal adaylar', count: q.data.prospects.length }]} />
+          <Tabs value={tab} onChange={setTab} items={[{ id: 'askers', label: 'Fiyat soranlar' }, { id: 'inbox', label: 'Web başvuruları', count: q.data.inbox.filter((i) => !q.data.converted.has(i.id)).length }, { id: 'companies', label: 'Firma adayları', count: q.data.companies.length }, { id: 'prospects', label: 'Sosyal adaylar', count: q.data.prospects.length }]} />
           {tab === 'companies' && <Button variant="primary" onClick={() => setAdding(true)} icon={<Plus className="w-4 h-4" />}>Firma adayı</Button>}
         </div>
       </div>
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : 'error'}>{msg.text}</Notice>}
-      {q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : tab === 'inbox' ? (
+      {tab === 'askers' ? <Prospects /> : q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : tab === 'inbox' ? (
         q.data.inbox.length === 0 ? <StateView kind="empty" title="Web başvurusu yok" message="Kurumsal sitedeki teklif formundan gelen KVKK onaylı talepler burada listelenir." /> : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {q.data.inbox.map((r) => { const done = q.data.converted.has(r.id); return (
