@@ -242,7 +242,9 @@ function groupDrafts(rows: Draft[], desc = false) {
 export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTab }) {
   const session = useSession();
   const admin = session.role === 'admin';
-  const [tab, setTab] = useState<CenterTab>(initialTab);
+  const { state } = useRouter();
+  const urlTab = state.params.get('tab') as CenterTab | null;
+  const [tab, setTab] = useState<CenterTab>(urlTab && ['calendar', 'content', 'pool', 'approval', 'done'].includes(urlTab) ? urlTab : initialTab);
   const [fmt, setFmt] = useState<'all' | 'reel' | 'carousel' | 'banner'>('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);

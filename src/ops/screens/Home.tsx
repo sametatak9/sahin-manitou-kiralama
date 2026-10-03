@@ -1,291 +1,234 @@
+// ANA SAYFA: işletme sahibinin 30 saniyede göreceği şeyler — büyüme, sıradaki paylaşımlar, yapılacaklar, sıcak müşteri adayları,
+// son paylaşımların sonucu, botların bulduğu fırsatlar. Teknik ayrıntı (bot zaman çizelgesi, otopilot) alt sayfalarda / katlanır bölümde.
 import { useMemo } from 'react';
-import { AlertTriangle, ArrowRight, Bot, Briefcase, CalendarClock, CheckCheck, Cpu, FileText, Film, Gauge, PlugZap, Radar, Sparkles, TrendingUp, UsersRound } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarClock, ChevronRight, FileText, Heart, MessageCircle, Settings2, TrendingDown, TrendingUp } from 'lucide-react';
 import { callOps } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
-import { OwnerTodos } from '../components/OwnerTodos';
-import { approvalLabel, approvalTone, connectionLabel, connectionTone, dayKey, fmtDateTime, fmtTime, istanbulHour, platformMeta, relTime, RUN_LABELS, runTone, TONE_DOT, type Tone } from '../lib/format';
-import type { Approval, Bot as BotRow, Draft, OpsStatus, Publication, Run, Task } from '../lib/types';
+import { dayKey, istanbulHour, relTime, timeOf } from '../lib/format';
+import type { OpsStatus } from '../lib/types';
 import { useRouter, useSession } from '../session';
-import { Button, cx, DynIcon, ErrorState, Panel, Pill, PlatformBadge, Stat, StateView } from '../ui';
+import { cx, ErrorState, PlatformBadge, StateView } from '../ui';
+import { OwnerTodos } from '../components/OwnerTodos';
+import { Prospects } from '../components/Prospects';
 import { AutopilotCard } from '../components/AutopilotCard';
 
-interface HomeData {
-  bots: BotRow[]; tasks: Task[]; runs: Run[]; approvals: Approval[]; pendingCount: number; drafts: Draft[]; pubs: Publication[];
-  counts: { construction: number; rental: number; web: number; constructionToday: number; rentalToday: number; webToday: number };
-  failedTasks: Task[]; failedApprovals: number; queuedReplies: number; queuedNeedsPermission: boolean; failedDrafts: number;
-}
+interface Snap { platform: string; day: string; followers: number | null }
+interface NextPost { id: string; format: string | null; headline: string | null; title: string | null; scheduled_at: string; primary_platform: string | null; design_url: string | null; media_urls: string[] | null; video_url: string | null }
+interface Pub { id: string; platform: string; published_at: string | null; external_url: string | null; content_id: string | null }
+interface Metric { publication_id: string; likes: number | null; comments: number | null; fetched_at: string }
+interface Mission { id: string; title: string; summary: string | null; finished_at: string | null; status: string }
 
-function dayStartIso() { return new Date(`${dayKey(new Date())}T00:00:00+03:00`).toISOString(); }
+const isVid = (u?: string | null) => !!u && /\.(mp4|mov|m4v)(\?|$)/i.test(u);
+const FMT: Record<string, string> = { reel: 'Reels', carousel: 'Kaydırmalı', banner: 'Banner', post: 'Gönderi', story: 'Hikâye' };
 
-async function loadHome(): Promise<HomeData> {
+async function loadHome() {
   const s = db();
-  const start = dayStartIso();
-  const end = new Date(new Date(start).getTime() + 86400_000).toISOString();
-  const week = new Date(Date.now() + 7 * 86400_000).toISOString();
-  const head = { count: 'exact' as const, head: true };
-  const [bots, tasks, runs, approvals, pending, drafts, pubs, cAll, rAll, wAll, cToday, rToday, wToday, failedTasks, failedAp, queuedReplies, failedDrafts] = await Promise.all([
-    s.from('automation_bots').select('*').neq('status', 'archived'),
-    s.from('automation_tasks').select('*').eq('enabled', true).is('archived_at', null).gte('next_run_at', start).lt('next_run_at', end).order('next_run_at'),
-    s.from('social_bot_runs').select('*').gte('created_at', start).order('created_at', { ascending: false }).limit(60),
-    s.from('approval_requests').select('*').eq('status', 'pending_approval').order('created_at', { ascending: false }).limit(6),
-    s.from('approval_requests').select('id', head).eq('status', 'pending_approval'),
-    s.from('social_drafts').select('*').gte('scheduled_at', new Date().toISOString()).lte('scheduled_at', week).not('workflow_status', 'in', '(cancelled,draft)').is('archived_at', null).order('scheduled_at').limit(8),
-    s.from('social_publications').select('*').gte('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()).order('created_at', { ascending: false }).limit(20),
-    s.from('construction_customers').select('id', head).is('archived_at', null),
-    s.from('rental_customers').select('id', head).is('archived_at', null),
-    s.from('lead_inbox').select('id', head).eq('status', 'yeni'),
-    s.from('construction_customers').select('id', head).gte('created_at', start),
-    s.from('rental_customers').select('id', head).gte('created_at', start),
-    s.from('lead_inbox').select('id', head).gte('created_at', start),
-    s.from('automation_tasks').select('*').in('status', ['dead_letter', 'failed']).is('archived_at', null).limit(5),
-    s.from('approval_requests').select('id', head).eq('status', 'failed'),
-    s.from('social_inbox').select('reply_source').eq('replied', false).like('reply_source', 'kuyruk%').limit(200),
-    s.from('social_drafts').select('id', head).eq('workflow_status', 'failed').is('archived_at', null).gte('scheduled_at', new Date(Date.now() - 7 * 86400_000).toISOString()),
+  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+  const [snaps, next, pubs, askers, customers, missions, failedDrafts, failedTasks, titles] = await Promise.all([
+    s.from('growth_snapshots').select('platform,day,followers').gte('day', dayKey(new Date(Date.now() - 10 * 86400_000))).order('day', { ascending: true }),
+    s.from('social_drafts').select('id,format,headline,title,scheduled_at,primary_platform,design_url,media_urls,video_url').in('workflow_status', ['scheduled', 'approved'])
+      .is('archived_at', null).gt('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(12),
+    s.from('social_publications').select('id,platform,published_at,external_url,content_id').eq('status', 'published').order('published_at', { ascending: false }).limit(8),
+    s.from('social_inbox').select('id', { count: 'exact', head: true }).in('intent', ['price', 'location', 'info']).eq('follow_stage', 'yeni').is('archived_at', null),
+    s.from('construction_customers').select('status').is('archived_at', null),
+    s.from('bot_missions').select('id,title,summary,finished_at,status').eq('status', 'completed').not('summary', 'is', null).order('finished_at', { ascending: false }).limit(3),
+    s.from('social_drafts').select('id', { count: 'exact', head: true }).eq('workflow_status', 'failed').is('archived_at', null).gte('scheduled_at', weekAgo),
+    s.from('automation_tasks').select('id,title,last_error').in('status', ['dead_letter', 'failed']).is('archived_at', null).limit(3),
+    s.from('social_drafts').select('id,headline,title,design_url,media_urls,video_url,format').eq('workflow_status', 'published').gte('scheduled_at', new Date(Date.now() - 21 * 86400_000).toISOString()).limit(200),
   ]);
-  const queued = (unwrap(queuedReplies) as Array<{ reply_source: string | null }>);
+  const pubList = unwrap(pubs) as Pub[];
+  const met = pubList.length ? unwrap(await s.from('social_post_metrics').select('publication_id,likes,comments,fetched_at').in('publication_id', pubList.map((p) => p.id)).order('fetched_at', { ascending: false })) as Metric[] : [];
+  const weekPubs = await s.from('social_publications').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', weekAgo);
   return {
-    bots: unwrap(bots), tasks: unwrap(tasks), runs: unwrap(runs), approvals: unwrap(approvals), pendingCount: pending.count ?? 0, drafts: unwrap(drafts), pubs: unwrap(pubs),
-    counts: { construction: cAll.count ?? 0, rental: rAll.count ?? 0, web: wAll.count ?? 0, constructionToday: cToday.count ?? 0, rentalToday: rToday.count ?? 0, webToday: wToday.count ?? 0 },
-    failedTasks: unwrap(failedTasks), failedApprovals: failedAp.count ?? 0,
-    queuedReplies: queued.length, queuedNeedsPermission: queued.some((r) => /permission|izni|izin/i.test(r.reply_source ?? '')),
-    failedDrafts: failedDrafts.count ?? 0,
+    snaps: unwrap(snaps) as Snap[], next: unwrap(next) as NextPost[], pubs: pubList, metrics: met, askers: askers.count ?? 0,
+    customers: (unwrap(customers) as Array<{ status: string }>), missions: unwrap(missions) as Mission[], failedDrafts: failedDrafts.count ?? 0,
+    failedTasks: (unwrap(failedTasks) as Array<{ id: string; title: string | null; last_error: string | null }>), weekPubs: weekPubs.count ?? 0,
+    drafts: unwrap(titles) as Array<{ id: string; headline: string | null; title: string | null; design_url: string | null; media_urls: string[] | null; video_url: string | null; format: string | null }>,
   };
 }
-
-const EMPTY: HomeData = { bots: [], tasks: [], runs: [], approvals: [], pendingCount: 0, drafts: [], pubs: [], counts: { construction: 0, rental: 0, web: 0, constructionToday: 0, rentalToday: 0, webToday: 0 }, failedTasks: [], failedApprovals: 0, queuedReplies: 0, queuedNeedsPermission: false, failedDrafts: 0 };
-
-interface TimelineItem { key: string; at: string; bot?: BotRow; title: string; detail: string; tone: Tone; label: string; kind: 'planned' | 'run' }
-
-function TodayRail({ items }: { items: TimelineItem[] }) {
-  const nowH = istanbulHour(new Date()) + new Date().getMinutes() / 60;
-  return (
-    <div className="relative h-16 mt-2 mb-1">
-      <div className="absolute inset-x-0 top-7 h-px bg-ink-700" />
-      <div className="absolute top-7 h-px bg-gradient-to-r from-brand-green/0 via-brand-green to-brand-green" style={{ left: 0, width: `${(nowH / 24) * 100}%` }} />
-      {[0, 6, 12, 18, 24].map((h) => (
-        <div key={h} className="absolute top-10 -translate-x-1/2 text-[9px] font-mono text-ink-500" style={{ left: `${(h / 24) * 100}%` }}>{String(h).padStart(2, '0')}:00</div>
-      ))}
-      <div className="absolute top-1 bottom-4 w-px bg-signal-go/70" style={{ left: `${(nowH / 24) * 100}%` }}>
-        <span className="absolute -top-1 -translate-x-1/2 text-[9px] font-mono font-bold text-signal-go bg-ink-900 px-1 rounded">ŞİMDİ</span>
-      </div>
-      {items.map((it) => {
-        const d = new Date(it.at); const h = istanbulHour(d) + d.getMinutes() / 60;
-        return <span key={it.key} title={`${fmtTime(it.at)} · ${it.title}`} className={cx('absolute top-[22px] w-3 h-3 -translate-x-1/2 rounded-full ring-2 ring-ink-900', TONE_DOT[it.tone], it.kind === 'planned' && 'opacity-60')} style={{ left: `${(h / 24) * 100}%` }} />;
-      })}
-    </div>
-  );
-}
+type HomeData = Awaited<ReturnType<typeof loadHome>>;
+const EMPTY: HomeData = { snaps: [], next: [], pubs: [], metrics: [], askers: 0, customers: [], missions: [], failedDrafts: 0, failedTasks: [], weekPubs: 0, drafts: [] };
 
 export function HomeScreen() {
   const { go } = useRouter();
   const session = useSession();
-  const q = useQuery(loadHome, EMPTY, [], ['social_bot_runs', 'automation_tasks', 'approval_requests', 'construction_customers', 'rental_customers', 'lead_inbox', 'social_drafts']);
+  const q = useQuery(loadHome, EMPTY, [], ['social_drafts', 'social_publications', 'social_inbox', 'construction_customers', 'growth_snapshots']);
   const status = useQuery<OpsStatus | null>(() => callOps<OpsStatus>('status'), null, []);
   const d = q.data;
-  const botById = useMemo(() => new Map(d.bots.map((b) => [b.id, b])), [d.bots]);
 
-  const timeline = useMemo<TimelineItem[]>(() => {
-    const planned = d.tasks.filter((t) => t.next_run_at && new Date(t.next_run_at).getTime() > Date.now() - 60_000).map((t) => ({
-      key: `t-${t.id}`, at: t.next_run_at!, bot: botById.get(t.bot_id || ''), title: t.title || t.task_type, detail: 'Planlandı', tone: 'idle' as Tone, label: 'PLANLI', kind: 'planned' as const,
-    }));
-    const runs = d.runs.map((r) => ({
-      key: `r-${r.id}`, at: r.started_at || r.created_at, bot: botById.get(r.bot_id || ''), title: r.summary || r.run_scope, detail: r.error_code ? `${r.error_code}` : r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)} sn` : '',
-      tone: runTone(r.status), label: RUN_LABELS[r.status] ?? r.status.toUpperCase(), kind: 'run' as const,
-    }));
-    return [...runs, ...planned].sort((a, b) => a.at.localeCompare(b.at));
-  }, [d.tasks, d.runs, botById]);
-
-  const running = d.runs.filter((r) => r.status === 'running');
-  const connected = status.data?.connectors.filter((c) => c.status === 'connected').length ?? 0;
-  const aiReady = status.data ? Object.values(status.data.ai).some(Boolean) : false;
-  const alerts: Array<{ tone: Tone; text: string; action?: () => void }> = [];
-  if (status.data && !aiReady) alerts.push({ tone: 'wait', text: 'AI sağlayıcı anahtarı tanımlı değil — AI içerik görevleri ENGELLENDİ durumunda. (Ayarlar → AI)', action: () => go('settings') });
-  d.failedTasks.forEach((t) => alerts.push({ tone: 'stop', text: `${t.title || t.task_type}: ${t.status === 'dead_letter' ? 'DEAD LETTER' : 'BAŞARISIZ'} — ${t.last_error ?? ''}`, action: () => go('bots', t.bot_id) }));
-  if (d.failedApprovals) alerts.push({ tone: 'stop', text: `${d.failedApprovals} onaylı işlem yürütülürken başarısız oldu`, action: () => go('approvals') });
-  d.runs.filter((r) => r.status === 'blocked').slice(0, 3).forEach((r) => alerts.push({ tone: 'wait', text: `${botById.get(r.bot_id || '')?.name ?? 'Bot'} engellendi: ${r.error}` }));
-  if (d.queuedReplies) alerts.push({ tone: d.queuedNeedsPermission ? 'stop' : 'wait', text: d.queuedNeedsPermission
-    ? `${d.queuedReplies} yorum cevabı bekliyor — Meta yorum izni eksik. Facebook'u yeniden bağlayın (izinleri onaylayın), cevaplar kendiliğinden gider.`
-    : `${d.queuedReplies} yorum cevabı gönderim sırasında`, action: () => go('connections') });
-  if (d.failedDrafts) alerts.push({ tone: 'stop', text: `${d.failedDrafts} gönderi yayınlanamadı (son 7 gün) — Yayın Kuyruğu'nda hatayı görün`, action: () => go('queue') });
-  status.data?.connectors.filter((c) => c.status === 'expired').forEach((c) => alerts.push({ tone: 'stop', text: `${c.name} token süresi doldu — yeniden bağlanın`, action: () => go('connections') }));
+  const growth = useMemo(() => {
+    const out: Record<string, { now: number | null; delta: number | null }> = {};
+    for (const p of ['instagram', 'facebook']) {
+      const rows = d.snaps.filter((r) => r.platform === p && r.followers != null);
+      const last = rows[rows.length - 1]; const base = rows.find((r) => new Date(r.day).getTime() >= Date.now() - 8 * 86400_000) ?? rows[0];
+      out[p] = { now: last?.followers ?? null, delta: last && base && last !== base ? (last.followers ?? 0) - (base.followers ?? 0) : null };
+    }
+    return out;
+  }, [d.snaps]);
+  // Instagram + Facebook ikizleri tek kart
+  const upcoming = useMemo(() => {
+    const m = new Map<string, NextPost[]>();
+    for (const p of d.next) { const k = `${p.format}|${p.video_url || p.media_urls?.[0] || p.headline}|${p.scheduled_at}`; m.set(k, [...(m.get(k) ?? []), p]); }
+    return [...m.values()].slice(0, 4);
+  }, [d.next]);
+  const lastPubs = useMemo(() => {
+    const byContent = new Map(d.drafts.map((x) => [x.id, x]));
+    return d.pubs.map((p) => {
+      const m = d.metrics.find((x) => x.publication_id === p.id);
+      const c = p.content_id ? byContent.get(p.content_id) : undefined;
+      return { p, m, c };
+    }).slice(0, 6);
+  }, [d.pubs, d.metrics, d.drafts]);
+  const activeCustomers = d.customers.filter((c) => !['kazanildi', 'kaybedildi'].includes(c.status)).length;
+  const conns = status.data?.connectors.filter((c) => ['instagram', 'facebook', 'telegram', 'canva'].includes(c.key)) ?? [];
+  const alerts: Array<{ text: string; action: () => void }> = [];
+  if (d.failedDrafts) alerts.push({ text: `${d.failedDrafts} paylaşım hata verdi (son 7 gün)`, action: () => go('queue') });
+  d.failedTasks.forEach((t) => alerts.push({ text: `Bot görevi durdu: ${t.title ?? ''} — ${(t.last_error ?? '').slice(0, 80)}`, action: () => go('bots') }));
+  conns.filter((c) => c.status === 'expired' || c.status === 'error').forEach((c) => alerts.push({ text: `${c.name} bağlantısı yenilenmeli`, action: () => go('connections') }));
 
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
   const h = istanbulHour(new Date());
   const hello = h < 12 ? 'Günaydın' : h < 18 ? 'İyi günler' : 'İyi akşamlar';
+  const ig = growth.instagram;
 
   return (
     <div className="space-y-4">
-      {/* Hızlı Erişim Şeridi */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 ops-scroll -mx-1 px-1">
-        <button onClick={() => go('home')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-green text-white text-xs font-semibold shrink-0 shadow-sm">
-          <Gauge className="w-3.5 h-3.5" /> Özet
-        </button>
-        <button onClick={() => go('connections')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <PlugZap className="w-3.5 h-3.5 text-brand-green" /> Uygulamalar
-        </button>
-        <button onClick={() => go('videos')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <Film className="w-3.5 h-3.5 text-amber-500" /> Video Havuzu
-        </button>
-        <button onClick={() => go('portfolio')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <Briefcase className="w-3.5 h-3.5 text-blue-500" /> Firma Portföyü
-        </button>
-        <button onClick={() => go('queue')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <CalendarClock className="w-3.5 h-3.5 text-rose-500" /> Yayın Kuyruğu
-        </button>
-        <button onClick={() => go('bots')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <Bot className="w-3.5 h-3.5 text-emerald-500" /> Botlar
-        </button>
-        <button onClick={() => go('reports')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ink-900 border border-ink-750 text-ink-200 hover:text-ink-100 text-xs font-medium shrink-0">
-          <FileText className="w-3.5 h-3.5 text-indigo-500" /> Raporlar
-        </button>
-      </div>
-
-      <OwnerTodos />
-      <AutopilotCard />
-
-      {/* Başlık şeridi */}
-      <section className="ops-panel p-5 sm:p-6 relative overflow-hidden">
-        <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-5">
-          <div>
-            <div className="text-xs text-ink-400">{new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', weekday: 'long', day: 'numeric', month: 'long' })}</div>
-            <h2 className="font-display text-2xl sm:text-3xl font-bold text-ink-100 mt-1">{hello}, {session.displayName}.</h2>
-            <p className="text-sm text-ink-300 mt-1 max-w-2xl">
-              Bugün <b className="text-ink-100">{d.tasks.length}</b> planlı bot görevi, <b className="text-ink-100">{d.runs.length}</b> tamamlanan/çalışan koşu ve <b className="text-amber-700">{d.pendingCount}</b> onay bekleyen iş var.
-            </p>
+      {/* ÜST BANT */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#10153F] via-[#1E2470] to-[#2E3192] text-white p-5 sm:p-6">
+        <div className="absolute -right-16 -top-16 w-72 h-72 rounded-full bg-[#8FC6F2]/10 blur-2xl pointer-events-none" />
+        <div className="relative">
+          <div className="text-[11px] text-[#B9D3F2]">{new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', weekday: 'long', day: 'numeric', month: 'long' })} · Embay Yapı</div>
+          <h2 className="font-display text-2xl sm:text-3xl font-bold mt-1">{hello}, {session.displayName}.</h2>
+          <p className="text-[13px] text-[#D6E4F7] mt-1 max-w-2xl">
+            {d.askers ? <>Bugün öncelik: <b className="text-white">{d.askers} kişi fiyat sordu</b>, dönüş bekliyor.</> : 'Fiyat soran herkese dönüldü.'}
+            {upcoming[0] && <> Sıradaki paylaşım <b className="text-white">{timeOf(upcoming[0][0].scheduled_at)}</b>’de: {upcoming[0][0].headline || upcoming[0][0].title}.</>}
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
+            <HeroStat label="Instagram takipçi" value={ig?.now != null ? ig.now.toLocaleString('tr-TR') : '…'}
+              sub={ig?.delta != null ? <span className={cx('inline-flex items-center gap-1', ig.delta > 0 ? 'text-emerald-300' : ig.delta < 0 ? 'text-rose-300' : '')}>{ig.delta >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}{ig.delta > 0 ? '+' : ''}{ig.delta} (7 gün)</span> : 'ölçüm başladı'} onClick={() => go('growth')} />
+            <HeroStat label="Bu hafta paylaşılan" value={d.weekPubs} sub={`Facebook: ${growth.facebook?.now ?? '…'} takipçi`} onClick={() => go('queue', null, { tab: 'done' })} />
+            <HeroStat label="Fiyat soran (bekliyor)" value={d.askers} sub="hazır DM metniyle" hot={d.askers > 0} onClick={() => go('leads')} />
+            <HeroStat label="Aktif müşteri" value={activeCustomers} sub={`${d.customers.length} toplam kayıt`} onClick={() => go('construction')} />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-w-0 lg:min-w-[520px]">
-            <Stat label="Çalışan bot" value={running.length} tone={running.length ? 'run' : 'idle'} sub={running.length ? running.map((r) => botById.get(r.bot_id || '')?.name).join(', ') : 'Şu an boşta'} />
-            <Stat label="Onay bekleyen" value={d.pendingCount} tone={d.pendingCount ? 'wait' : 'go'} sub="İnsan kararı" />
-            <Stat label="Bugünkü lead" value={d.counts.constructionToday + d.counts.rentalToday + d.counts.webToday} tone="go" sub={`${d.counts.webToday} web başvurusu`} />
-            <Stat label="Bağlı platform" value={status.data ? connected : '…'} tone={connected ? 'go' : 'wait'} sub={status.data ? `${status.data.connectors.length} uygulamadan` : 'kontrol ediliyor'} />
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {conns.map((c) => (
+              <span key={c.key} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px]">
+                <span className={cx('w-1.5 h-1.5 rounded-full', c.status === 'connected' ? 'bg-emerald-400' : 'bg-amber-400')} />{c.name}
+              </span>
+            ))}
+            {status.data?.worker_last_seen && <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Botlar çalışıyor · {relTime(status.data.worker_last_seen)}</span>}
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.55fr_1fr] gap-5">
-        {/* BUGÜN BOTLAR NE YAPIYOR */}
-        <Panel kicker="Today · Bot Activity" title="Bugün botlar ne yapıyor?" action={<Button variant="ghost" onClick={() => go('bots')} icon={<Bot className="w-4 h-4" />}>Botlar</Button>}>
-          {q.loading ? <StateView kind="loading" compact /> : (
-            <>
-              <TodayRail items={timeline} />
-              {timeline.length === 0 ? (
-                <StateView kind="empty" compact title="Bugün için görev yok" message="Bot Merkezi’nden görev verdiğinizde burada saat saat görünür." />
-              ) : (
-                <ol className="mt-3 space-y-1.5 max-h-[420px] overflow-y-auto ops-scroll pr-1">
-                  {timeline.map((it) => (
-                    <li key={it.key} className={cx('grid grid-cols-[52px_28px_1fr_auto] items-center gap-3 rounded-xl px-2.5 py-2', it.kind === 'planned' ? 'bg-transparent' : 'bg-ink-900/60 ring-1 ring-ink-800')}>
-                      <span className="font-mono text-xs tabular-nums text-ink-300">{fmtTime(it.at)}</span>
-                      <span className={cx('w-7 h-7 rounded-lg flex items-center justify-center bg-ink-800 text-ink-200', it.kind === 'planned' && 'opacity-60')}><DynIcon name={it.bot?.icon} className="w-3.5 h-3.5" /></span>
-                      <span className="min-w-0">
-                        <span className="block text-[13px] font-semibold text-ink-100 line-clamp-2 sm:truncate">{it.bot?.name ?? 'Görev'} <span className="text-ink-500">→</span> <span className="font-normal text-ink-300">{it.title}</span></span>
-                        {it.detail && <span className="block text-[10px] font-mono text-ink-500 truncate">{it.detail}</span>}
-                      </span>
-                      <Pill tone={it.tone}>{it.label}</Pill>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </>
-          )}
-        </Panel>
+      {alerts.length > 0 && (
+        <section className="rounded-2xl ring-1 ring-rose-200 bg-rose-50 p-3 space-y-1">
+          {alerts.slice(0, 4).map((a, i) => (
+            <button key={i} type="button" onClick={a.action} className="w-full flex items-center gap-2 text-left text-[12px] text-rose-800 hover:underline"><AlertTriangle className="w-4 h-4 shrink-0" />{a.text}<ChevronRight className="w-3.5 h-3.5 ml-auto" /></button>
+          ))}
+        </section>
+      )}
 
-        {/* ONAY AKIŞI */}
-        <Panel kicker="Approval Stream" title="Neyin onayı bekliyor?" action={<Button variant="ghost" onClick={() => go('approvals')} icon={<CheckCheck className="w-4 h-4" />}>Tümü</Button>}>
-          {q.loading ? <StateView kind="loading" compact /> : d.approvals.length === 0 ? (
-            <StateView kind="empty" compact title="Onay kuyruğu temiz" message="Botların ürettiği içerik, mesaj ve ilanlar yayından önce burada görünür." />
-          ) : (
-            <ul className="space-y-2">
-              {d.approvals.map((a) => (
-                <li key={a.id}>
-                  <button onClick={() => go('approvals', a.id)} className="w-full text-left rounded-xl bg-ink-900/60 ring-1 ring-ink-800 hover:ring-amber-400/40 px-3 py-2.5 flex items-start gap-3 transition">
-                    <PlatformBadge platform={a.platform} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-semibold text-ink-100 truncate">{a.title}</span>
-                      <span className="block text-[11px] text-ink-400 truncate">{a.summary || a.entity_type}</span>
-                    </span>
-                    <span className="text-[10px] font-mono text-ink-500 shrink-0">{relTime(a.created_at)}</span>
+      <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4">
+        {/* SIRADAKİ PAYLAŞIMLAR */}
+        <Card title="Sıradaki paylaşımlar" icon={<CalendarClock className="w-5 h-5 text-[#1E3FA0]" />} action={<LinkBtn onClick={() => go('queue')}>Yayın Merkezi</LinkBtn>}>
+          {q.loading && !d.next.length ? <StateView kind="loading" compact /> : !upcoming.length ? <StateView kind="empty" compact title="Planlı paylaşım yok" /> : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {upcoming.map((g) => {
+                const p = g[0]; const img = p.design_url || p.media_urls?.[0] || p.video_url;
+                const today = dayKey(p.scheduled_at) === dayKey(new Date());
+                return (
+                  <button key={p.id} type="button" onClick={() => go('queue')} className="text-left rounded-xl overflow-hidden ring-1 ring-ink-700/60 bg-white hover:ring-[#1E3FA0]">
+                    <div className="relative aspect-[4/5] bg-ink-900">
+                      {img && (isVid(img) ? <video src={`${img}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" /> : <img src={img} alt="" loading="lazy" className="w-full h-full object-cover" />)}
+                      <span className="absolute top-1.5 left-1.5 rounded-full bg-[#262A6B] text-white text-[10px] font-bold px-2 py-0.5">{FMT[p.format ?? ''] ?? p.format}</span>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-[11px] font-mono text-ink-400">{today ? 'Bugün' : new Date(p.scheduled_at).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'short' })} · {timeOf(p.scheduled_at)}</div>
+                      <div className="text-[12px] font-semibold text-ink-100 line-clamp-2">{p.headline || p.title}</div>
+                      <div className="flex gap-1 mt-1">{g.map((x) => <PlatformBadge key={x.id} platform={x.primary_platform} />)}</div>
+                    </div>
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* LEADS */}
-        <Panel kicker="Leads Pulse" title="Müşteri nabzı" action={<UsersRound className="w-5 h-5 text-ink-500" />}>
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => go('construction')} className="text-left"><Stat label="İnşaat" value={d.counts.construction} sub={`+${d.counts.constructionToday} bugün`} /></button>
-            <button onClick={() => go('rental')} className="text-left"><Stat label="Kiralama" value={d.counts.rental} sub={`+${d.counts.rentalToday} bugün`} /></button>
-            <button onClick={() => go('leads')} className="text-left"><Stat label="Web yeni" value={d.counts.web} tone={d.counts.web ? 'wait' : undefined} sub="işlenmedi" /></button>
-          </div>
-        </Panel>
-
-        {/* PLATFORM WALL */}
-        <Panel kicker="Platform Wall" title="Bağlantı durumu" action={<Button variant="ghost" onClick={() => go('connections')} icon={<PlugZap className="w-4 h-4" />}>Yönet</Button>}>
-          {status.loading ? <StateView kind="loading" compact /> : status.error ? <StateView kind="error" compact message={status.error} /> : (
-            <div className="grid grid-cols-2 gap-1.5">
-              {status.data?.connectors.filter((c) => c.category === 'social' || c.category === 'listing' || c.key === 'google_business' || c.key === 'canva').map((c) => (
-                <div key={c.key} className="flex items-center gap-2 rounded-lg bg-ink-900/60 px-2 py-1.5">
-                  <PlatformBadge platform={c.key} />
-                  <span className="min-w-0 flex-1 text-[11px] font-semibold text-ink-200 truncate">{c.name}</span>
-                  <span className={cx('w-2 h-2 rounded-full', TONE_DOT[connectionTone(c.status)])} title={connectionLabel(c.status)} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-          {status.data && <div className="mt-3 flex flex-wrap gap-1.5">
-            <Pill tone={aiReady ? 'go' : 'wait'}><Cpu className="w-3 h-3" /> Yapay zekâ {aiReady ? 'hazır' : 'anahtar gerekli'}</Pill>
-          </div>}
-        </Panel>
-
-        {/* ALERTS */}
-        <Panel kicker="Alerts" title="Dikkat gerektirenler" action={<AlertTriangle className="w-5 h-5 text-ink-500" />}>
-          {alerts.length === 0 ? <StateView kind="empty" compact title="Kritik uyarı yok" message="Hata veren görev veya bağlantısı kopan uygulama yok." /> : (
-            <ul className="space-y-1.5">
-              {alerts.slice(0, 6).map((a, i) => (
-                <li key={i}><button onClick={a.action} className="w-full text-left flex items-start gap-2 rounded-lg bg-ink-900/60 px-2.5 py-2 text-[12px] text-ink-200 hover:bg-ink-800">
-                  <span className={cx('mt-1 w-2 h-2 rounded-full shrink-0', TONE_DOT[a.tone])} />{a.text}</button></li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+        </Card>
+        <OwnerTodos />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* İÇERİK */}
-        <Panel kicker="Content Timeline" title="Ne yayınlanacak? (7 gün)" action={<Button variant="primary" onClick={() => go('studio')} icon={<Sparkles className="w-4 h-4" />}>Yeni gönderi</Button>}>
-          {d.drafts.length === 0 ? <StateView kind="empty" compact title="Planlı içerik yok" message="Gönderi Stüdyosu’nda içerik üretin veya İçerik Takvimi’nden aylık plan başlatın."
-            action={<Button variant="ghost" onClick={() => go('planner')} icon={<CalendarClock className="w-4 h-4" />}>Takvime git</Button>} /> : (
+      <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4">
+        {/* FİYAT SORANLAR */}
+        <Card title="Fiyat soranlar — dönüş bekleyenler" icon={<MessageCircle className="w-5 h-5 text-[#1E3FA0]" />} action={<LinkBtn onClick={() => go('leads')}>Tümü</LinkBtn>}>
+          <Prospects compact />
+        </Card>
+        {/* SON PAYLAŞIMLAR */}
+        <Card title="Son paylaşımlar" icon={<Heart className="w-5 h-5 text-[#1E3FA0]" />} action={<LinkBtn onClick={() => go('growth')}>Büyüme</LinkBtn>}>
+          {!lastPubs.length ? <StateView kind="empty" compact title="Henüz paylaşım yok" /> : (
             <ul className="space-y-1.5">
-              {d.drafts.map((dr) => (
-                <li key={dr.id} className="flex items-center gap-3 rounded-xl bg-ink-900/60 px-3 py-2">
-                  <PlatformBadge platform={dr.primary_platform || dr.platform_targets[0]} />
-                  <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold text-ink-100 truncate">{dr.title}</span><span className="block text-[10px] font-mono text-ink-500">{fmtDateTime(dr.scheduled_at)}</span></span>
-                  <Pill tone={approvalTone(dr.workflow_status)}>{approvalLabel(dr.workflow_status)}</Pill>
-                </li>
-              ))}
+              {lastPubs.map(({ p, m, c }) => {
+                const img = c?.design_url || c?.media_urls?.[0];
+                return (
+                  <li key={p.id} className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-ink-900 shrink-0">{img && !isVid(img) && <img src={img} alt="" loading="lazy" className="w-full h-full object-cover" />}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12px] font-semibold text-ink-100 line-clamp-1">{c?.headline || c?.title || 'Paylaşım'}</div>
+                      <div className="flex items-center gap-2 text-[11px] text-ink-400"><PlatformBadge platform={p.platform} />{p.published_at ? relTime(p.published_at) : ''}</div>
+                    </div>
+                    <div className="text-[11px] text-ink-300 font-mono tabular-nums text-right shrink-0">
+                      {m ? <><span className="inline-flex items-center gap-0.5"><Heart className="w-3 h-3" />{m.likes ?? '–'}</span> <span className="inline-flex items-center gap-0.5 ml-1"><MessageCircle className="w-3 h-3" />{m.comments ?? '–'}</span></> : <span className="text-ink-500">ölçülüyor</span>}
+                    </div>
+                    {p.external_url && <a href={p.external_url} target="_blank" rel="noreferrer" className="text-[#1E3FA0]"><ArrowRight className="w-4 h-4" /></a>}
+                  </li>
+                );
+              })}
             </ul>
           )}
-        </Panel>
-
-        {/* PERFORMANS */}
-        <Panel kicker="Performance Pulse" title="Ne sonuç verdi? (7 gün)" action={<TrendingUp className="w-5 h-5 text-ink-500" />}>
-          {d.pubs.length === 0 ? <StateView kind="not_connected" compact title="Henüz gerçek yayın yok" message="Uygulamalar bağlanıp ilk paylaşım yapıldığında sonuçlar burada görünür." action={<Button variant="ghost" onClick={() => go('connections')}>Platform bağla</Button>} /> : (
-            <ul className="space-y-1.5">
-              {d.pubs.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 rounded-xl bg-ink-900/60 px-3 py-2">
-                  <PlatformBadge platform={p.platform} />
-                  <span className="min-w-0 flex-1 text-[12px] text-ink-200 truncate">{p.external_url ? <a className="underline decoration-ink-600 hover:text-brand-green" href={p.external_url} target="_blank" rel="noreferrer">{p.external_post_id}</a> : (p.error || platformMeta(p.platform).name)}</span>
-                  <Pill tone={approvalTone(p.status)}>{approvalLabel(p.status)}</Pill>
-                </li>
-              ))}
-            </ul>
-          )}
-          <button onClick={() => go('planner')} className="mt-3 inline-flex items-center gap-1 text-[11px] text-ink-400 hover:text-brand-green">Tüm yayın geçmişi <ArrowRight className="w-3 h-3" /></button>
-        </Panel>
+        </Card>
       </div>
+
+      {/* BOTLARIN BULDUKLARI */}
+      <Card title="Botların son buldukları" icon={<FileText className="w-5 h-5 text-[#1E3FA0]" />} action={<LinkBtn onClick={() => go('reports')}>Bot sonuçları</LinkBtn>}>
+        {!d.missions.length ? <StateView kind="empty" compact title="Henüz rapor yok" /> : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {d.missions.map((m) => (
+              <button key={m.id} type="button" onClick={() => go('reports', m.id)} className="text-left rounded-xl ring-1 ring-ink-700/60 bg-white p-3 hover:ring-[#1E3FA0]">
+                <div className="text-[11px] text-ink-400">{m.finished_at ? relTime(m.finished_at) : ''}</div>
+                <div className="text-[13px] font-semibold text-ink-100 line-clamp-2">{m.title}</div>
+                <div className="text-[12px] text-ink-300 line-clamp-3 mt-1">{m.summary}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <details className="ops-panel p-3">
+        <summary className="cursor-pointer text-[12px] font-semibold text-ink-300 inline-flex items-center gap-2"><Settings2 className="w-4 h-4" />Otopilot ve bot ayarları</summary>
+        <div className="mt-3"><AutopilotCard /></div>
+      </details>
     </div>
   );
+}
+
+function HeroStat({ label, value, sub, onClick, hot = false }: { label: string; value: React.ReactNode; sub?: React.ReactNode; onClick?: () => void; hot?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} className={cx('text-left rounded-2xl px-3 py-2.5 transition', hot ? 'bg-[#8FC6F2] text-[#10153F]' : 'bg-white/10 hover:bg-white/15')}>
+      <div className={cx('text-[11px]', hot ? 'text-[#1E2470]' : 'text-[#B9D3F2]')}>{label}</div>
+      <div className="font-display text-2xl font-bold tabular-nums leading-tight">{value}</div>
+      {sub && <div className={cx('text-[11px] mt-0.5', hot ? 'text-[#1E2470]' : 'text-[#D6E4F7]')}>{sub}</div>}
+    </button>
+  );
+}
+
+function Card({ title, icon, action, children }: { title: string; icon?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="ops-panel p-4 sm:p-5">
+      <div className="flex items-center gap-2 mb-3">{icon}<h3 className="font-display text-base font-semibold text-ink-100">{title}</h3><span className="ml-auto">{action}</span></div>
+      {children}
+    </section>
+  );
+}
+
+function LinkBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return <button type="button" onClick={onClick} className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#1E3FA0] hover:underline">{children}<ChevronRight className="w-3.5 h-3.5" /></button>;
 }
