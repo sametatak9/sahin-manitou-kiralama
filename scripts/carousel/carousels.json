@@ -1,0 +1,51 @@
+{
+  "_not": "Numaralar scripts/media-sheets/list.json'daki 'n' (kontak sayfası numarası). Gerçek proje fotoğraflarımız; 79-86 (eski tasarım görselleri) kullanılmaz.",
+  "carousels": [
+    {
+      "slug": "c1-once-sonra",
+      "title": ["ÖNCE", "SONRA"],
+      "sub": "Aynı villa · 6 kare",
+      "cover": 61,
+      "slides": [
+        {"type": "pair", "before": 5, "after": 59, "label": "Taş şömineli salon"},
+        {"type": "pair", "before": 13, "after": 63, "label": "Galeri boşluklu yaşam alanı"},
+        {"type": "pair", "before": 25, "after": 71, "label": "Lacivert kitaplıklı çatı katı"},
+        {"type": "pair", "before": 1, "after": 57, "label": "Mutfak ve yemek alanı"},
+        {"type": "pair", "before": 33, "after": 65, "label": "Çatı katı oda"},
+        {"type": "pair", "before": 37, "after": 67, "label": "Üst kattan bakış"}
+      ],
+      "cta": "proje"
+    },
+    {
+      "slug": "c2-villa-turu",
+      "title": ["VİLLA", "TURU"],
+      "sub": "Oda oda bitmiş hâli",
+      "cover": 63,
+      "slides": [
+        {"type": "photo", "n": 47, "label": "Giriş"},
+        {"type": "photo", "n": 51, "label": "Merdiven"},
+        {"type": "photo", "n": 53, "label": "Kemerli niş"},
+        {"type": "photo", "n": 55, "label": "Ahşap dolaplı koridor"},
+        {"type": "photo", "n": 57, "label": "Yemek alanı"},
+        {"type": "photo", "n": 61, "label": "Salon"},
+        {"type": "photo", "n": 73, "label": "Taş duvarlı çalışma odası"},
+        {"type": "photo", "n": 49, "label": "Misafir banyosu"}
+      ],
+      "cta": "proje"
+    },
+    {
+      "slug": "c3-dis-mekan",
+      "title": ["DIŞ CEPHE", "BİTTİ"],
+      "sub": "Sıra peyzajda",
+      "cover": 45,
+      "slides": [
+        {"type": "photo", "n": 41, "label": "Üçgen cepheli villa"},
+        {"type": "photo", "n": 43, "label": "Taş kaplamalı yardımcı yapı"},
+        {"type": "photo", "n": 45, "label": "Tek katlı villa"},
+        {"type": "photo", "n": 9, "label": "İçeriden bahçe manzarası"},
+        {"type": "photo", "n": 47, "label": "Bitmiş giriş"}
+      ],
+      "cta": "teklif"
+    }
+  ]
+}
