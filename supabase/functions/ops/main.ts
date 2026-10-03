@@ -826,12 +826,20 @@ Deno.serve(async (req) => {
       if (!gk) throw new HttpError(400, 'Gemini anahtarı yok');
       const prompt = `${b.style || 'Sıcak, güven veren, akıcı bir reklam sunucusu tonuyla, acele etmeden Türkçe oku:'}\n${String(b.text).slice(0, 1500)}`;
       let lastErr = '';
-      for (const model of ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts']) {
+      // Ücretsiz katmanda yalnızca flash TTS modeli kotalı; dakikalık sınıra takılırsa Google'ın önerdiği süre kadar (≤60 sn) bekleyip bir kez daha dener
+      for (const model of ['gemini-2.5-flash-preview-tts', 'gemini-2.5-flash-preview-tts']) {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: 'POST', signal: AbortSignal.timeout(110_000), headers: { 'content-type': 'application/json', 'x-goog-api-key': gk },
+          method: 'POST', signal: AbortSignal.timeout(90_000), headers: { 'content-type': 'application/json', 'x-goog-api-key': gk },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: b.voice || 'Charon' } } } } }),
         });
-        if (!r.ok) { lastErr = `${model}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`; continue; }
+        if (!r.ok) {
+          const t = await r.text();
+          const quota = /"quotaId":\s*"([^"]+)"/.exec(t)?.[1] ?? ''; const wait = Number(/"retryDelay":\s*"(\d+)s"/.exec(t)?.[1] ?? 0);
+          lastErr = `${model}: HTTP ${r.status}${quota ? ` (${quota})` : ''} ${t.slice(0, 160)}`;
+          if (r.status === 429 && wait > 0 && wait <= 60 && !/PerDay/i.test(quota)) await new Promise((res) => setTimeout(res, (wait + 1) * 1000));
+          else if (r.status === 429) break;
+          continue;
+        }
         const j = await r.json();
         const data = j?.candidates?.[0]?.content?.parts?.find((p: { inlineData?: { data?: string } }) => p?.inlineData?.data)?.inlineData;
         if (!data?.data) { lastErr = `${model}: ses dönmedi`; continue; }

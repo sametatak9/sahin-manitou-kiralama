@@ -1,7 +1,7 @@
 // Yayın Kuyruğu: telefondan görsel/video yükle → platform + format + tarih/saat seç → bot o saatte resmi API ile paylaşır.
 // Başarı yalnızca platform API yanıtıyla (social_publications.external_post_id) gösterilir.
 import { useMemo, useRef, useState } from 'react';
-import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, RotateCcw, Send, Share2, Sparkles, Upload, X } from 'lucide-react';
+import { CalendarClock, ExternalLink, Film, ImagePlus, Loader2, Mic, MicOff, RotateCcw, Send, Share2, Sparkles, Upload, X } from 'lucide-react';
 import { callOps, errorCode, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { dayKey, fmtDateTime, istanbulToIso, relTime, timeOf, type Tone } from '../lib/format';
@@ -262,6 +262,23 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
     ]);
     return { drafts: unwrap(drafts) as Draft[], pubs: unwrap(pubs) as Publication[] };
   }, { drafts: [] as Draft[], pubs: [] as Publication[] }, [], ['social_drafts', 'social_publications']);
+  // Sunuculu / sunucusuz Reels ikizleri: media_library.edit.variant_of (sesli sürüm → orijinal)
+  const variants = useQuery(async () => {
+    const rows = unwrap(await db().from('media_library').select('edit').not('edit->>variant_of', 'is', null).is('archived_at', null)) as Array<{ edit: { slug?: string; variant_of?: string } }>;
+    const m = new Map<string, { voiced: boolean }>();
+    for (const r of rows) if (r.edit?.slug && r.edit.variant_of) { m.set(r.edit.slug, { voiced: true }); m.set(r.edit.variant_of, { voiced: false }); }
+    return m;
+  }, new Map<string, { voiced: boolean }>(), []);
+  const slugOf = (url?: string | null) => (url ? url.split('/').pop()?.replace(/\.mp4$/, '') ?? '' : '');
+  const swapVariant = async (g: Group) => {
+    setBusy(`v${g.key}`);
+    try {
+      const r = await db().rpc('swap_reel_variant', { p_ids: g.items.map((x) => x.id) });
+      if (r.error) throw r.error;
+      setMsg(r.data ? { tone: 'ok', text: 'Sürüm değiştirildi: aynı gün ve saatte diğer sürüm paylaşılacak; önceki sürüm havuza döndü.' } : { tone: 'warn', text: 'Bu videonun diğer sürümü havuzda bulunamadı.' });
+      q.reload();
+    } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+  };
   const pubBy = useMemo(() => { const m = new Map<string, Publication>(); q.data.pubs.forEach((p) => p.content_id && !m.has(p.content_id) && m.set(p.content_id, p)); return m; }, [q.data.pubs]);
   const fmtOk = (d: Draft) => fmt === 'all' || (fmt === 'reel' ? ['reel', 'short'].includes(d.format ?? '') : d.format === fmt);
   const DONE = ['published', 'failed', 'cancelled', 'rejected'];
@@ -330,6 +347,9 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
                     </div>
                     <div className="flex flex-wrap justify-end gap-1 shrink-0 max-w-[50%]">
                       {admin && mode === 'calendar' && <Button variant="subtle" loading={busy === g.key} onClick={() => publishNow(g)} icon={<Send className="w-3.5 h-3.5" />}>Şimdi</Button>}
+                      {mode === 'calendar' && d.format === 'reel' && variants.data.has(slugOf(d.video_url)) && (() => { const voiced = variants.data.get(slugOf(d.video_url))!.voiced; return (
+                        <Button variant="subtle" loading={busy === `v${g.key}`} onClick={() => swapVariant(g)} title={voiced ? 'Şu an sunuculu sürüm planlı' : 'Şu an sunucusuz sürüm planlı'}
+                          icon={voiced ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}>{voiced ? 'Sunucusuz yap' : 'Sunuculu yap'}</Button>); })()}
                       <DraftActionButtons draft={d} twins={g.items} onEdit={() => setEditing(g)} onDone={(m) => { setMsg(m); q.reload(); }} />
                       {pubs.filter((p) => p.external_url).map((p) => <a key={p.id} href={p.external_url!} target="_blank" rel="noreferrer" className="ops-chip"><ExternalLink className="w-3.5 h-3.5" />{p.platform === 'facebook' ? 'FB' : 'IG'}</a>)}
                     </div>

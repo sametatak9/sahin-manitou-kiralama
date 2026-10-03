@@ -1,12 +1,46 @@
 {
- "_not": "Sesli anlatımlı Reels (her videoda değil, seçilmiş birkaç tanesinde): gerçek çekimli Reels + canlı sunucu sesi (Google Gemini TTS, resmi API, ses: Puck) + altyazı + kısık müzik. Metinler: hayalinizdeki ev / villa tarzı, yalnızca videoda görünen gerçek işi anlatır; kapanış her zaman 'Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!'. Fiyat/süre gibi doğrulanmamış bilgi yok.",
+ "_not": "Her yeni Reels'in (11-18) iki sürümü var: sunucusuz (orijinal) ve sunuculu (bu liste). Panelde 'Sunuculu/Sunucusuz sürüm' ile takvimdekini ikiziyle değiştirebilirsiniz. Metin kuralı: büyük resim — ev, villa, çelik yapı, anahtar teslim; dolap/galeri gibi küçük detaylar vurgulanmaz. Kapanış: 'Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!'. Ses: Google Gemini TTS (resmi API), canlı ton (Puck). Fiyat/süre gibi doğrulanmamış bilgi yok.",
  "voice": "Puck",
  "items": [
-  {"slug": "19-sesli-karkastan-eve", "base": "11-karkastan-eve",
-   "text": "Çelik iskeletten, hayalinizdeki eve! Sağlam çelik, özenli işçilik ve anahtar teslim bir yuva. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"},
-  {"slug": "20-sesli-once-sonra", "base": "13-once-sonra-villa",
-   "text": "Hayalinizdeki villa böyle doğuyor! Önce boş bir salon… sonra taş şömineli, galeri boşluklu, ışıl ışıl bir yaşam alanı. Anahtar teslim, her detayıyla. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"},
-  {"slug": "22-sesli-orman-evi", "base": "16-mimari-orman-evi",
-   "text": "Ormanın içinde, doğayla iç içe modern bir ev! Ahşap cephe, ferah bir mutfak, şık bir banyo… Hayalinizdeki ev, düşündüğünüzden daha yakın. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"}
+  {
+   "slug": "19-sesli-karkastan-eve",
+   "base": "11-karkastan-eve",
+   "text": "Çelik iskeletten, hayalinizdeki eve! Embay Yapı ile sağlam çelik yapı, anahtar teslim ev. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "20-sesli-once-sonra",
+   "base": "13-once-sonra-villa",
+   "text": "Hayalinizdeki villa böyle doğuyor! Önce kaba inşaat… sonra anahtar teslim, yaşamaya hazır bir villa. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "22-sesli-orman-evi",
+   "base": "16-mimari-orman-evi",
+   "text": "Doğanın içinde modern bir ev! Çelik yapının gücüyle, anahtar teslim, yaşamaya hazır. Hayalinizdeki ev düşündüğünüzden daha yakın. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "24-sesli-evin-sirri",
+   "base": "12-evin-sirri",
+   "text": "Bu evin sırrı, duvarlarının içinde! Sağlam bir çelik iskelet, üstünde hayalinizdeki ev. Güçlü yapı, anahtar teslim. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "25-sesli-villa",
+   "base": "14-iscilik-detayda",
+   "text": "Baştan sona bizim inşa ettiğimiz bir villa! Çelik yapıdan iç mekâna, anahtar teslim. Sıradaki villa sizinki olabilir. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "26-sesli-dis-cephe",
+   "base": "15-dis-cephe-tamam",
+   "text": "Villalarımızın dış cepheleri tamam, sıra bahçede! Çelik yapı, sağlam ve modern. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "27-sesli-beyaz-villa",
+   "base": "17-mimari-beyaz-villa",
+   "text": "Sade çizgiler, güçlü bir yapı! Çelikten yükselen modern bir villa. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  },
+  {
+   "slug": "28-sesli-hayalinizdeki-villa",
+   "base": "18-mimari-isik-tas-ahsap",
+   "text": "Hayalinizdeki villa, içeriden böyle görünüyor! Ferah, aydınlık ve yaşamaya hazır. Anahtar teslim. Siz de böyle bir yapıya sahip olmak isterseniz, bize DM atın!"
+  }
  ]
 }
