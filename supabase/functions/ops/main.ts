@@ -272,28 +272,36 @@ async function metaWebhook(db: Db, req: Request, url: URL): Promise<Response> {
 }
 
 // ── Sistem kontrolü: her parça gerçekten çalışıyor mu? (secret değerleri döndürülmez) ──
-type Check = { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail'; detail: string; fix?: string };
+type Check = { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail' | 'off'; detail: string; fix?: string; route?: string };
 async function systemCheck(db: Db) {
   const checks: Check[] = [];
   const ago = (iso: string | null) => (iso ? Math.round((Date.now() - new Date(iso).getTime()) / 60000) : null);
 
   // 1) Zamanlanmış işler (bot motorları)
   const { data: jobs, error: je } = await db.rpc('ops_worker_health');
-  const JOB_LABEL: Record<string, string> = { 'embay-ops-worker': 'Bot görev + yayın motoru (her dakika)', 'embay-missions-worker': 'Araştırma görev motoru (her dakika)', 'embay-portfolio-reminders': 'Firma hatırlatmaları (her sabah 09:00)' };
+  const JOB_LABEL: Record<string, string> = { 'embay-ops-worker': 'Yayın + bot motoru (her dakika)', 'embay-missions-worker': 'Araştırma görevleri (her dakika)', 'embay-portfolio-reminders': 'Firma hatırlatmaları (her sabah 09:00)',
+    'embay-mission-schedules': 'Zamanlı bot görevleri (10 dakikada bir)', 'embay-newest-first': 'Takvimi toparla (her gece 00:30)', 'embay-stale-drafts-archive': 'Süresi geçen taslakları arşivle (her gece 00:45)',
+    'outreach-gunluk': 'Günlük takip mesajı önerileri', 'lead-imha-gunluk': 'KVKK: süresi dolan başvuruları temizle' };
   if (je) checks.push({ key: 'cron', group: 'Motor', label: 'Zamanlanmış işler', state: 'fail', detail: je.message });
   for (const j of (jobs || []) as Array<{ job: string; schedule: string; active: boolean; last_ok: string | null; last_status: string | null }>) {
     const everyMinute = j.schedule === '* * * * *'; const m = ago(j.last_ok);
     const ok = j.active && m !== null && m <= (everyMinute ? 3 : 26 * 60);
-    checks.push({ key: `cron:${j.job}`, group: 'Motor', label: JOB_LABEL[j.job] ?? j.job, state: ok ? 'ok' : !everyMinute && m === null ? 'warn' : 'fail',
-      detail: m === null ? 'Henüz çalışmadı' : `Son başarılı çalışma ${m} dk önce${j.last_status && j.last_status !== 'succeeded' ? ` · son durum: ${j.last_status}` : ''}` });
+    checks.push({ key: `cron:${j.job}`, group: 'Motor', label: JOB_LABEL[j.job] ?? j.job, state: ok ? 'ok' : !everyMinute && m === null ? 'ok' : 'fail',
+      detail: m === null ? 'Yeni eklendi — ilk çalışma saatini bekliyor' : `Son başarılı çalışma ${m} dk önce${j.last_status && j.last_status !== 'succeeded' ? ` · son durum: ${j.last_status}` : ''}` });
   }
 
   // 2) AI anahtarları — sağlayıcıdan gerçek (1 kelimelik) cevap istenerek canlı doğrulama
+  // Yedek sağlayıcı son 24 saatte başarılı üretim yaptıysa tek bir anahtarın sorunu "hata" değil "uyarı"dır (sistem çalışmaya devam eder)
+  const { data: okGen } = await db.from('ai_generations').select('provider').eq('status', 'succeeded').gte('created_at', new Date(Date.now() - 86400_000).toISOString()).limit(50);
+  const workingProviders = [...new Set((okGen || []).map((r: { provider: string }) => r.provider))];
+  checks.push({ key: 'ai:any', group: 'Yapay zekâ', label: 'İçerik/metin üretimi (son 24 saat)', state: workingProviders.length ? 'ok' : 'fail',
+    detail: workingProviders.length ? `Çalışıyor · ${workingProviders.join(', ')}` : 'Son 24 saatte başarılı üretim yok', fix: workingProviders.length ? undefined : 'Ayarlar → AI anahtarı', route: workingProviders.length ? undefined : 'settings' });
   for (const p of ['anthropic', 'gemini'] as const) {
     const key = await getAiKey(p); const label = p === 'anthropic' ? 'Claude (Anthropic) AI anahtarı' : 'Gemini AI anahtarı';
-    if (!key) { checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: p === 'anthropic' ? 'fail' : 'warn', detail: 'Tanımlı değil', fix: 'Ayarlar → AI anahtarı' }); continue; }
+    if (!key) { checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: 'off', detail: 'Tanımlı değil (isteğe bağlı)' }); continue; }
     const t = await liveKeyTest(p, key);
-    checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: t.ok ? 'ok' : 'fail', detail: t.ok ? `${t.detail} (…${key.slice(-4)})` : t.detail, fix: t.ok ? undefined : 'Ayarlar → AI anahtarı' });
+    checks.push({ key: `ai:${p}`, group: 'Yapay zekâ', label, state: t.ok ? 'ok' : workingProviders.length ? 'warn' : 'fail',
+      detail: t.ok ? `${t.detail} (…${key.slice(-4)})` : `${t.detail}${workingProviders.length ? ' — yedek sağlayıcı çalıştığı için sistem durmadı' : ''}`, fix: t.ok ? undefined : 'Ayarlar → AI anahtarı (kredi/anahtar)', route: t.ok ? undefined : 'settings' });
   }
 
   // 3) Son araştırma görevi
@@ -308,13 +316,15 @@ async function systemCheck(db: Db) {
 
   // 5) Uygulamalar: giriş bilgisi + hesap bağlantısı
   const { data: accounts } = await db.from('social_accounts').select('connector_key,platform,connection_status,external_account_name,token_expires_at,last_verified_at,last_error');
-  for (const k of ['instagram', 'facebook', 'youtube', 'whatsapp', 'email', 'telegram', 'canva']) {
+  const OPTIONAL = new Set(['youtube', 'whatsapp', 'email']);
+  for (const k of ['instagram', 'facebook', 'telegram', 'canva', 'youtube', 'whatsapp', 'email']) {
     const def = connectorByKey(k); if (!def) continue;
     const missing = def.requiredEnv.filter((e) => !secret(e));
     const acc = (accounts || []).find((a) => (a.connector_key === k || a.platform === k) && a.connection_status === 'connected');
     const st = resolveStatus(def, acc ?? null);
     const needsAccount = def.authType === 'oauth';
     let state: Check['state'] = 'ok'; let detail = ''; let fix: string | undefined;
+    if (OPTIONAL.has(k) && !acc && (missing.length || needsAccount)) { checks.push({ key: `app:${k}`, group: 'İsteğe bağlı', label: def.name, state: 'off', detail: 'Kullanılmıyor — gerekirse Uygulamalar ekranından bağlanır' }); continue; }
     if (missing.length) { state = 'warn'; detail = `Uygulama giriş bilgisi eksik: ${missing.join(', ')}`; fix = 'Uygulamalar → Giriş bilgileri'; }
     else if (needsAccount && !acc) { state = 'warn'; detail = 'Giriş bilgisi hazır · hesap henüz bağlanmadı'; fix = 'Uygulamalar → Bağla'; }
     else if (st !== 'connected') { state = 'fail'; detail = `Durum: ${st}`; fix = 'Yeniden bağlayın'; }
@@ -323,11 +333,35 @@ async function systemCheck(db: Db) {
       detail = `Bağlı${acc?.external_account_name ? ` · ${acc.external_account_name}` : ''}${exp ? ` · oturum ${Math.max(0, Math.round((exp - Date.now()) / 86400000))} gün geçerli` : ''}`;
       if (exp && exp - Date.now() < 7 * 86400000) { state = 'warn'; fix = 'Oturum süresi yakında doluyor — yeniden bağlayın'; }
     }
-    checks.push({ key: `app:${k}`, group: 'Uygulamalar', label: def.name, state, detail, fix });
+    checks.push({ key: `app:${k}`, group: 'Uygulamalar', label: def.name, state, detail, fix, route: state === 'ok' ? undefined : 'connections' });
+  }
+  // Meta izinleri: hesap "bağlı" olsa da yorum/istatistik izni eksik olabilir → Meta'ya sorulur (debug_token), sonuç hesaba yazılır
+  const fbAcc = (accounts || []).find((a) => a.connector_key === 'facebook' && a.connection_status === 'connected');
+  if (fbAcc && secret('META_APP_ID') && secret('META_APP_SECRET')) {
+    try {
+      const { data: full } = await db.from('social_accounts').select('*').eq('connector_key', 'facebook').eq('connection_status', 'connected').limit(1).maybeSingle();
+      const tok = await tokenFor(db, full as never);
+      const r = await fetch(`https://graph.facebook.com/${graphVersion()}/debug_token?input_token=${encodeURIComponent(tok)}&access_token=${encodeURIComponent(`${secret('META_APP_ID')}|${secret('META_APP_SECRET')}`)}`);
+      const dj = await r.json().catch(() => ({}));
+      const scopes: string[] = dj?.data?.scopes ?? [];
+      if (scopes.length) {
+        await db.from('social_accounts').update({ scopes, last_verified_at: new Date().toISOString() }).in('connector_key', ['facebook', 'instagram']).eq('connection_status', 'connected');
+        const NEED: Record<string, string> = { instagram_manage_comments: 'Instagram yorumlarını okuma/cevaplama', pages_read_user_content: 'Facebook yorumlarını okuma', instagram_manage_insights: 'Instagram istatistikleri', read_insights: 'Facebook istatistikleri', instagram_content_publish: 'Instagram’a paylaşım', pages_manage_posts: 'Facebook’a paylaşım' };
+        const missingP = Object.keys(NEED).filter((x) => !scopes.includes(x));
+        checks.push({ key: 'meta:perms', group: 'Uygulamalar', label: 'Meta izinleri', state: missingP.length ? 'fail' : 'ok',
+          detail: missingP.length ? `Eksik: ${missingP.map((x) => NEED[x]).join(', ')}` : `Tüm gerekli izinler verilmiş (${scopes.length} izin)`,
+          fix: missingP.length ? 'Uygulamalar → Facebook → Yeniden bağla → açılan Meta ekranında TÜM izinleri onaylayın' : undefined, route: missingP.length ? 'connections' : undefined });
+      } else checks.push({ key: 'meta:perms', group: 'Uygulamalar', label: 'Meta izinleri', state: 'warn', detail: `Meta izin listesi okunamadı${dj?.error?.message ? `: ${dj.error.message}` : ''}`, route: 'connections' });
+    } catch (e) { checks.push({ key: 'meta:perms', group: 'Uygulamalar', label: 'Meta izinleri', state: 'warn', detail: `Kontrol edilemedi: ${String((e as Error).message).slice(0, 120)}` }); }
+  }
+  // Telegram: bot anahtarı canlı test (getMe)
+  if (secret('TELEGRAM_BOT_TOKEN')) {
+    const t = await fetch(`https://api.telegram.org/bot${secret('TELEGRAM_BOT_TOKEN')}/getMe`).then((r) => r.json()).catch(() => ({ ok: false }));
+    checks.push({ key: 'telegram:live', group: 'Uygulamalar', label: 'Telegram botu (canlı test)', state: t.ok ? 'ok' : 'fail', detail: t.ok ? `@${t.result?.username} yanıt veriyor${secret('TELEGRAM_CHAT_ID') ? '' : ' · sohbet kimliği eksik'}` : 'Bot yanıt vermiyor — anahtarı kontrol edin', route: t.ok ? undefined : 'system' });
   }
   if (secret('META_APP_ID') || secret('META_APP_SECRET')) checks.push(...await verifyApp('meta'));
   if (secret('GOOGLE_CLIENT_ID') || secret('GOOGLE_CLIENT_SECRET')) checks.push(...await verifyApp('google'));
-  const summary = { ok: checks.filter((c) => c.state === 'ok').length, warn: checks.filter((c) => c.state === 'warn').length, fail: checks.filter((c) => c.state === 'fail').length };
+  const summary = { ok: checks.filter((c) => c.state === 'ok').length, warn: checks.filter((c) => c.state === 'warn').length, fail: checks.filter((c) => c.state === 'fail').length, off: checks.filter((c) => c.state === 'off').length };
   return { checked_at: new Date().toISOString(), summary, checks, redirect_uri: REDIRECT_URI() };
 }
 

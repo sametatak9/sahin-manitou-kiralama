@@ -9,8 +9,8 @@ import type { OpsStatus } from '../lib/types';
 import { useRouter, useSession } from '../session';
 import { Button, cx, ErrorState, Notice, Panel, Pill, StateView, Tabs } from '../ui';
 
-interface Check { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail'; detail: string; fix?: string }
-interface CheckResult { checked_at: string; summary: { ok: number; warn: number; fail: number }; checks: Check[]; redirect_uri: string }
+interface Check { key: string; group: string; label: string; state: 'ok' | 'warn' | 'fail' | 'off'; detail: string; fix?: string; route?: string }
+interface CheckResult { checked_at: string; summary: { ok: number; warn: number; fail: number; off?: number }; checks: Check[]; redirect_uri: string }
 
 interface CredField { name: string; label: string; secret: boolean; placeholder?: string }
 interface CredGroup { id: string; title: string; apps: string; why: string; fields: CredField[]; steps: string[]; link: { href: string; label: string }; redirect?: boolean }
@@ -46,43 +46,69 @@ const GROUPS: CredGroup[] = [
 ];
 
 function StateIcon({ s }: { s: Check['state'] }) {
-  return s === 'ok' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : s === 'warn' ? <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />;
+  return s === 'ok' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : s === 'warn' ? <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+    : s === 'off' ? <span className="w-5 h-5 rounded-full ring-2 ring-ink-700 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />;
 }
 
 function SystemCheckPanel() {
   const { go } = useRouter();
   const q = useQuery<CheckResult | null>(() => callOps<CheckResult>('system_check'), null, []);
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
-  const groups = q.data ? [...new Set(q.data.checks.map((c) => c.group))] : [];
+  const checks = q.data?.checks ?? [];
+  const problems = checks.filter((c) => c.state === 'fail' || c.state === 'warn').sort((a, b) => (a.state === 'fail' ? 0 : 1) - (b.state === 'fail' ? 0 : 1));
+  const okGroups = [...new Set(checks.filter((c) => c.state === 'ok').map((c) => c.group))];
+  const optional = checks.filter((c) => c.state === 'off');
+  const fixGo = (c: Check) => (c.route ? go(c.route as never) : c.fix?.startsWith('Ayarlar') ? go('settings', null, { tab: 'ai' }) : c.fix?.includes('Giriş bilgileri') ? go('system', null, { tab: 'credentials' }) : go('connections'));
+  const fails = checks.filter((c) => c.state === 'fail').length;
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {q.data && <>
-          <Pill tone="go">{q.data.summary.ok} ÇALIŞIYOR</Pill>
-          {q.data.summary.warn > 0 && <Pill tone="wait">{q.data.summary.warn} EKSİK</Pill>}
-          {q.data.summary.fail > 0 && <Pill tone="stop">{q.data.summary.fail} HATA</Pill>}
-          <span className="text-[11px] text-ink-500">{relTime(q.data.checked_at)} kontrol edildi</span>
-        </>}
-        <div className="flex-1" />
-        <Button variant="ghost" loading={q.loading} onClick={q.reload} icon={<RefreshCw className="w-4 h-4" />}>Yeniden kontrol et</Button>
-      </div>
-      {q.loading && !q.data ? <StateView kind="loading" title="Sistem kontrol ediliyor…" message="Motorlar, AI anahtarı (canlı doğrulama), depo ve uygulama bağlantıları test ediliyor." compact /> : groups.map((g) => (
-        <Panel key={g} title={g}>
-          <ul className="divide-y divide-ink-800">
-            {q.data!.checks.filter((c) => c.group === g).map((c) => (
-              <li key={c.key} className="py-2.5 flex items-start gap-2.5">
+      {q.loading && !q.data ? <StateView kind="loading" title="Sistem kontrol ediliyor…" message="Motorlar, yapay zekâ, Meta izinleri, Telegram ve depo canlı test ediliyor (≈20 sn)." compact /> : q.data && <>
+        <section className={cx('rounded-2xl p-4 ring-1 flex flex-wrap items-center gap-3', fails ? 'bg-rose-50 ring-rose-200' : problems.length ? 'bg-amber-50 ring-amber-200' : 'bg-emerald-50 ring-emerald-200')}>
+          {fails ? <XCircle className="w-8 h-8 text-rose-600" /> : problems.length ? <AlertTriangle className="w-8 h-8 text-amber-600" /> : <CheckCircle2 className="w-8 h-8 text-emerald-600" />}
+          <div className="flex-1 min-w-[12rem]">
+            <div className={cx('font-display text-lg font-bold', fails ? 'text-rose-800' : problems.length ? 'text-amber-800' : 'text-emerald-800')}>
+              {problems.length ? `${problems.length} konu ilgi bekliyor` : 'Her şey çalışıyor'}</div>
+            <div className="text-[12px] text-ink-400">{q.data.summary.ok} kontrol sorunsuz · {relTime(q.data.checked_at)} canlı test edildi</div>
+          </div>
+          <Button variant="ghost" loading={q.loading} onClick={q.reload} icon={<RefreshCw className="w-4 h-4" />}>Yeniden kontrol et</Button>
+        </section>
+        {problems.length > 0 && (
+          <ul className="space-y-1.5">
+            {problems.map((c) => (
+              <li key={c.key} className="ops-panel p-3 flex items-start gap-2.5">
                 <StateIcon s={c.state} />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-ink-100">{c.label}</div>
                   <div className="text-xs text-ink-400">{c.detail}</div>
+                  {c.fix && <div className="text-[11px] text-ink-300 mt-0.5">Ne yapmalı: {c.fix}</div>}
                 </div>
-                {c.fix && <button type="button" className="text-[11px] font-semibold text-brand-green underline shrink-0"
-                  onClick={() => (c.fix!.startsWith('Ayarlar') ? go('settings', null, { tab: 'ai' }) : c.fix!.includes('Giriş bilgileri') ? go('system', null, { tab: 'credentials' }) : c.fix!.startsWith('Bot') ? go('bots') : go('connections'))}>{c.fix}</button>}
+                <Button variant="primary" onClick={() => fixGo(c)}>Düzelt</Button>
               </li>
             ))}
           </ul>
-        </Panel>
-      ))}
+        )}
+        <details className="ops-panel p-3">
+          <summary className="cursor-pointer text-[13px] font-semibold text-ink-200">Çalışanlar ({checks.filter((c) => c.state === 'ok').length})</summary>
+          <div className="mt-2 space-y-3">
+            {okGroups.map((g) => (
+              <div key={g}>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400 mb-1">{g}</div>
+                <ul className="space-y-1">
+                  {checks.filter((c) => c.group === g && c.state === 'ok').map((c) => (
+                    <li key={c.key} className="flex items-start gap-2 text-[12px]"><StateIcon s={c.state} /><span className="font-medium text-ink-100">{c.label}</span><span className="text-ink-400 truncate">· {c.detail}</span></li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </details>
+        {optional.length > 0 && (
+          <details className="ops-panel p-3">
+            <summary className="cursor-pointer text-[13px] font-semibold text-ink-400">İsteğe bağlı, kullanılmayanlar ({optional.length})</summary>
+            <ul className="mt-2 space-y-1">{optional.map((c) => <li key={c.key} className="flex items-center gap-2 text-[12px] text-ink-400"><StateIcon s={c.state} />{c.label} · {c.detail}</li>)}</ul>
+          </details>
+        )}
+      </>}
     </div>
   );
 }
@@ -275,7 +301,7 @@ export function SystemScreen() {
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-xl font-semibold text-ink-100">Bağlantı & Sistem Kontrolü</h1>
-        <p className="text-sm text-ink-400">Botlar, yapay zekâ ve uygulama bağlantıları gerçekten çalışıyor mu — tek ekranda. Uygulama giriş bilgileri burada bir kez girilir ve kalıcı saklanır.</p>
+        <p className="text-sm text-ink-400">Her şey çalışıyor mu? Sorun varsa en üstte, “Düzelt” düğmesiyle.</p>
       </div>
       <Tabs value={tab} onChange={(t) => go('system', null, t === 'check' ? {} : { tab: t })}
         items={[{ id: 'check', label: 'Sistem kontrolü' }, { id: 'keys', label: 'Kayıtlı anahtarlar' }, { id: 'credentials', label: 'Giriş bilgileri' }]} className={cx('')} />
