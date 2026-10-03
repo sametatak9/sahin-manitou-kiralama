@@ -85,14 +85,30 @@ def slide_cover(c, urls, total):
     img = grade(cover_fit(photo(c['cover'], urls), W, H)).convert('RGBA')
     shade = Image.new('RGBA', (W, H), (12, 14, 40, 0)); shade.putalpha(gradient(W, H, 30, 215)); img.alpha_composite(shade)
     d = ImageDraw.Draw(img)
-    pill(d, 70, 760, 'EMBAY YAPI', NAVY + (235,), 34)
-    y = 850
-    for i, ln in enumerate(c['title']):
-        t = tr_up(ln); f = fit(d, t, 'head', 190, W - 140)
-        d.text((70, y), t, font=f, fill=LIGHT if i == len(c['title']) - 1 else WHITE)
-        y += f.getbbox(t)[3] + 10
-    fs = font('sub', 42); d.text((72, y + 10), c['sub'], font=fs, fill=WHITE)
-    pill(d, W - 330, H - 120, 'KAYDIR  →', BLUE + (255,), 36)
+    # Alttan yukarı yerleşim: [EMBAY YAPI etiketi] / başlık satırları / alt yazı / KAYDIR
+    lines = [tr_up(t) for t in c['title']]
+    f = font('head', 170)
+    for t in lines:
+        f = fit(d, t, 'head', min(170, f.size), W - 140)
+    boxes = [f.getbbox(t) for t in lines]
+    gap = 22; fs = font('sub', 44)
+    block = sum(b[3] - b[1] for b in boxes) + gap * (len(lines) - 1)
+    bottom = H - 220
+    sub_h = fs.getbbox(c['sub'])[3] - fs.getbbox(c['sub'])[1]
+    y = bottom - sub_h - 34 - block
+    pill(d, 70, y - 96, 'EMBAY YAPI', NAVY + (235,), 34)
+    for i, (t, b) in enumerate(zip(lines, boxes)):
+        d.text((70, y - b[1]), t, font=f, fill=LIGHT if i == len(lines) - 1 else WHITE)
+        y += (b[3] - b[1]) + gap
+    sb = fs.getbbox(c['sub']); d.text((72, y + 12 - sb[1]), c['sub'], font=fs, fill=WHITE)
+    # KAYDIR + çizilmiş ok
+    fk = font('sub', 38); tk = 'KAYDIR'; kw = d.textlength(tk, font=fk); kb = fk.getbbox(tk)
+    bx, by, bh = W - 70 - (kw + 140), H - 150, 76
+    d.rounded_rectangle([bx, by, W - 70, by + bh], radius=bh // 2, fill=BLUE + (255,))
+    d.text((bx + 30, by + (bh - (kb[3] - kb[1])) / 2 - kb[1]), tk, font=fk, fill=WHITE)
+    ax, ay = bx + 30 + kw + 22, by + bh / 2
+    d.line([(ax, ay), (ax + 46, ay)], fill=WHITE, width=6)
+    d.polygon([(ax + 56, ay), (ax + 38, ay - 14), (ax + 38, ay + 14)], fill=WHITE)
     corner_logo(img); counter(d, 1, total)
     return img
 
