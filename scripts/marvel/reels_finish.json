@@ -1,0 +1,676 @@
+{
+ "crop": {
+  "4": [
+   0,
+   0.12,
+   1,
+   1
+  ],
+  "8": [
+   0,
+   0,
+   1,
+   0.62
+  ],
+  "14": [
+   0,
+   0.15,
+   1,
+   0.7
+  ]
+ },
+ "reels": [
+  {
+   "slug": "29-bitti-teslime-hazir",
+   "music": "funk_130_9",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "BİTTİ,",
+    "TESLİME HAZIR"
+   ],
+   "sub": "Embay Yapı villaları",
+   "trans": [
+    "whip",
+    "zoom",
+    "flash",
+    "whip",
+    "glitch",
+    "zoom"
+   ],
+   "shots": [
+    [
+     117,
+     0.3,
+     3,
+     "İKİ KATLI VİLLA"
+    ],
+    [
+     115,
+     0.5,
+     3,
+     "ÜÇGEN CEPHE"
+    ],
+    [
+     118,
+     4.8,
+     3,
+     "TEK KATLI VİLLA"
+    ],
+    [
+     119,
+     1.0,
+     3
+    ],
+    [
+     117,
+     3.6,
+     3,
+     "ÇELİK YAPI"
+    ],
+    [
+     118,
+     6.3,
+     3,
+     "GENİŞ TERAS"
+    ],
+    [
+     115,
+     3.3,
+     3,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "30-iceri-buyurun",
+   "music": "drift_140_10",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "İÇERİ",
+    "BUYURUN"
+   ],
+   "sub": "Anahtar teslim villa",
+   "trans": [
+    "zoom",
+    "whip",
+    "flash",
+    "zoom",
+    "whip"
+   ],
+   "shots": [
+    [
+     120,
+     0.5,
+     4,
+     "YAŞAM ALANI"
+    ],
+    [
+     121,
+     0.3,
+     3,
+     "İKİ KATLI VİLLA"
+    ],
+    [
+     122,
+     0.5,
+     4
+    ],
+    [
+     123,
+     0.3,
+     3,
+     "YAŞAMAYA HAZIR"
+    ],
+    [
+     120,
+     9.0,
+     4,
+     "FERAH SALON"
+    ],
+    [
+     122,
+     6.0,
+     3,
+     "ANAHTAR TESLİM",
+     "ramp"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "31-uc-saniyede-donusum",
+   "music": "funk_128_11",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "3 SANİYEDE",
+    "DÖNÜŞÜM"
+   ],
+   "sub": "Kaba inşaattan anahtar teslime",
+   "trans": [
+    "flash",
+    "wipe",
+    "flash",
+    "glitch",
+    "flash",
+    "wipe",
+    "flash"
+   ],
+   "shots": [
+    [
+     104,
+     0.5,
+     2,
+     "ÖNCE"
+    ],
+    [
+     121,
+     0.5,
+     2,
+     "SONRA"
+    ],
+    [
+     113,
+     1.0,
+     2,
+     "ÖNCE"
+    ],
+    [
+     122,
+     1.0,
+     3,
+     "SONRA"
+    ],
+    [
+     105,
+     0.5,
+     2,
+     "ÖNCE"
+    ],
+    [
+     120,
+     10.0,
+     3,
+     "SONRA"
+    ],
+    [
+     110,
+     0.5,
+     2,
+     "ÖNCE"
+    ],
+    [
+     123,
+     0.5,
+     3,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "32-celikten-eve",
+   "music": "drift_140_10",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "ÇELİKTEN",
+    "EVE"
+   ],
+   "sub": "Sağlam yapı · anahtar teslim",
+   "trans": [
+    "whip",
+    "glitch",
+    "zoom",
+    "whip",
+    "flash",
+    "zoom"
+   ],
+   "shots": [
+    [
+     8,
+     5.0,
+     3,
+     "ÇELİK İSKELET"
+    ],
+    [
+     8,
+     15.0,
+     3
+    ],
+    [
+     8,
+     25.0,
+     3,
+     "SAĞLAM YAPI"
+    ],
+    [
+     8,
+     44.0,
+     3,
+     "DIŞ CEPHE"
+    ],
+    [
+     8,
+     54.0,
+     3
+    ],
+    [
+     8,
+     63.0,
+     3,
+     "ANAHTAR TESLİM"
+    ],
+    [
+     8,
+     70.0,
+     3,
+     "HAYALİNİZDEKİ EV"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "33-betonarmeden-villaya",
+   "music": "funk_130_9",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "BETONARMEDEN",
+    "VİLLAYA"
+   ],
+   "sub": "Embay Yapı ile adım adım",
+   "trans": [
+    "whip",
+    "zoom",
+    "glitch",
+    "whip",
+    "flash",
+    "zoom"
+   ],
+   "shots": [
+    [
+     14,
+     4.5,
+     3,
+     "KABA İNŞAAT"
+    ],
+    [
+     14,
+     13.5,
+     3
+    ],
+    [
+     14,
+     23.0,
+     3,
+     "BETONARME"
+    ],
+    [
+     14,
+     33.0,
+     3,
+     "DIŞ CEPHE"
+    ],
+    [
+     14,
+     45.0,
+     3,
+     "MODERN VİLLA"
+    ],
+    [
+     14,
+     56.0,
+     3
+    ],
+    [
+     14,
+     66.0,
+     3,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "34-bitmis-villamiz",
+   "music": "funk_128_11",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "BİTMİŞ",
+    "VİLLAMIZ"
+   ],
+   "sub": "Gerçek proje fotoğrafları",
+   "trans": [
+    "zoom",
+    "whip",
+    "flash",
+    "zoom",
+    "whip",
+    "glitch"
+   ],
+   "shots": [
+    [
+     241,
+     0.2,
+     3,
+     "ÜÇGEN CEPHELİ VİLLA"
+    ],
+    [
+     245,
+     0.2,
+     3,
+     "TEK KATLI VİLLA"
+    ],
+    [
+     261,
+     0.2,
+     3,
+     "YAŞAM ALANI"
+    ],
+    [
+     263,
+     0.2,
+     3,
+     "İKİ KATLI VİLLA"
+    ],
+    [
+     257,
+     0.2,
+     3
+    ],
+    [
+     247,
+     0.2,
+     3,
+     "YAŞAMAYA HAZIR"
+    ],
+    [
+     243,
+     0.2,
+     3,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "35-hayalinizdeki-ev-hangisi",
+   "music": "phonk_130_2",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "HAYALİNİZDEKİ EV",
+    "HANGİSİ?"
+   ],
+   "sub": "Yorumlara yazın",
+   "trans": [
+    "flash",
+    "whip",
+    "flash",
+    "whip",
+    "zoom"
+   ],
+   "shots": [
+    [
+     301,
+     0.2,
+     3,
+     "A-FRAME"
+    ],
+    [
+     302,
+     0.2,
+     3,
+     "İSKANDİNAV"
+    ],
+    [
+     303,
+     0.2,
+     3,
+     "TAŞ EV"
+    ],
+    [
+     304,
+     0.2,
+     3,
+     "HAVUZLU VİLLA"
+    ],
+    [
+     241,
+     0.2,
+     3,
+     "GERÇEK EMBAY PROJESİ"
+    ],
+    [
+     245,
+     0.2,
+     3,
+     "BİZ YAPARIZ"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "36-tek-katli-villa",
+   "music": "funk_130_9",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "TEK KATLI",
+    "VİLLA"
+   ],
+   "sub": "Merdivensiz rahat yaşam",
+   "trans": [
+    "whip",
+    "zoom",
+    "flash",
+    "whip",
+    "zoom",
+    "glitch"
+   ],
+   "shots": [
+    [
+     118,
+     0.3,
+     3,
+     "TEK KATLI VİLLA"
+    ],
+    [
+     119,
+     1.5,
+     3
+    ],
+    [
+     118,
+     6.0,
+     3,
+     "GENİŞ TERAS"
+    ],
+    [
+     245,
+     0.2,
+     3,
+     "GERÇEK EMBAY PROJESİ"
+    ],
+    [
+     115,
+     0.5,
+     3,
+     "ÜÇGEN CEPHE"
+    ],
+    [
+     119,
+     3.5,
+     3,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "37-doganin-icinde-modern-yasam",
+   "music": "drift_140_10",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "DOĞANIN İÇİNDE",
+    "MODERN YAŞAM"
+   ],
+   "sub": "Çelik yapı · biten projemiz",
+   "trans": [
+    "zoom",
+    "whip",
+    "glitch",
+    "zoom",
+    "flash",
+    "whip"
+   ],
+   "shots": [
+    [
+     4,
+     10.0,
+     3,
+     "MODERN EV"
+    ],
+    [
+     4,
+     25.0,
+     3
+    ],
+    [
+     4,
+     38.0,
+     3,
+     "DOĞANIN İÇİNDE"
+    ],
+    [
+     4,
+     50.0,
+     3
+    ],
+    [
+     4,
+     65.0,
+     3,
+     "YAŞAMAYA HAZIR"
+    ],
+    [
+     4,
+     78.0,
+     3
+    ],
+    [
+     4,
+     90.0,
+     3,
+     "ANAHTAR TESLİM"
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  },
+  {
+   "slug": "38-hayalinizdeki-ev-bizimle",
+   "music": "funk_130_9",
+   "intro": "hook",
+   "outro_card": "public/reels/kit/15-kapanis-karti-dm.mp4",
+   "hook": [
+    "HAYALİNİZDEKİ EV",
+    "BİZİMLE"
+   ],
+   "sub": "Embay Yapı",
+   "trans": [
+    "flash",
+    "whip",
+    "glitch",
+    "zoom",
+    "flash",
+    "whip",
+    "zoom",
+    "flash",
+    "glitch"
+   ],
+   "shots": [
+    [
+     117,
+     0.3,
+     2,
+     "VİLLA"
+    ],
+    [
+     121,
+     0.5,
+     2
+    ],
+    [
+     8,
+     63.0,
+     2,
+     "ÇELİK YAPI"
+    ],
+    [
+     14,
+     56.0,
+     2
+    ],
+    [
+     120,
+     2.0,
+     2,
+     "YAŞAM ALANI"
+    ],
+    [
+     118,
+     6.3,
+     2
+    ],
+    [
+     122,
+     4.0,
+     2
+    ],
+    [
+     115,
+     0.5,
+     2,
+     "ANAHTAR TESLİM"
+    ],
+    [
+     123,
+     1.0,
+     2
+    ],
+    [
+     241,
+     0.2,
+     3
+    ]
+   ],
+   "pace": "orta",
+   "sharp": true,
+   "min_short": 700
+  }
+ ]
+}

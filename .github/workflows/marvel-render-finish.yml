@@ -1,0 +1,66 @@
+# EMBAY · Bitmiş yapılar tanıtım Reels (29-38): ritme oturan geçişler, telifsiz funk/drift ritimleri, gerçek çekim + fotoğraf (+ az sayıda temsili yapay zekâ görseli)
+name: Bitmiş Yapılar Reels
+on:
+  workflow_dispatch:
+    inputs:
+      only: { description: 'Yalnızca bu slug ile başlayanlar (boş = hepsi)', required: false, default: '' }
+  push:
+    branches: [main]
+    paths: ['scripts/marvel/reels_finish.json', 'scripts/marvel/stills.py']
+permissions:
+  contents: write
+concurrency:
+  group: marvel-render-finish
+  cancel-in-progress: true
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 1 }
+      - name: Araçlar
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          pip install -q pillow numpy opencv-python-headless
+          mkdir -p scripts/marvel/fonts
+          curl -sSfL -o scripts/marvel/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
+          curl -sSfL -o scripts/marvel/fonts/BebasNeue-Regular.ttf https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf
+          curl -sSfL -o scripts/marvel/fonts/Oswald-VF.ttf "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf"
+      - name: Kaynak çekimler ve görsel sahneler
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          cfg = json.load(open('scripts/marvel/reels_finish.json'))
+          need = {s[0] for r in cfg['reels'] for s in r['shots']}
+          os.makedirs('scripts/marvel/src_finish', exist_ok=True)
+          for it in json.load(open('scripts/marvel/sources_drive.json')) + json.load(open('scripts/marvel/sources.json')):
+              if it['n'] not in need: continue
+              p = f"scripts/marvel/src_finish/{it['n']}.mp4"
+              if not os.path.exists(p): urllib.request.urlretrieve(it['url'], p)
+              print('ok', it['n'], os.path.getsize(p))
+          open('/tmp/need.txt', 'w').write(','.join(str(n) for n in sorted(need)))
+          PY
+          python3 scripts/marvel/stills.py --src scripts/marvel/src_finish --need "$(cat /tmp/need.txt)"
+      - name: Kurgu
+        run: python3 scripts/marvel/marvel.py --config reels_finish.json --src scripts/marvel/src_finish --out public/reels/marvel --only "${{ github.event.inputs.only }}"
+      - name: Instagram için sıkıştır
+        run: |
+          for s in $(python3 -c "import json;print(' '.join(r['slug'] for r in json.load(open('scripts/marvel/reels_finish.json'))['reels']))"); do
+            f="public/reels/marvel/$s.mp4"; [ -f "$f" ] || continue
+            ffmpeg -v error -y -i "$f" -c:v libx264 -preset slow -crf 22 -maxrate 7M -bufsize 14M -pix_fmt yuv420p -profile:v high -c:a copy -movflags +faststart "/tmp/$s.mp4" && mv "/tmp/$s.mp4" "$f"
+            # Müziksiz kopya: Instagram uygulamasından trend ses eklemek isteyenler için (telifli şarkılar yalnızca uygulama içinden eklenebilir)
+            ffmpeg -v error -y -i "$f" -c:v copy -an -movflags +faststart "public/reels/marvel/$s-sessiz.mp4"
+            ls -la "$f"
+          done
+      - name: Depoya yaz
+        run: |
+          git config user.name "embay-reels-bot"
+          git config user.email "embay-reels-bot@users.noreply.github.com"
+          for s in $(python3 -c "import json;print(' '.join(r['slug'] for r in json.load(open('scripts/marvel/reels_finish.json'))['reels']))"); do
+            git add "public/reels/marvel/$s.mp4" "public/reels/marvel/$s.jpg" "public/reels/marvel/$s-sessiz.mp4" 2>/dev/null || true
+          done
+          git add public/reels/marvel/index.json public/reels/kit/15-kapanis-karti-dm.mp4 2>/dev/null || true
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Bitmiş yapılar Reels ($(date -u +%Y-%m-%dT%H:%MZ))"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done

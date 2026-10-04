@@ -193,6 +193,28 @@ def make(style, bpm, seconds, seed):
                 if style == 'phonk': tr.put(tr.mel, cowbell(note * 2, 0.22), t0 + st * B, 0.9)
                 elif style == 'drill': (tr.put(tr.mel, bell(note, 0.5), t0 + st * B, 0.8) if i % 2 == 0 else None)
                 else: tr.put(tr.mel, bell(note * 2, 0.45) if i % 2 == 0 else pluck(note, 0.3), t0 + st * B, 0.8)
+        elif style in ('funk', 'drift'):
+            # Brezilya funk (tamborzão) / drift phonk: 16'lık kick deseni, el çırpma 2-4'te, distorsiyonlu çan melodisi, kayan 808
+            if on:
+                ks = [0, 3, 6, 8, 11, 14] if style == 'funk' else [0, 3, 8, 10, 14]
+                for st in ks: tr.put(tr.drums, kick(1.1), t0 + st * B / 4, 1.0 if st % 8 == 0 else 0.85)
+                for st in (4, 12): tr.put(tr.drums, clap(), t0 + st * B / 4, 0.95)
+                for st in range(16):
+                    if style == 'funk' and st % 4 == 2: tr.put(tr.drums, rim(), t0 + st * B / 4, 0.8)
+                    tr.put(tr.drums, hat(), t0 + st * B / 4, 0.55 if st % 2 else 0.8)
+                if bar % 4 == 3:  # ölçü sonu dolgusu
+                    for st in (13, 14, 15): tr.put(tr.drums, snare(230, 1.0, 0.08), t0 + st * B / 4, 0.55)
+                tr.put(tr.bass, bass808(bf, 1.6 * B, bf * (1.5 if bar % 2 else 0.75)), t0)
+                tr.put(tr.bass, bass808(bf * (1.33 if style == 'drift' else 1.0), 1.4 * B), t0 + 2 * B, 0.85)
+            else:
+                for st in range(0, 16, 2): tr.put(tr.drums, hat(), t0 + st * B / 4, 0.4)
+            # 16'lık çan ostinatosu (drift'te daha yüksek ve kayan)
+            motif = [0, 0, 4, 0, 3, 0, 4, 5] if style == 'funk' else [0, 4, 7, 4, 3, 4, 5, 4]
+            for st in range(16):
+                deg2 = motif[st % 8] + deg
+                note = sc[deg2 % 7] * (2 if deg2 >= 7 else 1) * (2 if style == 'drift' else 1)
+                if style == 'funk' and st % 2: continue
+                tr.put(tr.mel, np.tanh(cowbell(note * 2, 0.18) * 3) * 0.35, t0 + st * B / 4, 0.9 if st % 4 == 0 else 0.7)
         elif style == 'house':
             ch = [sc[(deg + k) % 7] for k in (0, 2, 4)]
             if on:
@@ -217,7 +239,8 @@ def make(style, bpm, seconds, seed):
     return tr.mix(intro)
 
 
-STYLES = [('trap', 140), ('phonk', 130), ('house', 124), ('afro', 108), ('drill', 142), ('trap', 150), ('house', 120), ('phonk', 125)]
+STYLES = [('trap', 140), ('phonk', 130), ('house', 124), ('afro', 108), ('drill', 142), ('trap', 150), ('house', 120), ('phonk', 125),
+          ('funk', 130), ('drift', 140), ('funk', 128)]
 
 
 def write_m4a(x, path):
