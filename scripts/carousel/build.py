@@ -13,6 +13,9 @@ FONTS = os.path.join(ROOT, 'scripts', 'marvel', 'fonts')
 
 
 def font(kind, size):
+    import sys; sys.path.insert(0, FONTS.rsplit(os.sep, 1)[0]); from brandfont import montserrat
+    m = montserrat(size, 700 if kind == 'head' else 400)   # kurumsal Montserrat: başlık 700, metin ince 400
+    if m: return m
     cands = {'head': ['Anton-Regular.ttf', 'BebasNeue-Regular.ttf'], 'sub': ['Oswald-VF.ttf']}[kind]
     for c in cands:
         p = os.path.join(FONTS, c)

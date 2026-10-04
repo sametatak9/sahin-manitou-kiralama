@@ -37,7 +37,10 @@ def ffmpeg():
 
 
 def F(size, kind='display'):
-    """Anton / Bebas (Actions'ta indirilir) → yoksa DejaVu Bold."""
+    """Kurumsal Montserrat (başlık 700, alt yazı 500) → yoksa Anton / Bebas → DejaVu Bold."""
+    from brandfont import montserrat
+    m = montserrat(size, 700 if kind == 'display' else 500)
+    if m: return m
     names = {'display': ['Anton-Regular.ttf', 'BebasNeue-Regular.ttf'], 'sub': ['Oswald-VF.ttf', 'BebasNeue-Regular.ttf']}[kind]
     for n in names + ['DejaVuSans-Bold.ttf']:
         for d in [os.path.join(HERE, 'fonts'), '/usr/share/fonts/truetype/dejavu']:

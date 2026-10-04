@@ -19,6 +19,9 @@ def ffmpeg():
 
 
 def font(size):
+    from brandfont import montserrat
+    m = montserrat(size, 400)
+    if m: return m
     p = os.path.join(HERE, 'fonts', 'Oswald-VF.ttf')
     return ImageFont.truetype(p, size) if os.path.exists(p) else ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', int(size * 0.8))
 

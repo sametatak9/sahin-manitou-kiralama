@@ -25,6 +25,7 @@ jobs:
           pip install -q pillow
           mkdir -p scripts/marvel/fonts
           curl -sSfL -o scripts/marvel/fonts/Oswald-VF.ttf "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf"
+          curl -sSfL -o scripts/marvel/fonts/Montserrat-VF.ttf "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"
       - run: python3 scripts/marvel/narrate.py --only "${{ github.event.inputs.only }}"
       - name: Depoya yaz
         run: |

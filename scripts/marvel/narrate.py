@@ -40,6 +40,9 @@ def silences(wav):
 
 
 def font(size):
+    from brandfont import montserrat
+    m = montserrat(size, 600)   # altyazı: Montserrat SemiBold
+    if m: return m
     for f in ('Oswald-VF.ttf', 'Anton-Regular.ttf'):
         p = os.path.join(HERE, 'fonts', f)
         if os.path.exists(p):

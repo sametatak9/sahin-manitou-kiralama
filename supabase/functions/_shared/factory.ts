@@ -81,6 +81,9 @@ async function ensureRenderer() {
   if (!fonts) {
     const get = async (f: string) => new Uint8Array(await (await fetch(`https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/${f}`)).arrayBuffer());
     fonts = await Promise.all([get('DejaVuSans-Bold.ttf'), get('DejaVuSans.ttf'), get('DejaVuSans-ExtraLight.ttf'), get('DejaVuSerif-Bold.ttf'), get('DejaVuSerif.ttf'), get('DejaVuSerif-Italic.ttf')]);
+    // Kurumsal yazı tipi: Montserrat (ince, sade). İndirilemezse DejaVu ile devam edilir (tasarım bozulmaz).
+    const mont = async (wt: string) => { try { const r = await fetch(`https://cdn.jsdelivr.net/gh/JulietaUla/Montserrat@master/fonts/ttf/Montserrat-${wt}.ttf`); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } };
+    for (const f of await Promise.all(['Light', 'Regular', 'SemiBold', 'Bold', 'ExtraBold'].map(mont))) if (f) fonts.push(f);
   }
 }
 function b64(bytes: Uint8Array) { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
@@ -133,8 +136,8 @@ function embayLogo(cx: number, cy: number, r: number, color: string) {
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${EMBAY.navy}" stroke="${EMBAY.white}" stroke-width="${r * 0.05}"/>
 <g transform="translate(${cx - 33 * k} ${cy - 40 * k}) scale(${k})" fill="none" stroke="${color}" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round">
 <path d="M6 44V26L24 12l18 14v18z"/><path d="M24 12l10-8 24 18v22H42"/><rect x="14" y="28" width="6" height="6"/><rect x="26" y="28" width="6" height="6"/><path d="M19 44v-6h10v6"/><rect x="47" y="26" width="5" height="5"/></g>
-<text x="${cx}" y="${cy + 18 * k}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${15 * k}" fill="${color}" letter-spacing="${1.2 * k}">EMBAY</text>
-<text x="${cx + 3 * k}" y="${cy + 33 * k}" text-anchor="middle" font-family="DejaVu Sans" font-weight="200" font-size="${13 * k}" fill="${color}" letter-spacing="${5 * k}">YAPI</text>`;
+<text x="${cx}" y="${cy + 18 * k}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${15 * k}" fill="${color}" letter-spacing="${1.2 * k}">EMBAY</text>
+<text x="${cx + 3 * k}" y="${cy + 33 * k}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="200" font-size="${13 * k}" fill="${color}" letter-spacing="${5 * k}">YAPI</text>`;
 }
 function renderEmbay(o: BannerOpts) {
   const { w, h } = o; const wide = w / h > 1.3; const tall = h / w > 1.5; const u = Math.min(w, h);
@@ -188,15 +191,15 @@ ${icon(ic, panel.x + panel.w - pad - u * 0.22, panel.y + (wide ? panel.h - u * 0
 ${embayLogo(pad + logoR, pad + logoR, logoR, EMBAY.white)}
 <rect x="${pad}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${EMBAY.sky}"/>
 ${icon(ic, pad + sSize * 0.55, badgeY + sSize * 0.25, sSize * 1.2, EMBAY.navy, 9)}
-<text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${EMBAY.navy}">${x(o.badge)}</text>
-${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${EMBAY.white}">${x(l)}</text>`).join('')}
-${sLines.map((l, i) => `<text x="${pad}" y="${subTop + i * sSize * 1.45}" font-family="DejaVu Sans" font-size="${sSize}" fill="#DCE9FB">${x(l)}</text>`).join('')}
-${cta ? `<text x="${pad}" y="${ctaY + sSize * 0.9}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.95)}" fill="${EMBAY.sky}">→ ${x(cta)}</text>` : ''}
-${showChips ? chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); const cx0 = pad + i * (cw + u * 0.02); return `<rect x="${cx0}" y="${chipY + pad * 0.3}" width="${cw}" height="${chipH}" rx="${chipH / 2}" fill="none" stroke="${EMBAY.sky}" stroke-width="2" opacity="0.8"/>${icon(c[0], cx0 + sSize * 0.5, chipY + pad * 0.3 + sSize * 0.35, sSize * 1.1, EMBAY.sky, 8)}<text x="${cx0 + sSize * 1.85}" y="${chipY + pad * 0.3 + chipH * 0.66}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.7)}" fill="${EMBAY.white}">${x(c[1])}</text>`; }).join('') : ''}
+<text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${EMBAY.navy}">${x(o.badge)}</text>
+${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.2}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${EMBAY.white}">${x(l)}</text>`).join('')}
+${sLines.map((l, i) => `<text x="${pad}" y="${subTop + i * sSize * 1.45}" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${sSize}" fill="#DCE9FB">${x(l)}</text>`).join('')}
+${cta ? `<text x="${pad}" y="${ctaY + sSize * 0.9}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.95)}" fill="${EMBAY.sky}">→ ${x(cta)}</text>` : ''}
+${showChips ? chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); const cx0 = pad + i * (cw + u * 0.02); return `<rect x="${cx0}" y="${chipY + pad * 0.3}" width="${cw}" height="${chipH}" rx="${chipH / 2}" fill="none" stroke="${EMBAY.sky}" stroke-width="2" opacity="0.8"/>${icon(c[0], cx0 + sSize * 0.5, chipY + pad * 0.3 + sSize * 0.35, sSize * 1.1, EMBAY.sky, 8)}<text x="${cx0 + sSize * 1.85}" y="${chipY + pad * 0.3 + chipH * 0.66}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.7)}" fill="${EMBAY.white}">${x(c[1])}</text>`; }).join('') : ''}
 <rect x="0" y="${h - barH}" width="${w}" height="${barH}" fill="${EMBAY.navy2}"/>
 <rect x="0" y="${h - barH}" width="${w}" height="3" fill="${EMBAY.sky}" opacity="0.7"/>
-<text x="${pad}" y="${h - barH / 2 + sSize * 0.42}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 1.15)}" fill="${EMBAY.white}">☎ ${x(phone)}</text>
-<text x="${w - pad}" y="${h - barH / 2 + sSize * 0.3}" text-anchor="end" font-family="DejaVu Sans" font-size="${Math.round(sSize * 0.72)}" fill="#C9DBF5" letter-spacing="1.5">${x(site)}</text>
+<text x="${pad}" y="${h - barH / 2 + sSize * 0.42}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 1.15)}" fill="${EMBAY.white}">☎ ${x(phone)}</text>
+<text x="${w - pad}" y="${h - barH / 2 + sSize * 0.3}" text-anchor="end" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${Math.round(sSize * 0.72)}" fill="#C9DBF5" letter-spacing="1.5">${x(site)}</text>
 </svg>`;
 }
 
@@ -209,9 +212,9 @@ function luxLogo(x0: number, y0: number, s: number, color: string) {
   const k = s / 60;
   return `<g transform="translate(${x0} ${y0}) scale(${k})" fill="none" stroke="${color}" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
 <path d="M6 44V26L24 12l18 14v18z"/><path d="M24 12l10-8 24 18v22H42"/><rect x="14" y="28" width="6" height="6"/><rect x="26" y="28" width="6" height="6"/><path d="M19 44v-6h10v6"/><rect x="47" y="26" width="5" height="5"/></g>
-<text x="${x0 + s * 1.12}" y="${y0 + s * 0.52}" font-family="DejaVu Serif" font-size="${s * 0.5}" fill="${color}" letter-spacing="${s * 0.09}">EMBAY</text>
+<text x="${x0 + s * 1.12}" y="${y0 + s * 0.52}" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${s * 0.5}" fill="${color}" letter-spacing="${s * 0.09}">EMBAY</text>
 <line x1="${x0 + s * 1.14}" y1="${y0 + s * 0.7}" x2="${x0 + s * 1.5}" y2="${y0 + s * 0.7}" stroke="${color}" stroke-width="${Math.max(1, s * 0.02)}"/>
-<text x="${x0 + s * 1.62}" y="${y0 + s * 0.78}" font-family="DejaVu Sans" font-size="${s * 0.2}" fill="${color}" letter-spacing="${s * 0.1}">YAPI</text>
+<text x="${x0 + s * 1.62}" y="${y0 + s * 0.78}" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${s * 0.2}" fill="${color}" letter-spacing="${s * 0.1}">YAPI</text>
 <line x1="${x0 + s * 2.62}" y1="${y0 + s * 0.7}" x2="${x0 + s * 2.98}" y2="${y0 + s * 0.7}" stroke="${color}" stroke-width="${Math.max(1, s * 0.02)}"/>`;
 }
 function renderLuxury(o: BannerOpts) {
@@ -240,7 +243,7 @@ function renderLuxury(o: BannerOpts) {
   const badgeLines = wrap(o.badge.toLocaleUpperCase('tr-TR').replace(/\s*&\s*/g, ' & '), 12, 3);
   const ribbon = `<path d="M${rx} 0 H${rx + rw} V${rh} L${rx + rw / 2} ${rh + rw * 0.28} L${rx} ${rh} Z" fill="${LUX.navy}" fill-opacity="0.92" stroke="${LUX.gold}" stroke-width="${Math.max(2, u * 0.003)}"/>
 ${icon(iconFor(o.badge), rx + rw * 0.28, rh * 0.1, rw * 0.44, LUX.gold, 5)}
-${badgeLines.map((l, i) => `<text x="${rx + rw / 2}" y="${rh * 0.62 + i * u * 0.03}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(u * 0.021)}" fill="${LUX.white}" letter-spacing="${u * 0.001}">${x(l)}</text>`).join('')}`;
+${badgeLines.map((l, i) => `<text x="${rx + rw / 2}" y="${rh * 0.62 + i * u * 0.03}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${Math.round(u * 0.021)}" fill="${LUX.white}" letter-spacing="${u * 0.001}">${x(l)}</text>`).join('')}`;
   const hY = (i: number) => hTop + i * hSize * 1.18;
   const ruleY = hY(hLines.length - 1) + hSize * 0.75;
   const svcs: Array<[string, string]> = [['ev', 'EV & VİLLA'], ['bina', 'BİNA YAPIMI'], ['alet', 'TADİLAT'], ['baret', 'TAMİRAT']];
@@ -251,7 +254,7 @@ ${badgeLines.map((l, i) => `<text x="${rx + rw / 2}" y="${rh * 0.62 + i * u * 0.
     const lf = Math.min(Math.round(u * 0.022), Math.floor(svcW / (11 * 0.78)));
     return `${i ? `<line x1="${svcX0 + svcW * i}" y1="${svcY + svcH * 0.22}" x2="${svcX0 + svcW * i}" y2="${svcY + svcH * 0.82}" stroke="${LUX.gold}" stroke-opacity="0.35" stroke-width="1.5"/>` : ''}
 ${icon(ic, cx - is / 2, svcY + svcH * 0.14, is, LUX.gold, 5)}
-<text x="${cx}" y="${svcY + svcH * 0.8}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${lf}" fill="${LUX.white}" letter-spacing="${u * 0.0015}">${x(label)}</text>`;
+<text x="${cx}" y="${svcY + svcH * 0.8}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${lf}" fill="${LUX.white}" letter-spacing="${u * 0.0015}">${x(label)}</text>`;
   }).join('');
   const bandText = 'KALİTE  |  GÜVEN  |  ESTETİK  |  DAYANIKLILIK';
   const bandW = wide ? photoX : w;
@@ -260,20 +263,20 @@ ${icon(ic, cx - is / 2, svcY + svcH * 0.14, is, LUX.gold, 5)}
   const band = `<rect x="0" y="${bandY}" width="${bandW}" height="${bandH}" fill="${LUX.cream}"/>
 <line x1="${pad}" y1="${bandY + bandH / 2}" x2="${bandW / 2 - tw / 2 - u * 0.02}" y2="${bandY + bandH / 2}" stroke="${LUX.gold}" stroke-width="1.5"/>
 <line x1="${bandW / 2 + tw / 2 + u * 0.02}" y1="${bandY + bandH / 2}" x2="${bandW - pad}" y2="${bandY + bandH / 2}" stroke="${LUX.gold}" stroke-width="1.5"/>
-<text x="${bandW / 2}" y="${bandY + bandH / 2 + bs * 0.36}" text-anchor="middle" font-family="DejaVu Serif" font-weight="700" font-size="${bs}" fill="#A8843F">${bandText}</text>`;
+<text x="${bandW / 2}" y="${bandY + bandH / 2 + bs * 0.36}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${bs}" fill="#A8843F">${bandText}</text>`;
   const by = h - barH; const fs = Math.round(u * 0.027);
   const bar = `<rect x="0" y="${by}" width="${w}" height="${barH}" fill="${LUX.navy2}"/><rect x="0" y="${by}" width="${w}" height="${Math.max(2, u * 0.003)}" fill="${LUX.gold}"/>
 ${luxLogo(pad, by + barH * 0.2, barH * 0.5, LUX.gold)}
-<text x="${w * (wide ? 0.4 : 0.47)}" y="${by + barH / 2 + fs * 0.36}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${fs}" fill="${LUX.white}"><tspan fill="${LUX.gold}">☎ </tspan>${x(phone)}</text>
-<text x="${w * (wide ? 0.62 : 0.76)}" y="${by + barH / 2 + fs * 0.36}" text-anchor="middle" font-family="DejaVu Sans" font-size="${Math.round(fs * 0.85)}" fill="${LUX.mist}">${x(site)}</text>
-${wide ? `<text x="${w - pad}" y="${by + barH / 2 + fs * 0.4}" text-anchor="end" font-family="DejaVu Serif" font-style="italic" font-size="${Math.round(fs * 1.05)}" fill="${LUX.gold2}">İşimiz güvencenizdir.</text>` : ''}`;
+<text x="${w * (wide ? 0.4 : 0.47)}" y="${by + barH / 2 + fs * 0.36}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${fs}" fill="${LUX.white}"><tspan fill="${LUX.gold}">☎ </tspan>${x(phone)}</text>
+<text x="${w * (wide ? 0.62 : 0.76)}" y="${by + barH / 2 + fs * 0.36}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${Math.round(fs * 0.85)}" fill="${LUX.mist}">${x(site)}</text>
+${wide ? `<text x="${w - pad}" y="${by + barH / 2 + fs * 0.4}" text-anchor="end" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${Math.round(fs * 1.05)}" fill="${LUX.gold2}">İşimiz güvencenizdir.</text>` : ''}`;
   const exTop = svcY + svcH; const exH = by - exTop;
   const ctaTxt = (o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').replace(/^WhatsApp$/i, '').trim() || 'Ücretsiz keşif için arayın').toLocaleUpperCase('tr-TR');
   const cf = Math.round(u * 0.028); const cw = Math.min(w - pad * 2, ctaTxt.length * cf * 0.72 + cf * 3);
   const pillY = exH > u * 0.2 ? exTop + exH * 0.18 : exTop + (exH - cf * 2.4) / 2 - u * 0.01;
   const filler = !wide && exH > u * 0.08 ? `<rect x="${w / 2 - cw / 2}" y="${pillY}" width="${cw}" height="${cf * 2.4}" rx="${cf * 1.2}" fill="${LUX.gold}"/>
-<text x="${w / 2}" y="${pillY + cf * 1.56}" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="${cf}" fill="${LUX.navy2}" letter-spacing="${u * 0.0015}">${x(ctaTxt)}</text>
-${exH > u * 0.2 ? `<text x="${w / 2}" y="${exTop + exH * 0.18 + cf * 2.4 + u * 0.075}" text-anchor="middle" font-family="DejaVu Serif" font-style="italic" font-size="${Math.round(u * 0.036)}" fill="${LUX.gold2}">İşimiz güvencenizdir.</text>` : ''}` : '';
+<text x="${w / 2}" y="${pillY + cf * 1.56}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${cf}" fill="${LUX.navy2}" letter-spacing="${u * 0.0015}">${x(ctaTxt)}</text>
+${exH > u * 0.2 ? `<text x="${w / 2}" y="${exTop + exH * 0.18 + cf * 2.4 + u * 0.075}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${Math.round(u * 0.036)}" fill="${LUX.gold2}">İşimiz güvencenizdir.</text>` : ''}` : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
 <defs>
 <linearGradient id="lx" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${LUX.navy}" stop-opacity="0.96"/><stop offset="${wide ? 0.25 : 0.42}" stop-color="${LUX.navy}" stop-opacity="0.8"/><stop offset="${wide ? 0.5 : 0.75}" stop-color="${LUX.navy}" stop-opacity="0.1"/><stop offset="1" stop-color="${LUX.navy}" stop-opacity="0"/></linearGradient>
@@ -286,9 +289,9 @@ ${photo}
 ${wide ? '' : `<rect x="0" y="0" width="${w}" height="${photoH}" fill="url(#lx)"/>`}
 ${luxLogo(pad, pad, logoS, LUX.gold)}
 ${ribbon}
-${hLines.map((l, i) => `<text x="${pad}" y="${hY(i)}" font-family="DejaVu Serif" font-weight="700" font-size="${hSize}" fill="${i === hLines.length - 1 && hLines.length > 1 ? LUX.gold : LUX.white}">${x(l)}</text>`).join('')}
+${hLines.map((l, i) => `<text x="${pad}" y="${hY(i)}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${i === hLines.length - 1 && hLines.length > 1 ? LUX.gold : LUX.white}">${x(l)}</text>`).join('')}
 <rect x="${pad}" y="${ruleY}" width="${u * 0.12}" height="${Math.max(2, u * 0.004)}" fill="${LUX.gold}"/>
-${sLines.map((l, i) => `<text x="${pad}" y="${ruleY + sSize * 2.2 + i * sSize * 1.5}" font-family="DejaVu Sans" font-size="${sSize}" fill="${LUX.white}" fill-opacity="0.92" letter-spacing="${u * 0.001}">${x(l)}</text>`).join('')}
+${sLines.map((l, i) => `<text x="${pad}" y="${ruleY + sSize * 2.2 + i * sSize * 1.5}" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${sSize}" fill="${LUX.white}" fill-opacity="0.92" letter-spacing="${u * 0.001}">${x(l)}</text>`).join('')}
 ${band}
 ${svcRow}
 ${filler}
@@ -347,7 +350,7 @@ export async function renderBanner(o: BannerOpts) {
   await ensureRenderer();
   // Tüm banner'lar Embay Yapı kimliğiyle (Manitou kiralama da Embay çatısı altında; eski sarı Şahin Manitou tasarımı yedekte duruyor)
   if (!LEGACY_SAHIN_DESIGN) {
-    const r = new Resvg(LUXURY_DESIGN ? renderLuxury(o) : renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
+    const r = new Resvg(LUXURY_DESIGN ? renderLuxury(o) : renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'Montserrat' }, fitTo: { mode: 'original' } });
     const img = r.render();
     const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;
     img.free?.(); r.free?.();
@@ -386,20 +389,20 @@ export async function renderBanner(o: BannerOpts) {
 ${photo}
 <rect x="${pad}" y="${pad}" width="${logo}" height="${logo}" rx="${Math.round(logo * 0.22)}" fill="${p.acc}"/>
 ${icon(o.brandName === 'Şahin Manitou' ? 'manitou' : 'baret', pad + logo * 0.12, pad + logo * 0.1, logo * 0.76, p.bg2, 9)}
-<text x="${pad + logo + u * 0.025}" y="${pad + logo * (longBrand && !wide ? 0.48 : 0.66)}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(u * 0.036)}" fill="${p.txt}">${x(longBrand ? 'Embay Yapı · Şahin Manitou' : o.brandName)}</text>
-${longBrand && !wide ? `<text x="${pad + logo + u * 0.025}" y="${pad + logo * 0.9}" font-family="DejaVu Sans" font-size="${Math.round(u * 0.024)}" fill="#CFE8D8">${x(site)}</text>` : `<text x="${w - pad}" y="${pad + logo * 0.66}" text-anchor="end" font-family="DejaVu Sans" font-size="${Math.round(u * 0.024)}" fill="#CFE8D8">${x(site)}</text>`}
+<text x="${pad + logo + u * 0.025}" y="${pad + logo * (longBrand && !wide ? 0.48 : 0.66)}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${Math.round(u * 0.036)}" fill="${p.txt}">${x(longBrand ? 'Embay Yapı · Şahin Manitou' : o.brandName)}</text>
+${longBrand && !wide ? `<text x="${pad + logo + u * 0.025}" y="${pad + logo * 0.9}" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${Math.round(u * 0.024)}" fill="#CFE8D8">${x(site)}</text>` : `<text x="${w - pad}" y="${pad + logo * 0.66}" text-anchor="end" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${Math.round(u * 0.024)}" fill="#CFE8D8">${x(site)}</text>`}
 ${wide ? icon(ic, w - pad - u * 0.4, h - barH - u * 0.46, u * 0.4, p.acc, 4, 0.22) : o.photo ? '' : icon(ic, w - pad - u * 0.3, chipsY - u * 0.34, u * 0.3, p.acc, 4, 0.25)}
 <rect x="${pad}" y="${badgeY}" width="${Math.round(o.badge.length * sSize * 0.78 + sSize * 2.8)}" height="${Math.round(sSize * 1.7)}" rx="${Math.round(sSize * 0.85)}" fill="${p.acc}"/>
 ${icon(ic, pad + sSize * 0.55, badgeY + sSize * 0.25, sSize * 1.2, p.bg2, 9)}
-<text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${p.bg2}">${x(o.badge)}</text>
-${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.1}" font-family="DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${p.txt}">${x(l)}</text>`).join('')}
-${sLines.map((l, i) => `<text x="${pad}" y="${textTop + (hLines.length - 1) * hSize * 1.1 + sSize * 2.1 + i * sSize * 1.35}" font-family="DejaVu Sans" font-size="${sSize}" fill="#E5F3EA">${x(l)}</text>`).join('')}
-${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); return `<rect x="${pad + i * (cw + u * 0.02)}" y="${chipsY}" width="${cw}" height="${Math.round(sSize * 1.9)}" rx="${Math.round(sSize * 0.95)}" fill="#FFFFFF" opacity="0.12"/>${icon(c[0], pad + i * (cw + u * 0.02) + sSize * 0.5, chipsY + sSize * 0.42, sSize * 1.05, p.acc, 9)}<text x="${pad + i * (cw + u * 0.02) + sSize * 1.85}" y="${chipsY + sSize * 1.24}" font-family="DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.76)}" fill="#FFFFFF">${x(c[1])}</text>`; }).join('')}
+<text x="${pad + sSize * 2.0}" y="${badgeY + sSize * 1.2}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${sSize}" fill="${p.bg2}">${x(o.badge)}</text>
+${hLines.map((l, i) => `<text x="${pad}" y="${textTop + i * hSize * 1.1}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${hSize}" fill="${p.txt}">${x(l)}</text>`).join('')}
+${sLines.map((l, i) => `<text x="${pad}" y="${textTop + (hLines.length - 1) * hSize * 1.1 + sSize * 2.1 + i * sSize * 1.35}" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${sSize}" fill="#E5F3EA">${x(l)}</text>`).join('')}
+${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.04) / 3); return `<rect x="${pad + i * (cw + u * 0.02)}" y="${chipsY}" width="${cw}" height="${Math.round(sSize * 1.9)}" rx="${Math.round(sSize * 0.95)}" fill="#FFFFFF" opacity="0.12"/>${icon(c[0], pad + i * (cw + u * 0.02) + sSize * 0.5, chipsY + sSize * 0.42, sSize * 1.05, p.acc, 9)}<text x="${pad + i * (cw + u * 0.02) + sSize * 1.85}" y="${chipsY + sSize * 1.24}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${Math.round(sSize * 0.76)}" fill="#FFFFFF">${x(c[1])}</text>`; }).join('')}
 <rect x="0" y="${h - barH}" width="${w}" height="${barH}" fill="${p.acc}"/>
-<text x="${pad}" y="${h - barH / 2 + ctaSize * 0.36}" font-family="DejaVu Sans" font-weight="700" font-size="${ctaFont}" fill="${p.bg2}">${x(cta)}</text>
-<text x="${w - pad}" y="${h - barH / 2 + ctaSize * 0.36}" text-anchor="end" font-family="DejaVu Sans" font-weight="700" font-size="${ctaSize}" fill="${p.bg2}">☎ ${x(phone)}</text>
+<text x="${pad}" y="${h - barH / 2 + ctaSize * 0.36}" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${ctaFont}" fill="${p.bg2}">${x(cta)}</text>
+<text x="${w - pad}" y="${h - barH / 2 + ctaSize * 0.36}" text-anchor="end" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${ctaSize}" fill="${p.bg2}">☎ ${x(phone)}</text>
 </svg>`;
-  const r = new Resvg(svg, { font: { fontBuffers: fonts!, defaultFontFamily: 'DejaVu Sans' }, fitTo: { mode: 'original' } });
+  const r = new Resvg(svg, { font: { fontBuffers: fonts!, defaultFontFamily: 'Montserrat' }, fitTo: { mode: 'original' } });
   // Instagram API yalnızca JPEG görsel kabul eder → banner JPEG olarak üretilir
   const img = r.render();
   const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;

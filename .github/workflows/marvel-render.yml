@@ -24,6 +24,7 @@ jobs:
           curl -sSfL -o scripts/marvel/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
           curl -sSfL -o scripts/marvel/fonts/BebasNeue-Regular.ttf https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf
           curl -sSfL -o scripts/marvel/fonts/Oswald-VF.ttf "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf"
+          curl -sSfL -o scripts/marvel/fonts/Montserrat-VF.ttf "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"
       - name: Kaynak videolar
         run: |
           python3 - <<'PY'
