@@ -245,7 +245,7 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
   const { state } = useRouter();
   const urlTab = state.params.get('tab') as CenterTab | null;
   const [tab, setTab] = useState<CenterTab>(urlTab && ['calendar', 'content', 'pool', 'approval', 'done'].includes(urlTab) ? urlTab : initialTab);
-  const [fmt, setFmt] = useState<'all' | 'reel' | 'carousel' | 'banner'>('all');
+  const [fmt, setFmt] = useState<'all' | 'reel' | 'carousel' | 'banner' | 'voice' | 'styles'>('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error' | 'warn'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [composer, setComposer] = useState(false);
@@ -275,12 +275,15 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
     try {
       const r = await db().rpc('swap_reel_variant', { p_ids: g.items.map((x) => x.id) });
       if (r.error) throw r.error;
-      setMsg(r.data ? { tone: 'ok', text: 'Sürüm değiştirildi: aynı gün ve saatte diğer sürüm paylaşılacak; önceki sürüm havuza döndü.' } : { tone: 'warn', text: 'Bu videonun diğer sürümü havuzda bulunamadı.' });
+      setMsg(r.data ? { tone: 'ok', text: 'Sürüm değiştirildi: aynı gün ve saatte diğer sürüm paylaşılacak; önceki sürüm havuza döndü.' } : { tone: 'warn', text: 'Değiştirilecek ikiz bulunamadı (diğer sürüm henüz hazır değil ya da takvimde değil).' });
       q.reload();
     } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
   const pubBy = useMemo(() => { const m = new Map<string, Publication>(); q.data.pubs.forEach((p) => p.content_id && !m.has(p.content_id) && m.set(p.content_id, p)); return m; }, [q.data.pubs]);
-  const fmtOk = (d: Draft) => fmt === 'all' || (fmt === 'reel' ? ['reel', 'short'].includes(d.format ?? '') : d.format === fmt);
+  const fmtOk = (d: Draft) => fmt === 'all'
+    || (fmt === 'voice' ? d.format === 'reel' && variants.data.has(slugOf(d.video_url))
+      : fmt === 'styles' ? (d.campaign_name ?? '').includes('Ev Tarzları')
+        : fmt === 'reel' ? ['reel', 'short'].includes(d.format ?? '') : d.format === fmt);
   const DONE = ['published', 'failed', 'cancelled', 'rejected'];
   const lists = useMemo(() => ({
     calendar: q.data.drafts.filter((d) => !DONE.includes(d.workflow_status) && !['draft', 'pending_approval'].includes(d.workflow_status)),
@@ -341,6 +344,9 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
                         <span className="rounded-full bg-ink-800 text-ink-300 text-[10px] font-semibold px-2 py-0.5">{FORMAT_LABEL[d.format ?? ''] ?? d.format}</span>
                         {g.items.map((x) => <PlatformBadge key={x.id} platform={x.primary_platform} />)}
                         {mode !== 'calendar' && <Pill tone={wf.tone}>{wf.label}</Pill>}
+                        {d.format === 'reel' && variants.data.has(slugOf(d.video_url)) && (variants.data.get(slugOf(d.video_url))!.voiced
+                          ? <span className="rounded-full bg-violet-100 text-violet-800 text-[10px] font-bold px-2 py-0.5">🎙️ Sunuculu</span>
+                          : <span className="rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold px-2 py-0.5">🎵 Sunucusuz</span>)}
                       </div>
                       <div className="text-[13px] font-semibold text-ink-100 line-clamp-1 mt-0.5">{d.headline || d.title}</div>
                       {err && <div className="text-[11px] text-rose-600 line-clamp-1" title={err}>Hata: {err}</div>}
@@ -350,6 +356,9 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
                       {mode === 'calendar' && d.format === 'reel' && variants.data.has(slugOf(d.video_url)) && (() => { const voiced = variants.data.get(slugOf(d.video_url))!.voiced; return (
                         <Button variant="subtle" loading={busy === `v${g.key}`} onClick={() => swapVariant(g)} title={voiced ? 'Şu an sunuculu sürüm planlı' : 'Şu an sunucusuz sürüm planlı'}
                           icon={voiced ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}>{voiced ? 'Sunucusuz yap' : 'Sunuculu yap'}</Button>); })()}
+                      {mode === 'pool' && d.format === 'reel' && variants.data.has(slugOf(d.video_url)) && (
+                        <Button variant="subtle" loading={busy === `v${g.key}`} onClick={() => swapVariant(g)} title="Takvimdeki ikizinin gün ve saatine bu sürüm geçer; takvimdeki havuza döner"
+                          icon={variants.data.get(slugOf(d.video_url))!.voiced ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}>Takvimdekinin yerine koy</Button>)}
                       <DraftActionButtons draft={d} twins={g.items} onEdit={() => setEditing(g)} onDone={(m) => { setMsg(m); q.reload(); }} />
                       {pubs.filter((p) => p.external_url).map((p) => <a key={p.id} href={p.external_url!} target="_blank" rel="noreferrer" className="ops-chip"><ExternalLink className="w-3.5 h-3.5" />{p.platform === 'facebook' ? 'FB' : 'IG'}</a>)}
                     </div>
@@ -390,7 +399,7 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
         { id: 'approval', label: 'Onay', count: groupsOf(lists.approval) }, { id: 'done', label: 'Yayınlanan' }]} />
       {['calendar', 'pool', 'approval', 'done'].includes(tab) && (
         <div className="flex flex-wrap gap-1.5">
-          {([['all', 'Hepsi'], ['reel', 'Reels'], ['carousel', 'Kaydırmalı'], ['banner', 'Banner']] as const).map(([k, l]) => (
+          {([['all', 'Hepsi'], ['reel', 'Reels'], ['voice', '🎙️ Sunuculu / Sunucusuz'], ['styles', '🏡 Ev Tarzları'], ['carousel', 'Kaydırmalı'], ['banner', 'Banner']] as const).map(([k, l]) => (
             <button key={k} type="button" onClick={() => setFmt(k)} className={cx('ops-chip', fmt === k && '!bg-[#262A6B] !text-white !ring-transparent')}>{l}</button>
           ))}
         </div>

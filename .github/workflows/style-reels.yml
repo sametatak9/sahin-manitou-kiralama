@@ -1,0 +1,37 @@
+# EMBAY · Ev Tarzları Reels: her tarzın slaytlarından dikey kısa video (sayaçsız, 'KAYDIR'sız), müzikli.
+name: Ev Tarzları Reels
+on:
+  workflow_dispatch:
+    inputs:
+      only: { description: 'Yalnızca bu slug ile başlayanlar (boş = hepsi)', required: false, default: '' }
+  push:
+    branches: [main]
+    paths: ['scripts/carousel/style_reels.py', 'scripts/carousel/ev_tarzlari.json', 'scripts/carousel/build.py']
+permissions:
+  contents: write
+concurrency:
+  group: style-reels
+  cancel-in-progress: true
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 1 }
+      - name: Araçlar
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          pip install -q pillow numpy
+          mkdir -p scripts/marvel/fonts
+          curl -sSfL -o scripts/marvel/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
+          curl -sSfL -o scripts/marvel/fonts/Oswald-VF.ttf "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf"
+      - run: python3 scripts/carousel/style_reels.py --only "${{ github.event.inputs.only }}"
+      - name: Depoya yaz
+        run: |
+          git config user.name "embay-reels-bot"
+          git config user.email "embay-reels-bot@users.noreply.github.com"
+          git add public/reels/tarzlar
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Ev Tarzları Reels ($(date -u +%Y-%m-%dT%H:%MZ))"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
