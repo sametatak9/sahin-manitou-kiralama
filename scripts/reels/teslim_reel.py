@@ -19,9 +19,9 @@ NAVY, WHITE = (24, 42, 104), (255, 255, 255)
 REEL = {
     'slug': 'villa-teslim',
     'music': 'house_120_7',          # yalnızca önizleme kopyası için (telifsiz, kendi üretimimiz)
-    'cover': None,                   # kapakta fotoğraf yok (yalnızca başlık); numara verilirse alta villa fotoğrafı konur
+    'cover': 41,                     # kapağın altındaki villa fotoğrafı (havuz no; None → yalnızca başlık)
     'end': 45,                # kapanış kartının altındaki fotoğraf
-    'photos': [47, 61, 63, 57, 67, 53, 71],
+    'photos': [61, 63, 57, 67, 53, 71],
     'cover_s': 4.2, 'slide_s': 2.6, 'end_s': 4.2, 'xf': 0.45,
 }
 
