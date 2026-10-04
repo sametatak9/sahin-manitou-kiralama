@@ -34,9 +34,7 @@
     "whip",
     "zoom",
     "flash",
-    "whip",
-    "glitch",
-    "zoom"
+    "whip"
    ],
    "shots": [
     [
@@ -52,31 +50,19 @@
      "ÜÇGEN CEPHE"
     ],
     [
-     118,
-     4.8,
-     3,
-     "TEK KATLI VİLLA"
-    ],
-    [
-     119,
-     1.0,
+     116,
+     2.0,
      3
     ],
     [
+     241,
+     0.2,
+     3,
+     "TAŞ CEPHE"
+    ],
+    [
      117,
-     3.6,
-     3,
-     "ÇELİK YAPI"
-    ],
-    [
-     118,
-     6.3,
-     3,
-     "GENİŞ TERAS"
-    ],
-    [
-     115,
-     3.3,
+     4.6,
      3,
      "ANAHTAR TESLİM"
     ]
@@ -153,26 +139,28 @@
     "3 SANİYEDE",
     "DÖNÜŞÜM"
    ],
-   "sub": "Kaba inşaattan anahtar teslime",
+   "sub": "Aynı ev · önce ve sonra",
    "trans": [
     "flash",
     "wipe",
     "flash",
-    "glitch",
+    "wipe",
+    "flash",
+    "wipe",
     "flash",
     "wipe",
     "flash"
    ],
    "shots": [
     [
-     104,
+     105,
      0.5,
      2,
      "ÖNCE"
     ],
     [
-     121,
-     0.5,
+     261,
+     0.2,
      2,
      "SONRA"
     ],
@@ -183,21 +171,9 @@
      "ÖNCE"
     ],
     [
-     122,
-     1.0,
-     3,
-     "SONRA"
-    ],
-    [
-     105,
-     0.5,
+     267,
+     0.2,
      2,
-     "ÖNCE"
-    ],
-    [
-     120,
-     10.0,
-     3,
      "SONRA"
     ],
     [
@@ -207,8 +183,32 @@
      "ÖNCE"
     ],
     [
-     123,
-     0.5,
+     271,
+     0.2,
+     2,
+     "SONRA"
+    ],
+    [
+     233,
+     0.2,
+     2,
+     "ÖNCE"
+    ],
+    [
+     265,
+     0.2,
+     2,
+     "SONRA"
+    ],
+    [
+     211,
+     0.2,
+     2,
+     "ÖNCE"
+    ],
+    [
+     263,
+     0.2,
      3,
      "ANAHTAR TESLİM"
     ]
@@ -229,29 +229,34 @@
    "sub": "Sağlam yapı · anahtar teslim",
    "trans": [
     "whip",
-    "glitch",
     "zoom",
-    "whip",
     "flash",
+    "whip",
+    "glitch",
     "zoom"
    ],
    "shots": [
     [
-     8,
-     5.0,
+     131,
+     1.5,
      3,
      "ÇELİK İSKELET"
     ],
     [
-     8,
-     15.0,
+     137,
+     10.4,
      3
+    ],
+    [
+     134,
+     3.0,
+     3,
+     "SAĞLAM YAPI"
     ],
     [
      8,
      25.0,
-     3,
-     "SAĞLAM YAPI"
+     3
     ],
     [
      8,
@@ -269,17 +274,11 @@
      63.0,
      3,
      "ANAHTAR TESLİM"
-    ],
-    [
-     8,
-     70.0,
-     3,
-     "HAYALİNİZDEKİ EV"
     ]
    ],
    "pace": "orta",
    "sharp": true,
-   "min_short": 700
+   "min_short": 460
   },
   {
    "slug": "33-betonarmeden-villaya",
@@ -365,42 +364,41 @@
    ],
    "shots": [
     [
-     241,
+     243,
      0.2,
      3,
-     "ÜÇGEN CEPHELİ VİLLA"
+     "TAŞ CEPHE"
     ],
     [
-     245,
+     259,
      0.2,
      3,
-     "TEK KATLI VİLLA"
+     "FERAH SALON"
     ],
     [
-     261,
+     257,
      0.2,
      3,
      "YAŞAM ALANI"
     ],
     [
-     263,
-     0.2,
-     3,
-     "İKİ KATLI VİLLA"
-    ],
-    [
-     257,
+     253,
      0.2,
      3
     ],
     [
-     247,
+     273,
      0.2,
      3,
      "YAŞAMAYA HAZIR"
     ],
     [
-     243,
+     277,
+     0.2,
+     3
+    ],
+    [
+     249,
      0.2,
      3,
      "ANAHTAR TESLİM"
@@ -419,55 +417,48 @@
     "HAYALİNİZDEKİ EV",
     "HANGİSİ?"
    ],
-   "sub": "Yorumlara yazın",
+   "sub": "Yorumlara 1-2-3-4 yazın",
    "trans": [
     "flash",
     "whip",
     "flash",
-    "whip",
-    "zoom"
+    "whip"
    ],
    "shots": [
     [
-     301,
-     0.2,
+     119,
+     1.0,
      3,
-     "A-FRAME"
+     "1 · TEK KATLI VİLLA"
     ],
     [
-     302,
-     0.2,
+     133,
+     0.5,
      3,
-     "İSKANDİNAV"
-    ],
-    [
-     303,
-     0.2,
-     3,
-     "TAŞ EV"
+     "2 · İKİ KATLI EV"
     ],
     [
      304,
      0.2,
      3,
-     "HAVUZLU VİLLA"
+     "3 · HAVUZLU VİLLA"
     ],
     [
-     241,
+     302,
      0.2,
      3,
-     "GERÇEK EMBAY PROJESİ"
+     "4 · İSKANDİNAV EV"
     ],
     [
-     245,
-     0.2,
+     119,
+     3.6,
      3,
-     "BİZ YAPARIZ"
+     "HEPSİNİ YAPIYORUZ"
     ]
    ],
    "pace": "orta",
    "sharp": true,
-   "min_short": 700
+   "min_short": 460
   },
   {
    "slug": "36-tek-katli-villa",
@@ -483,9 +474,7 @@
     "whip",
     "zoom",
     "flash",
-    "whip",
-    "zoom",
-    "glitch"
+    "whip"
    ],
    "shots": [
     [
@@ -495,31 +484,25 @@
      "TEK KATLI VİLLA"
     ],
     [
-     119,
-     1.5,
-     3
+     247,
+     0.2,
+     3,
+     "GİRİŞ"
     ],
     [
      118,
-     6.0,
+     5.0,
      3,
      "GENİŞ TERAS"
     ],
     [
      245,
      0.2,
-     3,
-     "GERÇEK EMBAY PROJESİ"
+     3
     ],
     [
-     115,
-     0.5,
-     3,
-     "ÜÇGEN CEPHE"
-    ],
-    [
-     119,
-     3.5,
+     118,
+     7.4,
      3,
      "ANAHTAR TESLİM"
     ]
@@ -537,14 +520,13 @@
     "DOĞANIN İÇİNDE",
     "MODERN YAŞAM"
    ],
-   "sub": "Çelik yapı · biten projemiz",
+   "sub": "Biten projemiz",
    "trans": [
     "zoom",
     "whip",
     "glitch",
     "zoom",
-    "flash",
-    "whip"
+    "flash"
    ],
    "shots": [
     [
@@ -560,14 +542,8 @@
      "DOĞANIN İÇİNDE"
     ],
     [
-     209,
-     0.2,
-     3,
-     "BAHÇE MANZARASI"
-    ],
-    [
      4,
-     84.0,
+     85.0,
      3,
      "MANZARA"
     ],
@@ -576,6 +552,12 @@
      19.0,
      3,
      "YAŞAMAYA HAZIR"
+    ],
+    [
+     4,
+     58.8,
+     3,
+     "FERAH ODALAR"
     ],
     [
      4,
@@ -597,77 +579,54 @@
     "HAYALİNİZDEKİ EV",
     "BİZİMLE"
    ],
-   "sub": "Embay Yapı",
+   "sub": "Her adımda yanınızdayız",
    "trans": [
     "flash",
     "whip",
     "glitch",
     "zoom",
-    "flash",
-    "whip",
-    "zoom",
-    "flash",
-    "glitch"
+    "flash"
    ],
    "shots": [
     [
-     117,
-     0.3,
-     2,
-     "VİLLA"
-    ],
-    [
-     121,
-     0.5,
-     2
-    ],
-    [
-     8,
-     63.0,
-     2,
-     "ÇELİK YAPI"
-    ],
-    [
-     14,
-     56.0,
-     2
-    ],
-    [
-     120,
-     2.0,
-     2,
-     "YAŞAM ALANI"
-    ],
-    [
-     118,
-     6.3,
-     2
-    ],
-    [
-     122,
-     4.0,
-     2
-    ],
-    [
-     115,
-     0.5,
-     2,
-     "ANAHTAR TESLİM"
-    ],
-    [
-     123,
+     132,
      1.0,
-     2
+     2,
+     "PROJE"
     ],
     [
-     241,
+     136,
+     0.3,
+     3,
+     "İKİ KATLI EV"
+    ],
+    [
+     135,
+     2.0,
+     3,
+     "AYDINLIK YAŞAM"
+    ],
+    [
+     251,
      0.2,
      3
+    ],
+    [
+     269,
+     0.2,
+     3,
+     "YAŞAMAYA HAZIR"
+    ],
+    [
+     136,
+     3.5,
+     3,
+     "ANAHTAR TESLİM"
     ]
    ],
    "pace": "orta",
    "sharp": true,
-   "min_short": 700
+   "min_short": 460
   }
  ]
 }

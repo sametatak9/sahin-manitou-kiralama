@@ -87,11 +87,11 @@ def corner_logo(img):
     l = logo(110); img.alpha_composite(l, (36, 30))
 
 
-def temsili(d, t='TEMSİLİ GÖRSEL · YAPAY ZEKÂ', fill=(0, 0, 0, 150)):
+def temsili(d, t='Temsili görsel', fill=(0, 0, 0, 110)):
     # Yapay zekâ görseli → açık etiket (yanıltmamak için her slaytta); gerçek proje fotoğrafında 'GERÇEK EMBAY PROJESİ'
-    f = font('sub', 26); tw = d.textlength(t, font=f)
-    d.rounded_rectangle([W - tw - 64, 108, W - 30, 152], radius=22, fill=fill)
-    d.text((W - tw - 47, 113), t, font=f, fill=WHITE)
+    f = font('sub', 18); tw = d.textlength(t, font=f)
+    d.rounded_rectangle([W - tw - 46, 112, W - 26, 140], radius=14, fill=fill)
+    d.text((W - tw - 36, 114), t, font=f, fill=WHITE)
 
 
 # Görseli henüz olmayan tarzlar için mimari çizim (blueprint) — fotoğraf taklidi değil, açıkça çizim.

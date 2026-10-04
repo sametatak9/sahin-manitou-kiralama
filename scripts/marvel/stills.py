@@ -1,6 +1,6 @@
 """EMBAY · Fotoğraf → kısa video sahnesi (Reels motoru video kaynak bekler) + 'Bize DM atın' kapanış kartı.
 - sources_finish.json'daki görseller: 1080x1920, bulanık arka plan + ortada görsel, 6 sn yavaş yakınlaşma.
-  'temsili': true olanlara (yapay zekâ görseli) sağ üstte 'TEMSİLİ GÖRSEL · YAPAY ZEKÂ' etiketi basılır.
+  'temsili': true olanlara (yapay zekâ görseli) sağ üstte küçük 'Temsili görsel' etiketi basılır.
 - public/reels/kit/15-kapanis-karti-dm.mp4: 'Siz de sahip olmak isterseniz · Bize DM atın' kartı (3,5 sn).
 Kullanım: python3 scripts/marvel/stills.py --src scripts/marvel/src_drive --need 241,245,301"""
 import argparse, io, json, os, subprocess, sys, urllib.request
@@ -23,10 +23,11 @@ def font(size):
     return ImageFont.truetype(p, size) if os.path.exists(p) else ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', int(size * 0.8))
 
 
-def tag(img, text='TEMSİLİ GÖRSEL · YAPAY ZEKÂ'):
-    d = ImageDraw.Draw(img); f = font(30); tw = d.textlength(text, font=f)
-    d.rounded_rectangle([W - tw - 80, 150, W - 36, 202], radius=26, fill=(0, 0, 0, 160))
-    d.text((W - tw - 58, 156), text, font=f, fill=(255, 255, 255))
+def tag(img, text='Temsili görsel'):
+    # küçük, sade etiket (sağ üst köşe) — görseli kapatmaz ama yanıltmaz
+    d = ImageDraw.Draw(img, 'RGBA'); f = font(20); tw = d.textlength(text, font=f)
+    d.rounded_rectangle([W - tw - 46, 56, W - 24, 86], radius=15, fill=(0, 0, 0, 110))
+    d.text((W - tw - 35, 58), text, font=f, fill=(255, 255, 255, 230))
 
 
 def write(frames_fn, n, out):
