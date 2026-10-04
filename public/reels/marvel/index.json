@@ -123,5 +123,40 @@
   "frames": 645,
   "narrated": true,
   "base": "18-mimari-isik-tas-ahsap"
+ },
+ {
+  "slug": "24-sesli-evin-sirri",
+  "dur": 20.9,
+  "frames": 627,
+  "narrated": true,
+  "base": "12-evin-sirri"
+ },
+ {
+  "slug": "25-sesli-villa",
+  "dur": 26.43,
+  "frames": 793,
+  "narrated": true,
+  "base": "14-iscilik-detayda"
+ },
+ {
+  "slug": "26-sesli-dis-cephe",
+  "dur": 24.03,
+  "frames": 721,
+  "narrated": true,
+  "base": "15-dis-cephe-tamam"
+ },
+ {
+  "slug": "27-sesli-beyaz-villa",
+  "dur": 21.5,
+  "frames": 645,
+  "narrated": true,
+  "base": "17-mimari-beyaz-villa"
+ },
+ {
+  "slug": "28-sesli-hayalinizdeki-villa",
+  "dur": 21.5,
+  "frames": 645,
+  "narrated": true,
+  "base": "18-mimari-isik-tas-ahsap"
  }
 ]
