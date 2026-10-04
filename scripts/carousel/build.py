@@ -161,7 +161,7 @@ def slide_cover(c, urls, total):
     for t in lines:
         f = fit(d, t, 'head', min(170, f.size), W - 140)
     boxes = [f.getbbox(t) for t in lines]
-    gap = 22; fs = font('sub', 44)
+    gap = 36; fs = font('sub', 44)
     block = sum(b[3] - b[1] for b in boxes) + gap * (len(lines) - 1)
     bottom = H - 220
     sub_h = fs.getbbox(c['sub'])[3] - fs.getbbox(c['sub'])[1]
