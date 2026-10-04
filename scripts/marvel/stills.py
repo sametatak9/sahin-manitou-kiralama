@@ -26,8 +26,8 @@ def font(size):
 def tag(img, text='Temsili görsel'):
     # küçük, sade etiket (sağ üst köşe) — görseli kapatmaz ama yanıltmaz
     d = ImageDraw.Draw(img, 'RGBA'); f = font(20); tw = d.textlength(text, font=f)
-    d.rounded_rectangle([W - tw - 46, 56, W - 24, 86], radius=15, fill=(0, 0, 0, 110))
-    d.text((W - tw - 35, 58), text, font=f, fill=(255, 255, 255, 230))
+    d.rounded_rectangle([W - tw - 70, 150, W - 48, 180], radius=15, fill=(0, 0, 0, 110))
+    d.text((W - tw - 59, 152), text, font=f, fill=(255, 255, 255, 230))
 
 
 def write(frames_fn, n, out):
