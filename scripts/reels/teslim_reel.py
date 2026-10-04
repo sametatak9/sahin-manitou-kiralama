@@ -19,7 +19,7 @@ NAVY, WHITE = (24, 42, 104), (255, 255, 255)
 REEL = {
     'slug': 'villa-teslim',
     'music': 'house_120_7',          # yalnızca önizleme kopyası için (telifsiz, kendi üretimimiz)
-    'cover': 41,                     # kapaktaki villa fotoğrafı (havuz no)
+    'cover': None,                   # kapakta fotoğraf yok (yalnızca başlık); numara verilirse alta villa fotoğrafı konur
     'end': 45,                # kapanış kartının altındaki fotoğraf
     'photos': [47, 61, 63, 57, 67, 53, 71],
     'cover_s': 4.2, 'slide_s': 2.6, 'end_s': 4.2, 'xf': 0.45,
@@ -73,18 +73,20 @@ def badge(d, cx, cy, lines, r=96):
         f = fs[min(i, 1)]; d.text((cx - d.textlength(t, font=f) / 2, y), t, font=f, fill=NAVY); y += 34 if i == 0 else 48
 
 
-def cover_static(photo):
-    """Kapak: gökyüzü degrade + logo + başlık + rozetler (üst katman) ve alttaki villa fotoğrafı (ayrı, yakınlaşır)."""
+def cover_static(photo=None):
+    """Kapak: gökyüzü degrade + logo + başlık + rozetler. Fotoğraf verilmezse yazı bloğu ekranda ortalanır."""
     bg = sky()
     top = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(top)
-    l = logo(190); top.alpha_composite(l, ((W - l.width) // 2, 120))
-    ctext(d, 480, 'Teslim Ettiğimiz', mont(70, 300))
-    ctext(d, 565, 'Villa Projemiz', mont(100, 800))
-    ctext(d, 700, 'Detaylarını inceleyin!', mont(44, 600))
-    badge(d, 200, 900, ['ANAHTAR', 'TESLİM'])
-    badge(d, 880, 900, ['GERÇEK', 'PROJE'])
-    ctext(d, 862, 'BİLGİ & TEKLİF', mont(26, 600), (225, 236, 250))
-    ctext(d, 896, '0531 436 29 04', mont(46, 800))
+    o = 0 if photo is not None else 330          # fotoğrafsız kapakta blok dikeyde ortaya kayar
+    l = logo(210 if photo is None else 190); top.alpha_composite(l, ((W - l.width) // 2, 120 + o - (20 if photo is None else 0)))
+    ctext(d, 480 + o, 'Teslim Ettiğimiz', mont(70, 300))
+    ctext(d, 565 + o, 'Villa Projemiz', mont(100, 800))
+    ctext(d, 700 + o, 'Detaylarını inceleyin!', mont(44, 600))
+    badge(d, 200, 900 + o, ['ANAHTAR', 'TESLİM'])
+    badge(d, 880, 900 + o, ['GERÇEK', 'PROJE'])
+    ctext(d, 862 + o, 'BİLGİ & TEKLİF', mont(26, 600), (225, 236, 250))
+    ctext(d, 896 + o, '0531 436 29 04', mont(46, 800))
+    if photo is None: return bg, top, None, None, 0
     # fotoğraf alanı: alt %50, üst kenarı gökyüzüne yumuşak geçer
     ph_h = 980
     mask = Image.new('L', (W, ph_h), 255); md = ImageDraw.Draw(mask)
@@ -94,10 +96,12 @@ def cover_static(photo):
 
 def cover_frame(c, t):
     bg, top, photo, mask, ph_h = c
-    z = 1.0 + 0.05 * t
-    pw, ph = int(W * z), int(ph_h * z)
-    p = ImageOps.fit(photo, (pw, ph), Image.BILINEAR, centering=(0.5, 0.45)).crop(((pw - W) // 2, ph - ph_h, (pw - W) // 2 + W, ph))
-    img = bg.copy(); img.paste(p, (0, H - ph_h), mask)
+    img = bg.copy()
+    if photo is not None:
+        z = 1.0 + 0.05 * t
+        pw, ph = int(W * z), int(ph_h * z)
+        p = ImageOps.fit(photo, (pw, ph), Image.BILINEAR, centering=(0.5, 0.45)).crop(((pw - W) // 2, ph - ph_h, (pw - W) // 2 + W, ph))
+        img.paste(p, (0, H - ph_h), mask)
     img = img.convert('RGBA')
     a = min(1.0, t * 4.2 / 0.7) if t < 0.2 else 1.0     # yazılar ilk ~0,7 sn'de belirir
     if a < 1.0:
@@ -142,7 +146,7 @@ def end_static(photo):
 def main():
     urls = {it['n']: it['url'] for it in json.load(open(os.path.join(ROOT, 'scripts', 'media-sheets', 'list.json')))}
     R = REEL; os.makedirs(OUT, exist_ok=True)
-    cov = cover_static(load(R['cover'], urls))
+    cov = cover_static(load(R['cover'], urls) if R['cover'] else None)
     photos = [load(n, urls) for n in R['photos']]
     bub = logo_bubble(); end = end_static(load(R['end'], urls))
     # sahneler: (süre, kare üretici)
