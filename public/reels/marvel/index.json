@@ -158,5 +158,55 @@
   "frames": 645,
   "narrated": true,
   "base": "18-mimari-isik-tas-ahsap"
+ },
+ {
+  "slug": "29-bitti-teslime-hazir",
+  "dur": 18.03,
+  "frames": 539
+ },
+ {
+  "slug": "30-iceri-buyurun",
+  "dur": 17.0,
+  "frames": 510
+ },
+ {
+  "slug": "31-uc-saniyede-donusum",
+  "dur": 16.87,
+  "frames": 504
+ },
+ {
+  "slug": "32-celikten-eve",
+  "dur": 17.0,
+  "frames": 511
+ },
+ {
+  "slug": "33-betonarmeden-villaya",
+  "dur": 18.03,
+  "frames": 539
+ },
+ {
+  "slug": "34-bitmis-villamiz",
+  "dur": 18.27,
+  "frames": 546
+ },
+ {
+  "slug": "35-hayalinizdeki-ev-hangisi",
+  "dur": 15.97,
+  "frames": 477
+ },
+ {
+  "slug": "36-tek-katli-villa",
+  "dur": 15.97,
+  "frames": 477
+ },
+ {
+  "slug": "37-doganin-icinde-modern-yasam",
+  "dur": 17.0,
+  "frames": 511
+ },
+ {
+  "slug": "38-hayalinizdeki-ev-bizimle",
+  "dur": 18.03,
+  "frames": 545
  }
 ]
