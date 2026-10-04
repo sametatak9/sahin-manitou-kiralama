@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(ROOT, 'scripts', 'reels'))
 W, H, FPS = 1080, 1920, 30
 # Embay kurumsal renkleri (brand_kits): mavi #1E3FA0, lacivert #262A6B, açık mavi #8FC6F2
 RED, RED_D, GOLD, WHITE, NAVY = (30, 63, 160), (38, 42, 107), (143, 198, 242), (255, 255, 255), (38, 42, 107)
-PHONES = '0536 784 62 22  ·  0531 436 29 04'
+PHONES = '0531 436 29 04'
 SR = 44100
 
 

@@ -57,7 +57,7 @@ c = radial((W, Hh), (40, 10, 14), BLACK).convert('RGBA')
 place(c, logo_block(), 430, Hh / 2, 560)
 d = ImageDraw.Draw(c); fT = F('Anton-Regular.ttf', 88); fP = F('Anton-Regular.ttf', 54)
 d.text((820, 170), "TÜRKİYE'NİN", font=fT, fill=WHITE); d.text((820, 270), '81 İLİNE KURULUM', font=fT, fill=RED)
-d.text((820, 400), '0536 784 62 22  ·  0531 436 29 04', font=fP, fill=GOLD)
+d.text((820, 400), '0531 436 29 04', font=fP, fill=GOLD)
 c.convert('RGB').save(os.path.join(OUT, 'facebook-kapak.png'))
 # 6) Önizleme: profillerin daire içinde görünümü
 prev = Image.new('RGB', (3 * 380 + 40, 420), (245, 245, 245))

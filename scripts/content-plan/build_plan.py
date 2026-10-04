@@ -1,7 +1,7 @@
 import json
 rows=json.load(open('scripts/media-sheets/list.json'))
 ID=lambda n: rows[n-1]['id']
-PH='📞 0536 784 62 22 · 0531 436 29 04'
+PH='📞 0531 436 29 04'
 END=f"\n\nAynı kalitede bir ev hayal ediyorsanız fiyat ve detaylı bilgi için DM'den ya da WhatsApp'tan yazın 👇\n{PH}\n🇹🇷 Türkiye'nin 81 iline kurulum!"
 EDU="Her gün inşaata dair yeni bir şey öğreniyoruz! 📚\n\n"
 ASK="\n\nSiz evinizde bunu ister miydiniz? Yorumlara yazın 👇"

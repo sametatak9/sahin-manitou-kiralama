@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 W, H = 1080, 1350
 NAVY, BLUE, LIGHT, WHITE = (38, 42, 107), (30, 63, 160), (143, 198, 242), (255, 255, 255)
-PHONES = '0536 784 62 22  ·  0531 436 29 04'
+PHONES = '0531 436 29 04'
 FONTS = os.path.join(ROOT, 'scripts', 'marvel', 'fonts')
 
 

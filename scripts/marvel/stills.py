@@ -86,7 +86,7 @@ def main():
         p = os.path.join(a.src, f"{it['n']}.mp4")
         if not os.path.exists(p): still_clip(it['url'], p, it.get('temsili', False)); print('✓ görsel sahne', it['n'], it.get('title'))
     card = os.path.join(ROOT, 'public', 'reels', 'kit', '15-kapanis-karti-dm.mp4')
-    if not os.path.exists(card): dm_card(card); print('✓ kapanış kartı', card)
+    dm_card(card); print('✓ kapanış kartı', card)   # her çalıştırmada güncel yazı tipi/telefonla yeniden çizilir
 
 
 if __name__ == '__main__':

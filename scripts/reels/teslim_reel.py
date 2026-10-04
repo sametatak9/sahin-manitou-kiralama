@@ -138,7 +138,7 @@ def end_static(photo):
     f = mont(58, 800); t = 'Bize DM atın'; tw = d.textlength(t, font=f)
     d.rounded_rectangle([(W - tw) / 2 - 60, 730, (W + tw) / 2 + 60, 850], radius=60, fill=WHITE)
     d.text(((W - tw) / 2, 754), t, font=f, fill=NAVY)
-    ctext(d, 920, '0531 436 29 04  ·  0536 784 62 22', mont(42, 700))
+    ctext(d, 920, '0531 436 29 04', mont(42, 700))
     ctext(d, 990, 'embayyapi.com.tr  ·  @embayyapi', mont(34, 500), (225, 236, 250))
     return img.convert('RGB')
 
