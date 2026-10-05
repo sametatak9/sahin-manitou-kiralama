@@ -1,0 +1,7 @@
+1-salon-somine.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1EzMB-L1mEojIzXEa8Frj3DxWelgEklzh.jpg
+2-galeri-kat.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1LD5GifUnk4a0BIpZ-ilovWHoTcyP9pn3.jpg
+3-yemek-alani.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1xDDsnsmOFLiJ-kt8TCH6z3rzF6j50Z8I.jpg
+4-kemerli-nis.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1aBgoAK860_XcAewVVgmIKq99jBf7Cqzs.jpg
+5-ust-kat-merdiven.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1T28HxlJgK7ZVcqw_5a-MySjSZbl_3V-Z.jpg
+6-misafir-lavabo.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1eRHPW9RNj8_mKUb2r6dfeHxku9KKPLOz.jpg
+7-villa-dis.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1zOI5qM9-hooh8CL_MJiGAi9VHj7eZE_y.jpg

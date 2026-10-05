@@ -1,0 +1,32 @@
+# Higgsfield'a yüklenecek gerçek proje fotoğrafları: depodan herkese açık adresle indirilebilsin (public/higgsfield).
+name: Higgsfield Fotoğrafları
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/higgsfield/list.txt']
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 1 }
+      - name: Fotoğrafları indir
+        run: |
+          mkdir -p public/higgsfield
+          while read -r name url; do
+            [ -z "$name" ] && continue
+            curl -sSfL --retry 3 -o "public/higgsfield/$name" "$url"
+            echo "$name $(stat -c %s public/higgsfield/$name) bayt"
+          done < scripts/higgsfield/list.txt
+      - name: Depoya yaz
+        run: |
+          git config user.name "embay-reels-bot"
+          git config user.email "embay-reels-bot@users.noreply.github.com"
+          git add public/higgsfield
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Higgsfield için gerçek proje fotoğrafları"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done

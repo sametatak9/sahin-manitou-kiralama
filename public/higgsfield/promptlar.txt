@@ -1,0 +1,47 @@
+EMBAY YAPI – HIGGSFIELD REELS (7 SAHNE)
+Ayarlar: Image to Video · 9:16 dikey · her sahne 5 sn
+Kural: Videoya yazı/logo YAZDIRMA. Bina ve eşyalar fotoğraftakiyle aynı kalsın.
+
+SAHNE 1 – AÇILIŞ: Şömineli salon
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/1-salon-somine.jpg
+Hareket: Dolly In
+Prompt: Slow cinematic push-in into a bright double-height living room with a tall natural stone fireplace, black steel framed windows and a wrought iron gallery balcony, warm afternoon sunlight streaming through the windows, soft dust particles in the light, photorealistic interior film, keep the room and furniture exactly as in the photo, no new objects, no people, no text
+
+SAHNE 2 – Galeri katından bakış
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/2-galeri-kat.jpg
+Hareket: Crane Down / Tilt Down
+Prompt: Smooth crane shot looking down from an upper gallery with an ornate black iron railing onto a double-height living room with a stone fireplace, gentle downward camera movement, natural daylight, airy and luxurious mood, photorealistic, architecture and furniture unchanged, no people, no text
+
+SAHNE 3 – Yemek alanı
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/3-yemek-alani.jpg
+Hareket: Truck Left / Slide
+Prompt: Slow lateral sliding camera along a long wooden dining table with a woven pendant chandelier above, open kitchen in the background, warm cozy evening light, chandelier softly glowing, photorealistic interior commercial, keep everything identical to the photo, no people, no text
+
+SAHNE 4 – Kemerli niş ve merdiven
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/4-kemerli-nis.jpg
+Hareket: Dolly In (yavaş)
+Prompt: Gentle slow dolly forward through a hallway with a white arched built-in niche with shelves and cabinets, wooden floor and warm recessed ceiling lights, wooden stairs in the background, calm elegant mood, photorealistic, design unchanged, no people, no text
+
+SAHNE 5 – Üst kat merdiven
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/5-ust-kat-merdiven.jpg
+Hareket: FPV / Dolly In
+Prompt: Smooth floating camera moving toward a staircase with a decorative black wrought iron railing on the upper floor, warm light coming from the arched wall niche, dark built-in bookshelves on the right, wooden floor, cinematic home tour feeling, photorealistic, architecture unchanged, no people, no text
+
+SAHNE 6 – Misafir lavabosu
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/6-misafir-lavabo.jpg
+Hareket: Slow Push In
+Prompt: Slow elegant push-in toward a classic powder room vanity with a vintage gold framed mirror and two wall sconces glowing warmly, soft textured wallpaper, refined boutique hotel atmosphere, photorealistic, keep every detail exactly as in the photo, no people, no text
+
+SAHNE 7 – KAPANIŞ: Villanın dışı
+Fotoğraf: https://embayyapi.vercel.app/higgsfield/7-villa-dis.jpg
+Hareket: Dolly Out
+Prompt: Slow cinematic pull-back from a finished single-storey white villa with large windows and a terrace, dramatic cloudy sky slowly moving, trees swaying gently, calm and proud atmosphere, leave empty sky at the top of the frame for a title, photorealistic, building unchanged, no text, no logos
+
+VİDEO ÜZERİ YAZILAR (Montserrat ince – sonradan eklenecek)
+1: Hayalinizdeki ev
+2: Ferah, aydınlık, sizin
+3: Sofranız hazır
+4: Her köşe özenle
+5: İnce işçilik
+6: Detayda kalite
+7: Embay Yapı logosu + "Teslim ettiğimiz villa projemiz" + "Siz de sahip olmak ister misiniz?" + 0531 436 29 04
