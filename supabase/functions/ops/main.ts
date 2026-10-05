@@ -20,6 +20,7 @@ import { morningBrief, notifyPublished, telegramSetupWebhook, telegramWebhook } 
 import { aiImage, aiImageLastError, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
+import { showroomEditorTick, writeShowroomTexts } from '../_shared/showroom.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
 
@@ -78,7 +79,8 @@ async function runWorker(db: Db, workerId: string) {
   const growth = await growthTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const archive = await archiveTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const digest = await radarDigest(db).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, morning, autopilot };
+  const showroom = await showroomEditorTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, showroom, morning, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
@@ -619,6 +621,19 @@ async function api(db: Db, req: Request) {
     }
     // İçerik Fabrikası: bugünün eksik içeriklerini şimdi üret (yönetici). Kota dolu platformlar atlanır.
     // Banner havuzu: şablondan yeni banner çiz veya mevcut banner'ı düzenleyip yeniden çiz
+    // Ev Vitrini: "Bot yazsın" — editör bot bu evin ön yazısını şimdi yazar. Taslak eve doğrudan yazar; yayındaki eve öneri bırakır.
+    case 'showroom_write': {
+      const u = await requireUser(db, req);
+      const { data: m } = await db.from('showroom_models').select('*').eq('id', String(body.id || '')).maybeSingle();
+      if (!m) throw new HttpError(404, 'Model bulunamadı');
+      const t = await writeShowroomTexts(db, m as never, u.userId);
+      const caption = `${t.social_caption}\n\n${t.hashtags.join(' ')}`;
+      const patch = m.status === 'published'
+        ? { ai_note: `ÖNERİ — Slogan: ${t.subtitle}\n\n${t.description}`, social_caption: caption }
+        : { subtitle: t.subtitle, description: t.description, social_caption: caption, ai_note: 'Ön yazıyı Editör Bot yazdı — yayınlamadan önce okuyun.' };
+      await db.from('showroom_models').update({ ...patch, ai_written_at: new Date().toISOString(), ai_requested_at: null }).eq('id', m.id);
+      return { ...t, applied: m.status !== 'published' };
+    }
     case 'banner_render': {
       const u = await requireUser(db, req);
       const t = body.template as { headline?: string } | undefined;

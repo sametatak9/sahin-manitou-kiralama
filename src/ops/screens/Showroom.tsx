@@ -1,7 +1,8 @@
 // EV VİTRİNİ (Showroom): sitedeki /evler sayfasında sergilenen ev / villa modelleri. Yalnızca ekip ekler ve düzenler.
 // Fiyat, m², oda dağılımı boş bırakılırsa sitede o alan hiç gösterilmez (uydurma yok). Silme yok: arşivlenir.
 import { useMemo, useState } from 'react';
-import { Archive, Eye, ExternalLink, ImagePlus, Pencil, Plus, Star, Trash2, Upload } from 'lucide-react';
+import { Archive, Eye, ExternalLink, ImagePlus, PenLine, Pencil, Plus, Star, Trash2, Upload } from 'lucide-react';
+import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { useClient } from '../client';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
@@ -12,6 +13,7 @@ interface Model {
   rooms: string | null; room_breakdown: Room[]; price: number | null; price_note: string | null; delivery: string; delivery_days: number | null;
   location: string | null; is_real_project: boolean; includes: string[]; excludes: string[]; description: string | null; cover_url: string | null;
   gallery: string[]; plan_url: string | null; video_url: string | null; featured: boolean; sort: number; status: 'draft' | 'published' | 'archived'; updated_at: string;
+  ai_note: string | null; ai_written_at: string | null; announced_at: string | null; social_caption: string | null;
 }
 interface Media { id: string; url: string; title: string | null }
 
@@ -71,6 +73,17 @@ export function ShowroomScreen() {
       await q.reload(); setEdit(null);
     } catch (e) { setMsg({ tone: 'error', text: (e as Error).message }); } finally { setBusy(false); }
   };
+  const [writing, setWriting] = useState(false);
+  const botWrite = async () => {
+    if (edit === 'new' || !edit) { setMsg({ tone: 'error', text: 'Önce "Taslak kaydet" deyin; sonra bot ön yazıyı yazsın.' }); return; }
+    setWriting(true); setMsg(null);
+    try {
+      const r = await callOps<{ subtitle: string; description: string; social_caption: string; hashtags: string[]; applied: boolean }>('showroom_write', { id: edit.id });
+      if (r.applied) setForm((f) => ({ ...f, subtitle: r.subtitle, description: r.description }));
+      setMsg({ tone: 'ok', text: r.applied ? 'Editör Bot slogan ve ön yazıyı yazdı — okuyup düzenleyebilirsiniz.' : 'Ev yayında olduğu için bot metni değiştirmedi; önerisini aşağıdaki nota bıraktı.' });
+      await q.reload();
+    } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setWriting(false); }
+  };
   const setStatus = async (m: Model, status: Model['status']) => {
     if (status === 'published' && !m.cover_url && !m.gallery.length) { setMsg({ tone: 'error', text: `"${m.title}" için önce fotoğraf seçin.` }); return; }
     const { error } = await db().from('showroom_models').update({ status }).eq('id', m.id);
@@ -92,7 +105,8 @@ export function ShowroomScreen() {
         </div>
       </div>
       {msg && !edit && <Notice tone={msg.tone === 'ok' ? 'ok' : 'error'}>{msg.text}</Notice>}
-      <Notice tone="info">Fiyat, m² ve oda bilgisi boş bırakılırsa sitede o alan gösterilmez; yerine “Fiyat için teklif alın” yazar. Teklif formundan gelenler <b>Müşteri Adayları</b>na düşer.</Notice>
+      <Notice tone="info">Fiyat, m² ve oda bilgisi boş bırakılırsa sitede o alan gösterilmez; yerine “Fiyat için teklif alın” yazar. Teklif formundan gelenler <b>Müşteri Adayları</b>na düşer.
+        <br />🤖 <b>Editör Bot</b>: yazısı eksik taslaklara ön yazı yazar (yalnızca girdiğiniz bilgilerle); bir ev yayına girince Instagram + Facebook paylaşımını <b>Yayın Merkezi → Havuz</b>a koyar ve Telegram’dan haber verir.</Notice>
       {q.loading ? <StateView kind="loading" compact /> : q.error ? <StateView kind="error" message={q.error} /> : list.length === 0 ? (
         <StateView kind="empty" title={tab === 'archived' ? 'Arşiv boş' : 'Henüz model yok'} message={tab === 'archived' ? undefined : 'İlk evinizi ekleyin: başlık, fotoğraflar, m² ve oda bilgisi.'}
           action={tab === 'active' ? <Button variant="primary" onClick={() => open('new')}>Yeni model ekle</Button> : undefined} />
@@ -109,6 +123,8 @@ export function ShowroomScreen() {
               </div>
               <div className="space-y-2 p-3">
                 <div className="font-semibold text-ink-100">{m.title}</div>
+                {m.ai_note && <div className="rounded-lg bg-sky-500/10 px-2 py-1 text-[10px] text-sky-700">🤖 {m.ai_note.split('\n')[0].slice(0, 90)}</div>}
+                {m.announced_at && <div className="text-[10px] text-ink-400">📣 IG + FB paylaşımı havuza kondu</div>}
                 <div className="text-[11px] text-ink-400">{[m.code, m.area_m2 && `${m.area_m2} m²`, m.rooms, m.price ? `${m.price.toLocaleString('tr-TR')}₺` : (m.price_note || 'fiyat: teklif'), m.is_real_project && 'teslim edilen proje'].filter(Boolean).join(' · ')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => open(m)}>Düzenle</Button>
@@ -190,7 +206,13 @@ export function ShowroomScreen() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Fiyata dahil olanlar (her satıra bir madde)"><textarea className="ops-input w-full" rows={4} value={form.includes} onChange={(e) => set('includes', e.target.value)} /></Field>
             <Field label="Fiyata dahil olmayanlar"><textarea className="ops-input w-full" rows={4} value={form.excludes} onChange={(e) => set('excludes', e.target.value)} /></Field>
-            <Field label="Açıklama" className="sm:col-span-2"><textarea className="ops-input w-full" rows={4} value={form.description} onChange={(e) => set('description', e.target.value)} /></Field>
+            <div className="sm:col-span-2">
+              <div className="mb-1.5 flex items-center justify-between"><span className="text-[11px] font-semibold text-ink-300">Ön yazı (Proje hakkında)</span>
+                <Button variant="subtle" loading={writing} icon={<PenLine className="h-3.5 w-3.5" />} onClick={botWrite}>Editör Bot yazsın</Button></div>
+              <textarea className="ops-input w-full" rows={5} value={form.description} onChange={(e) => set('description', e.target.value)} />
+              {edit !== 'new' && edit?.ai_note && <p className="mt-1.5 whitespace-pre-line rounded-lg bg-sky-500/10 px-2.5 py-2 text-[11px] text-sky-700">🤖 {edit.ai_note}</p>}
+              {edit !== 'new' && edit?.social_caption && <details className="mt-1.5 text-[11px] text-ink-300"><summary className="cursor-pointer">Instagram / Facebook açıklaması (bot)</summary><p className="mt-1 whitespace-pre-line">{edit.social_caption}</p></details>}
+            </div>
           </div>
         </div>
       </Modal>
