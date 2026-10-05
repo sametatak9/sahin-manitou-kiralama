@@ -11,7 +11,7 @@ import { DISTRICTS, locative, slugTr } from './istanbul.ts';
 
 const SITE = 'https://embay-panel.vercel.app';
 // Herkese açık (Google'da dizine eklenen) site adresi
-export const PUBLIC_SITE = 'https://sahinmanitou.com';
+export const PUBLIC_SITE = 'https://embayyapi.vercel.app';
 const PHONE = '0531 436 29 04';
 const SYSTEM: Record<string, string> = { celik: 'çelik yapı', hafif_celik: 'hafif çelik', betonarme: 'betonarme', prefabrik: 'prefabrik', diger: '' };
 const DELIVERY: Record<string, string> = { anahtar_teslim: 'anahtar teslim', ileri_kaba: 'ileri kaba', kaba: 'kaba inşaat' };

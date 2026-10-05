@@ -4,4 +4,4 @@ Allow: /
 Disallow: /panel
 
 Sitemap: https://sahinmanitou.com/sitemap.xml
-Sitemap: https://sahinmanitou.com/sitemap-evler.xml
+Sitemap: https://embayyapi.vercel.app/sitemap-evler.xml

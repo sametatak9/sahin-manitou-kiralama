@@ -20,7 +20,7 @@ const LOGO = '/reels/kit/embay_logo_beyaz.png';
 const SYSTEM: Record<string, string> = { celik: 'Çelik yapı', hafif_celik: 'Hafif çelik', betonarme: 'Betonarme', prefabrik: 'Prefabrik', diger: 'Diğer' };
 const DELIVERY: Record<string, string> = { anahtar_teslim: 'Anahtar teslim', ileri_kaba: 'İleri kaba', kaba: 'Kaba inşaat' };
 // Google'da dizine eklenen herkese açık adres (embayyapi.com.tr bağlanınca değiştirilecek)
-const PUBLIC_SITE = 'https://sahinmanitou.com';
+const PUBLIC_SITE = 'https://embayyapi.vercel.app';
 const SOCIAL: Array<{ name: string; url: string; handle: string; icon: typeof Instagram; color: string }> = [
   { name: 'Instagram', url: 'https://www.instagram.com/embayyapi/', handle: '@embayyapi', icon: Instagram, color: 'from-[#F58529] via-[#DD2A7B] to-[#8134AF]' },
   { name: 'Facebook', url: 'https://www.facebook.com/1272475282623657', handle: 'Embay Yapı', icon: Facebook, color: 'from-[#1877F2] to-[#0F5BD3]' },
