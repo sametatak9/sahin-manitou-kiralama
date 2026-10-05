@@ -56,21 +56,33 @@ const SCHEMA = {
     subtitle: { type: 'string', description: 'Kartta görünen tek satır slogan, en fazla 70 karakter' },
     description: { type: 'string', description: '"Proje hakkında" ön yazısı: 2 kısa paragraf, toplam 350-600 karakter' },
     social_caption: { type: 'string', description: 'Instagram/Facebook açıklaması: 3-5 kısa satır, sonda "Detaylar ve teklif için DM atın veya arayın" çağrısı; hashtag YOK' },
-    hashtags: { type: 'array', items: { type: 'string' }, description: '8-12 Türkçe hashtag, # ile' },
   },
-  required: ['subtitle', 'description', 'social_caption', 'hashtags'],
+  required: ['subtitle', 'description', 'social_caption'],
 };
+
+/** Hashtag'ler yapay zekâya bırakılmaz (yazım hatası / uydurma konum olmasın): evin bilgilerinden sabit liste. */
+function tagsFor(m: Model) {
+  const t = ['#embayyapı'];
+  if (m.is_real_project) t.push('#teslimettik', '#gerçekproje');
+  if (m.floors === 1) t.push('#tekkatlıev', '#tekkatlıvilla'); else if ((m.floors ?? 0) >= 2) t.push('#dubleksvilla', '#ikikatlıev');
+  const sys: Record<string, string[]> = { celik: ['#çelikev', '#çelikyapı'], hafif_celik: ['#hafifçelik', '#hafifçelikev'], betonarme: ['#betonarme'], prefabrik: ['#prefabrikev'] };
+  t.push(...(sys[m.system] ?? []));
+  if (m.delivery === 'anahtar_teslim') t.push('#anahtarteslim');
+  if (m.location && !/\s/.test(m.location.trim())) t.push(`#${m.location.trim().toLocaleLowerCase('tr-TR')}`);
+  t.push(...BASE_TAGS);
+  return [...new Set(t)].slice(0, 20);
+}
 
 /** Tek bir ev için metin üret (kaydetmez). */
 export async function writeShowroomTexts(db: Db, m: Model, actorId: string | null = null) {
   const agent = await loadAgent(db, null);
   const r = await aiComplete({ db, runId: null, actorId: actorId as string, tokens: { in: 0, out: 0 }, agent }, 'showroom_editor',
     `Aşağıdaki ev için site ve sosyal medya metinlerini yaz.\n\n${facts(m)}`, SCHEMA, RULES);
-  const j = r.json as { subtitle?: string; description?: string; social_caption?: string; hashtags?: string[] };
+  const j = r.json as { subtitle?: string; description?: string; social_caption?: string };
   const clean = (s: unknown, n: number) => String(s ?? '').replace(/\s+\n/g, '\n').trim().slice(0, n);
   return {
     subtitle: clean(j.subtitle, 90), description: clean(j.description, 1200), social_caption: clean(j.social_caption, 1200),
-    hashtags: [...new Set([...(j.hashtags ?? []), ...BASE_TAGS].map((h) => `#${String(h).replace(/^#+/, '').replace(/\s+/g, '').toLocaleLowerCase('tr-TR')}`).filter((h) => h.length > 2 && (m.location ? true : !PLACES.test(h))))].slice(0, 20),
+    hashtags: tagsFor(m),
   };
 }
 
