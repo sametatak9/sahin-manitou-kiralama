@@ -11,6 +11,8 @@ const SITE = 'https://embay-panel.vercel.app';
 const PHONE = '0531 436 29 04';
 const SYSTEM: Record<string, string> = { celik: 'çelik yapı', hafif_celik: 'hafif çelik', betonarme: 'betonarme', prefabrik: 'prefabrik', diger: '' };
 const DELIVERY: Record<string, string> = { anahtar_teslim: 'anahtar teslim', ileri_kaba: 'ileri kaba', kaba: 'kaba inşaat' };
+// Konum girilmemişse ilçe/semt etiketi kullanılmaz (uydurma konum olmasın)
+const PLACES = /(güngören|tozkoparan|çatalca|catalca|silivri|büyükçekmece|arnavutköy|esenyurt|beylikdüzü|başakşehir|avcılar|küçükçekmece|bahçelievler|bağcılar|esenler|sultangazi|eyüp|sarıyer|beşiktaş|kadıköy|üsküdar|ataşehir|maltepe|kartal|pendik|tuzla|şile|beykoz|ümraniye|sancaktepe|çekmeköy|sultanbeyli|zeytinburnu|fatih|bayrampaşa|gaziosmanpaşa|kağıthane|şişli|beyoğlu|adalar|hadımköy|kocaeli|gebze|tekirdağ|çorlu|çerkezköy|ankara|izmir|bursa|antalya)/i;
 const BASE_TAGS = ['#embayyapı', '#villa', '#müstakilev', '#anahtarteslim', '#evyaptırmak', '#hayalimdekiev', '#villaprojesi', '#modernev', '#evmodelleri', '#istanbul', '#keşfet'];
 
 interface Model {
@@ -46,7 +48,7 @@ function facts(m: Model) {
 
 const RULES = `Embay Yapı'nın ev vitrini editörüsün. Türkçe, sıcak, sade ve kurumsal yaz (ince ve naif ton; abartı, ünlem yağmuru yok).
 KESİN KURALLAR: Yalnızca verilen bilgileri kullan. Verilmeyen m², oda, fiyat, süre, konum, malzeme markası, garanti, müşteri adı, tarih YAZMA; tahmin etme.
-"En iyi", "Türkiye'nin 1 numarası" gibi kanıtsız iddia yok. Telefon: ${PHONE}. Emojiyi sadece sosyal medya metninde, az kullan.`;
+"En iyi", "Türkiye'nin 1 numarası" gibi kanıtsız iddia yok. Konum verilmediyse hiçbir ilçe/şehir adı (metinde de hashtag'de de) yazma. Telefon: ${PHONE}. Emojiyi sadece sosyal medya metninde, az kullan.`;
 
 const SCHEMA = {
   type: 'object',
@@ -68,7 +70,7 @@ export async function writeShowroomTexts(db: Db, m: Model, actorId: string | nul
   const clean = (s: unknown, n: number) => String(s ?? '').replace(/\s+\n/g, '\n').trim().slice(0, n);
   return {
     subtitle: clean(j.subtitle, 90), description: clean(j.description, 1200), social_caption: clean(j.social_caption, 1200),
-    hashtags: [...new Set([...(j.hashtags ?? []), ...BASE_TAGS].map((h) => `#${String(h).replace(/^#+/, '').replace(/\s+/g, '').toLocaleLowerCase('tr-TR')}`).filter((h) => h.length > 2))].slice(0, 20),
+    hashtags: [...new Set([...(j.hashtags ?? []), ...BASE_TAGS].map((h) => `#${String(h).replace(/^#+/, '').replace(/\s+/g, '').toLocaleLowerCase('tr-TR')}`).filter((h) => h.length > 2 && (m.location ? true : !PLACES.test(h))))].slice(0, 20),
   };
 }
 
