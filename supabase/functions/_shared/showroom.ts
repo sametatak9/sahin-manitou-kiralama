@@ -174,6 +174,7 @@ const POST_RULES = `${RULES}
 Bu bir web sitesi rehber yazısı: Google'da arama yapan ev sahibine gerçekten faydalı, genel ve DOĞRU bilgi ver.
 İlçe hakkında doğrulanamayan özel bilgi (imar oranı, arsa fiyatı, nüfus, yasal madde numarası, belirli mahalle iddiası) YAZMA; bunlar için "ilgili belediyenin imar müdürlüğünden öğrenin" de.
 Embay Yapı'nın o ilçede proje yaptığını İDDİA ETME; "İstanbul genelinde ve ${'{ilçe}'} için de teklif hazırlıyoruz" gibi hizmet diliyle yaz. Fiyat, süre, garanti rakamı yazma.
+Resmi süreç sırası DOĞRU olsun: imar durumu belgesi → mimari/statik/tesisat projeleri (yetkili mühendis-mimar) → belediyeden yapı ruhsatı → yapı denetim gözetiminde inşaat → iskân (yapı kullanma izin belgesi). Ruhsatı projeden önce gösterme; ruhsatsız/kaçak yapıyı asla önerme.
 Ara başlıkları kısa tut; her bölüm 2-4 cümle. Son bölüm: teklif için telefon ${PHONE} ve sitedeki teklif formu.`;
 const POST_SCHEMA = {
   type: 'object',
