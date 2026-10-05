@@ -17,7 +17,7 @@ const PanelApp = lazy(() => import('./App.tsx'));
 const ShowroomView = lazy(() => import('./components/views/ShowroomView').then((m) => ({ default: m.ShowroomView })));
 // Ev modelleri vitrini (/evler, /ev/<slug>) — herkese açık
 // Embay Yapı alan adlarında (embayyapi.vercel.app, ileride embayyapi.com.tr) ana sayfa doğrudan Embay vitrinidir.
-const isEmbayHost = /(^|\.)embayyapi\./.test(window.location.hostname);
+const isEmbayHost = /(^|\.)embay(yapi)?\.(vercel\.app|com\.tr)$/.test(window.location.hostname);
 const isShowroom = () => /^\/(evler|ev\/|blog|ilce\/)/.test(window.location.pathname)
   || (isEmbayHost && !window.location.pathname.startsWith('/panel') && window.location.pathname !== '/manitou');
 

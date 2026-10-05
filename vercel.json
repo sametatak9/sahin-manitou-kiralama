@@ -1,7 +1,12 @@
 {
   "rewrites": [
     { "source": "/sitemap-evler.xml", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/sitemap" },
-    { "source": "/((?!assets/|.*\\..*).*)", "destination": "/index.html" }],
+    { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embayyapi.vercel.app" }], "destination": "/embay.html" },
+    { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embayyapi.com.tr" }], "destination": "/embay.html" },
+    { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "www.embayyapi.com.tr" }], "destination": "/embay.html" },
+    { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embay.com.tr" }], "destination": "/embay.html" },
+    { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "www.embay.com.tr" }], "destination": "/embay.html" },
+    { "source": "/((?!assets/|.*\\..*).*)", "destination": "/site.html" }],
   "headers": [
     { "source": "/(.*)", "has": [{ "type": "host", "value": "embay-panel.vercel.app" }], "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
     { "source": "/panel(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
