@@ -543,7 +543,7 @@ function PostPage({ slug, models }: { slug: string; models: Model[] }) {
           })}
         </div>
         {imgs.length > 0 && <div className="mt-6 grid grid-cols-2 gap-2">{imgs.map((u) => <img key={u} src={u} alt="Embay Yapı projesinden" loading="lazy" className="aspect-[4/3] w-full rounded-2xl object-cover" />)}</div>}
-        <p className="mt-2 text-[11px] text-slate-400">Fotoğraflar Embay Yapı'nın teslim ettiği projelerdendir.</p>
+        {p.images.length > 0 && <p className="mt-2 text-[11px] text-slate-400">Fotoğraflar Embay Yapı'nın teslim ettiği projelerdendir.</p>}
         {p.district_slug && <button onClick={() => go(`/ilce/${p.district_slug}`)} className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-[#EAF1FC] px-4 py-2 text-[13px] font-semibold text-[#16428F]"><MapPin className="h-4 w-4" /> {p.district} için diğer yazılar</button>}
       </article>
       {related.length > 0 && <section className="mx-auto max-w-6xl px-4 pb-6"><h2 className="mb-4 text-xl font-bold">Ev modellerimiz</h2><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{related.map((m) => <Card key={m.id} m={m} />)}</div></section>}
