@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Home, Menu, MessageCircle, Phone, Ruler, BedDouble, Layers, Send, ShieldCheck, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Facebook, Home, Instagram, MapPin, Menu, MessageCircle, Phone, Ruler, BedDouble, Layers, Send, ShieldCheck, X, Youtube } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { DISTRICTS, locative } from '../../lib/istanbul';
 
 /** EMBAY Showroom — ev / villa modelleri vitrini (/evler, /ev/<slug>). Yalnızca panelde "yayında" işaretlenen modeller görünür.
  *  Fiyat, m², oda bilgisi panelden girilir; boş olan alan sitede gösterilmez (uydurma yok). Teklif formu KVKK onayıyla lead_inbox'a yazar. */
@@ -18,6 +19,48 @@ const PHONE_CLEAN = '05314362904';
 const LOGO = '/reels/kit/embay_logo_beyaz.png';
 const SYSTEM: Record<string, string> = { celik: 'Çelik yapı', hafif_celik: 'Hafif çelik', betonarme: 'Betonarme', prefabrik: 'Prefabrik', diger: 'Diğer' };
 const DELIVERY: Record<string, string> = { anahtar_teslim: 'Anahtar teslim', ileri_kaba: 'İleri kaba', kaba: 'Kaba inşaat' };
+// Google'da dizine eklenen herkese açık adres (embayyapi.com.tr bağlanınca değiştirilecek)
+const PUBLIC_SITE = 'https://sahinmanitou.com';
+const SOCIAL: Array<{ name: string; url: string; handle: string; icon: typeof Instagram; color: string }> = [
+  { name: 'Instagram', url: 'https://www.instagram.com/embayyapi/', handle: '@embayyapi', icon: Instagram, color: 'from-[#F58529] via-[#DD2A7B] to-[#8134AF]' },
+  { name: 'Facebook', url: 'https://www.facebook.com/1272475282623657', handle: 'Embay Yapı', icon: Facebook, color: 'from-[#1877F2] to-[#0F5BD3]' },
+  // YouTube kanal adresi girilince görünür
+  ...(import.meta.env.VITE_YOUTUBE_URL ? [{ name: 'YouTube', url: String(import.meta.env.VITE_YOUTUBE_URL), handle: 'Embay Yapı', icon: Youtube, color: 'from-[#FF0000] to-[#C4302B]' }] : []),
+];
+interface Post { id: string; slug: string; kind: string; title: string; excerpt: string | null; body: string | null; cover_url: string | null; images: string[]; district: string | null; district_slug: string | null; model_slug: string | null; seo_title: string | null; seo_description: string | null; published_at: string | null }
+
+/** Sayfa başına Google bilgileri: başlık, açıklama, kanonik adres, sosyal önizleme, yapılandırılmış veri. */
+function useSeo(o: { title: string; description?: string | null; path: string; image?: string | null; jsonLd?: Record<string, unknown> | null }) {
+  useEffect(() => {
+    document.title = o.title;
+    const meta = (attr: 'name' | 'property', key: string, val?: string | null) => {
+      if (!val) return;
+      let el = document.head.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null;
+      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, key); document.head.appendChild(el); }
+      el.content = val;
+    };
+    const desc = (o.description || '').slice(0, 170);
+    meta('name', 'description', desc); meta('property', 'og:title', o.title); meta('property', 'og:description', desc);
+    meta('property', 'og:type', 'website'); meta('property', 'og:url', PUBLIC_SITE + o.path); meta('property', 'og:image', o.image || undefined);
+    let link = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link); }
+    link.href = PUBLIC_SITE + o.path;
+    document.getElementById('seo-jsonld')?.remove();
+    if (o.jsonLd) { const sc = document.createElement('script'); sc.type = 'application/ld+json'; sc.id = 'seo-jsonld'; sc.text = JSON.stringify(o.jsonLd); document.head.appendChild(sc); }
+  }, [o.title, o.description, o.path, o.image, o.jsonLd]);
+}
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+function usePosts(filter?: { district?: string; limit?: number }) {
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  useEffect(() => {
+    if (!supabase) { setPosts([]); return; }
+    let q = supabase.from('site_posts').select('id,slug,kind,title,excerpt,cover_url,images,district,district_slug,model_slug,seo_title,seo_description,published_at,body').eq('status', 'published').order('published_at', { ascending: false });
+    if (filter?.district) q = q.eq('district_slug', filter.district);
+    q.limit(filter?.limit ?? 60).then(({ data }) => setPosts((data as Post[]) ?? []));
+  }, [filter?.district, filter?.limit]);
+  return posts;
+}
+
 const tl = (n: number) => `${n.toLocaleString('tr-TR')}₺`;
 const m2 = (n: number) => `${Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} m²`;
 const wa = (text: string) => `https://wa.me/90${PHONE_CLEAN}?text=${encodeURIComponent(text)}`;
@@ -39,7 +82,9 @@ const MENU: Array<{ label: string; path: string; anchor?: string }> = [
   { label: 'Anasayfa', path: '/evler' },
   { label: 'Ev Modellerimiz', path: '/evler', anchor: 'modeller' },
   { label: 'Teslim Ettiklerimiz', path: '/evler?f=teslim', anchor: 'modeller' },
-  { label: 'Neden Embay Yapı', path: '/evler', anchor: 'kurumsal' },
+  { label: 'Ev Rehberi', path: '/blog' },
+  { label: 'İlçeler', path: '/evler', anchor: 'ilceler' },
+  { label: 'Sosyal Medya', path: '/evler', anchor: 'sosyal' },
   { label: 'Sık Sorulan Sorular', path: '/evler', anchor: 'sss' },
   { label: 'İletişim', path: '/evler', anchor: 'iletisim' },
 ];
@@ -49,7 +94,6 @@ export const ShowroomView: React.FC = () => {
   const [models, setModels] = useState<Model[] | null>(null);
   const [err, setErr] = useState('');
   useEffect(() => {
-    document.title = 'Ev Modellerimiz | Embay Yapı';
     if (!supabase) { setModels([]); return; }
     supabase.from('showroom_models').select('*').eq('status', 'published').order('featured', { ascending: false }).order('sort').order('created_at', { ascending: false })
       .then(({ data, error }) => { if (error) setErr('Modeller yüklenemedi.'); setModels((data as Model[]) ?? []); });
@@ -62,7 +106,10 @@ export const ShowroomView: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F4F7FC] text-[#14213D]" style={{ fontFamily: 'Montserrat, "Plus Jakarta Sans", system-ui, sans-serif' }}>
       <Header />
-      {slug ? (models === null ? <Loading /> : model ? <Detail m={model} /> : <NotFound />) : <Catalog key={filter} initial={filter} models={models} err={err} />}
+      {pathname === '/blog' || pathname === '/blog/' ? <BlogList />
+        : pathname.startsWith('/blog/') ? <PostPage slug={decodeURIComponent(pathname.slice(6)).replace(/\/$/, '')} models={models ?? []} />
+        : pathname.startsWith('/ilce/') ? <DistrictPage slug={decodeURIComponent(pathname.slice(6)).replace(/\/$/, '')} models={models ?? []} />
+        : slug ? (models === null ? <Loading /> : model ? <Detail m={model} /> : <NotFound />) : <Catalog key={filter} initial={filter} models={models} err={err} />}
       <Footer />
       <a href={wa('Merhaba, ev modelleriniz hakkında bilgi almak istiyorum.')} target="_blank" rel="noopener noreferrer"
         className="fixed bottom-5 right-5 z-20 flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 hover:brightness-105">
@@ -140,6 +187,9 @@ function Catalog({ models, err, initial }: { models: Model[] | null; err: string
   const list = useMemo(() => (models ?? []).filter((m) => f === 'all' || (f === 'tek' && m.floors === 1) || (f === 'cift' && (m.floors ?? 0) >= 2) || (f === 'teslim' && m.is_real_project)), [models, f]);
   const has = (k: Filter) => (models ?? []).some((m) => (k === 'tek' && m.floors === 1) || (k === 'cift' && (m.floors ?? 0) >= 2) || (k === 'teslim' && m.is_real_project));
   const chips: Array<[Filter, string]> = [['all', 'Tümü'], ['tek', 'Tek katlı'], ['cift', 'Çift katlı'], ['teslim', 'Teslim ettiklerimiz']];
+  useSeo({ title: 'Ev ve Villa Modelleri · Anahtar Teslim Ev Yapımı | Embay Yapı', path: '/evler',
+    description: "Embay Yapı ev ve villa modelleri, teslim ettiğimiz gerçek projeler ve İstanbul'un tüm ilçeleri için anahtar teslim ev yapımı. Teklif: 0531 436 29 04",
+    jsonLd: { '@context': 'https://schema.org', '@type': 'HomeAndConstructionBusiness', name: 'Embay Yapı', telephone: '+905314362904', url: PUBLIC_SITE + '/evler', areaServed: DISTRICTS.map((d) => `${d.name}, İstanbul`), sameAs: SOCIAL.map((x) => x.url) } });
   return (
     <>
       <Hero count={models?.length ?? 0} />
@@ -162,7 +212,10 @@ function Catalog({ models, err, initial }: { models: Model[] | null; err: string
             </div>
           )}
       </section>
+      <LatestPosts />
       <Why />
+      <DistrictGrid />
+      <SocialSection />
       <Faq />
       <LeadForm />
     </>
@@ -210,7 +263,10 @@ function Detail({ m }: { m: Model }) {
   const imgs = [m.cover_url, ...m.gallery].filter((x, i, a): x is string => Boolean(x) && a.indexOf(x) === i);
   const [i, setI] = useState(0);
   const [zoom, setZoom] = useState(false);
-  useEffect(() => { document.title = `${m.title} | Embay Yapı`; }, [m.title]);
+  useSeo({ title: `${m.title}${m.area_m2 ? ` · ${m2(m.area_m2)}` : ''} | Embay Yapı`, path: `/ev/${m.slug}`, image: imgs[0],
+    description: (m.subtitle ? `${m.subtitle}. ` : '') + (m.description || 'Embay Yapı ev modeli. Detaylar ve teklif için: 0531 436 29 04').slice(0, 140),
+    jsonLd: { '@context': 'https://schema.org', '@type': 'Product', name: m.title, image: imgs.slice(0, 5), description: m.description || m.subtitle || m.title, brand: { '@type': 'Brand', name: 'Embay Yapı' },
+      ...(m.price ? { offers: { '@type': 'Offer', priceCurrency: 'TRY', price: m.price, availability: 'https://schema.org/InStock', url: `${PUBLIC_SITE}/ev/${m.slug}` } } : {}) } });
   const rooms = (m.room_breakdown ?? []).filter((r) => r.label);
   return (
     <>
@@ -372,6 +428,9 @@ function Footer() {
         <div className="text-center font-light text-white/80 sm:text-right">
           <a href={`tel:${PHONE_CLEAN}`} className="font-semibold text-white">{PHONE}</a>
           <p>embayyapi.com.tr · @embayyapi</p>
+          <div className="mt-2 flex justify-center gap-2 sm:justify-end">
+            {SOCIAL.map((x) => <a key={x.name} href={x.url} target="_blank" rel="noopener noreferrer" aria-label={x.name} className="rounded-full bg-white/10 p-2 hover:bg-white/20"><x.icon className="h-4 w-4" /></a>)}
+          </div>
         </div>
       </div>
     </footer>
@@ -398,6 +457,150 @@ function Faq() {
             </button>
             {o === k && <p className="px-5 pb-5 text-sm font-light leading-relaxed text-slate-600">{a}</p>}
           </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PostCard({ p }: { p: Post }) {
+  return (
+    <button onClick={() => go(`/blog/${p.slug}`)} className="group flex h-full flex-col overflow-hidden rounded-3xl bg-white text-left shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-xl">
+      <div className="aspect-[16/10] overflow-hidden bg-slate-100">{p.cover_url && <img src={p.cover_url} alt={p.title} loading="lazy" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />}</div>
+      <div className="flex flex-1 flex-col gap-2 p-5">
+        <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold text-[#1E5BC6]">
+          <span>{p.kind === 'proje' ? '✓ Proje' : 'Ev rehberi'}</span>{p.district && <span className="text-slate-400">· {p.district}</span>}<span className="text-slate-400">· {fmtDate(p.published_at)}</span>
+        </div>
+        <h3 className="font-bold leading-snug">{p.title}</h3>
+        {p.excerpt && <p className="line-clamp-3 text-[13px] font-light text-slate-600">{p.excerpt}</p>}
+        <span className="mt-auto flex items-center pt-2 text-[13px] font-semibold text-[#1E5BC6]">Devamını oku <ChevronRight className="h-4 w-4" /></span>
+      </div>
+    </button>
+  );
+}
+
+function LatestPosts() {
+  const posts = usePosts({ limit: 3 });
+  if (!posts?.length) return null;
+  return (
+    <section className="mx-auto max-w-6xl px-4 pt-14">
+      <div className="mb-5 flex items-end justify-between gap-3">
+        <h2 className="text-2xl font-light">Ev <span className="font-bold">rehberi</span></h2>
+        <button onClick={() => go('/blog')} className="text-[13px] font-semibold text-[#1E5BC6]">Tüm yazılar →</button>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{posts.map((p) => <PostCard key={p.id} p={p} />)}</div>
+    </section>
+  );
+}
+
+function BlogList() {
+  const posts = usePosts();
+  useSeo({ title: 'Ev Rehberi · Ev ve Villa Yaptırmak İçin Bilgiler | Embay Yapı', path: '/blog',
+    description: "İstanbul'da müstakil ev ve villa yaptırmak isteyenler için ilçe ilçe rehber yazılar ve teslim ettiğimiz projeler. Embay Yapı · 0531 436 29 04" });
+  return (
+    <>
+      <section className="bg-gradient-to-b from-[#1E5BC6] to-[#F4F7FC] px-4 pb-16 pt-10 text-center text-white">
+        <BookOpen className="mx-auto h-8 w-8" />
+        <h1 className="mt-2 text-3xl font-light sm:text-4xl">Ev <span className="font-extrabold">Rehberi</span></h1>
+        <p className="mx-auto mt-2 max-w-xl text-sm font-light text-white/90">İstanbul'da ev ve villa yaptırmak isteyenler için ilçe ilçe bilgiler ve teslim ettiğimiz projeler.</p>
+      </section>
+      <section className="mx-auto -mt-8 max-w-6xl px-4 pb-12">
+        {posts === null ? <Loading /> : posts.length === 0 ? <p className="rounded-3xl bg-white p-8 text-center text-sm text-slate-500">İlk yazılarımız çok yakında burada.</p>
+          : <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{posts.map((p) => <PostCard key={p.id} p={p} />)}</div>}
+      </section>
+      <DistrictGrid />
+      <LeadForm />
+    </>
+  );
+}
+
+function PostPage({ slug, models }: { slug: string; models: Model[] }) {
+  const [p, setP] = useState<Post | null | undefined>(undefined);
+  useEffect(() => {
+    if (!supabase) { setP(null); return; }
+    supabase.from('site_posts').select('*').eq('status', 'published').eq('slug', slug).maybeSingle().then(({ data }) => setP((data as Post) ?? null));
+  }, [slug]);
+  useSeo({ title: p ? `${p.seo_title || p.title} | Embay Yapı` : 'Ev Rehberi | Embay Yapı', path: `/blog/${slug}`, description: p?.seo_description || p?.excerpt, image: p?.cover_url,
+    jsonLd: p ? { '@context': 'https://schema.org', '@type': 'Article', headline: p.title, image: p.images.slice(0, 5), datePublished: p.published_at, author: { '@type': 'Organization', name: 'Embay Yapı' }, publisher: { '@type': 'Organization', name: 'Embay Yapı' } } : null });
+  if (p === undefined) return <Loading />;
+  if (!p) return <NotFound />;
+  const blocks = (p.body ?? '').split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  const imgs = p.images.filter((u) => u !== p.cover_url);
+  const related = p.model_slug ? models.filter((m) => m.slug === p.model_slug) : models.slice(0, 3);
+  return (
+    <>
+      <article className="mx-auto max-w-3xl px-4 pb-6 pt-6">
+        <button onClick={() => go('/blog')} className="flex items-center gap-1 text-[13px] font-semibold text-[#1E5BC6]"><ArrowLeft className="h-4 w-4" /> Ev rehberi</button>
+        <p className="mt-4 text-[12px] font-semibold text-[#1E5BC6]">{p.kind === 'proje' ? '✓ Teslim ettiğimiz proje' : 'Ev rehberi'}{p.district ? ` · ${p.district}` : ''} · {fmtDate(p.published_at)}</p>
+        <h1 className="mt-1 text-3xl font-bold leading-tight">{p.title}</h1>
+        {p.excerpt && <p className="mt-3 text-base font-light text-slate-600">{p.excerpt}</p>}
+        {p.cover_url && <img src={p.cover_url} alt={p.title} className="mt-6 w-full rounded-3xl object-cover shadow-sm" />}
+        <div className="mt-6 space-y-4 text-[15px] font-light leading-relaxed text-slate-700">
+          {blocks.map((b, i) => {
+            const [first, ...rest] = b.split('\n');
+            if (first.startsWith('## ')) return <div key={i}><h2 className="mb-1.5 text-xl font-bold text-[#14213D]">{first.slice(3)}</h2>{rest.length > 0 && <p>{rest.join(' ')}</p>}</div>;
+            return <p key={i}>{b}</p>;
+          })}
+        </div>
+        {imgs.length > 0 && <div className="mt-6 grid grid-cols-2 gap-2">{imgs.map((u) => <img key={u} src={u} alt="Embay Yapı projesinden" loading="lazy" className="aspect-[4/3] w-full rounded-2xl object-cover" />)}</div>}
+        <p className="mt-2 text-[11px] text-slate-400">Fotoğraflar Embay Yapı'nın teslim ettiği projelerdendir.</p>
+        {p.district_slug && <button onClick={() => go(`/ilce/${p.district_slug}`)} className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-[#EAF1FC] px-4 py-2 text-[13px] font-semibold text-[#16428F]"><MapPin className="h-4 w-4" /> {p.district} için diğer yazılar</button>}
+      </article>
+      {related.length > 0 && <section className="mx-auto max-w-6xl px-4 pb-6"><h2 className="mb-4 text-xl font-bold">Ev modellerimiz</h2><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{related.map((m) => <Card key={m.id} m={m} />)}</div></section>}
+      <LeadForm />
+    </>
+  );
+}
+
+function DistrictPage({ slug, models }: { slug: string; models: Model[] }) {
+  const d = DISTRICTS.find((x) => x.slug === slug);
+  const posts = usePosts({ district: slug });
+  const name = d?.name ?? slug;
+  useSeo({ title: `${locative(name)} Müstakil Ev ve Villa Yapımı · Anahtar Teslim | Embay Yapı`, path: `/ilce/${slug}`,
+    description: `${locative(name)} ev veya villa yaptırmak isteyenler için ev modellerimiz, rehber yazılar ve ücretsiz teklif. Embay Yapı · 0531 436 29 04` });
+  if (!d) return <NotFound />;
+  return (
+    <>
+      <section className="bg-gradient-to-b from-[#1E5BC6] to-[#F4F7FC] px-4 pb-16 pt-10 text-center text-white">
+        <MapPin className="mx-auto h-8 w-8" />
+        <h1 className="mt-2 text-3xl font-light sm:text-4xl">{locative(name)} <span className="font-extrabold">ev ve villa yapımı</span></h1>
+        <p className="mx-auto mt-3 max-w-2xl text-sm font-light text-white/90">{locative(name)} arsanıza müstakil ev veya villa yaptırmak mı istiyorsunuz? Ev modellerimizi inceleyin, metrekare ve teslim tipini yazın; {name} için size özel teklifimizi hazırlayalım.</p>
+        <a href="#teklif" className="mt-6 inline-block rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#16428F]">{name} için teklif al</a>
+      </section>
+      {posts && posts.length > 0 && <section className="mx-auto -mt-8 max-w-6xl px-4 pb-6"><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{posts.map((p) => <PostCard key={p.id} p={p} />)}</div></section>}
+      {models.length > 0 && <section className="mx-auto max-w-6xl px-4 py-6"><h2 className="mb-4 text-xl font-bold">Ev modellerimiz</h2><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{models.slice(0, 6).map((m) => <Card key={m.id} m={m} />)}</div></section>}
+      <DistrictGrid current={slug} />
+      <LeadForm />
+    </>
+  );
+}
+
+function DistrictGrid({ current }: { current?: string }) {
+  return (
+    <section id="ilceler" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-10">
+      <h2 className="mb-1 text-2xl font-light">İstanbul'un <span className="font-bold">tüm ilçeleri</span></h2>
+      <p className="mb-4 text-sm font-light text-slate-600">Bulunduğunuz ilçeyi seçin; o ilçe için rehber yazılara ve teklif formuna ulaşın.</p>
+      <div className="flex flex-wrap gap-2">
+        {DISTRICTS.map((d) => (
+          <button key={d.slug} onClick={() => go(`/ilce/${d.slug}`)}
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium ring-1 ${current === d.slug ? 'bg-[#16428F] text-white ring-[#16428F]' : 'bg-white text-[#16428F] ring-black/5 hover:bg-[#EAF1FC]'}`}>{d.name}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SocialSection() {
+  return (
+    <section id="sosyal" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-10">
+      <h2 className="mb-1 text-2xl font-light">Bizi <span className="font-bold">takip edin</span></h2>
+      <p className="mb-5 text-sm font-light text-slate-600">Şantiyeden, teslim ettiğimiz evlerden ve yeni projelerden kareler her gün sosyal medya hesaplarımızda.</p>
+      <div className={`grid gap-4 ${SOCIAL.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+        {SOCIAL.map((x) => (
+          <a key={x.name} href={x.url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-4 rounded-3xl bg-gradient-to-br ${x.color} p-6 text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg`}>
+            <x.icon className="h-10 w-10 shrink-0" />
+            <div><p className="text-lg font-bold">{x.name}</p><p className="text-sm font-light text-white/90">{x.handle}</p><p className="mt-1 text-[12px] font-semibold">Takip et →</p></div>
+          </a>
         ))}
       </div>
     </section>

@@ -6,8 +6,12 @@ import type { Db } from './context.ts';
 import { aiComplete, loadAgent } from './context.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { telegramSend } from './connectors/messaging.ts';
+import { DISTRICTS, locative, slugTr } from './istanbul.ts';
+
 
 const SITE = 'https://embay-panel.vercel.app';
+// Herkese açık (Google'da dizine eklenen) site adresi
+export const PUBLIC_SITE = 'https://sahinmanitou.com';
 const PHONE = '0531 436 29 04';
 const SYSTEM: Record<string, string> = { celik: 'çelik yapı', hafif_celik: 'hafif çelik', betonarme: 'betonarme', prefabrik: 'prefabrik', diger: '' };
 const DELIVERY: Record<string, string> = { anahtar_teslim: 'anahtar teslim', ileri_kaba: 'ileri kaba', kaba: 'kaba inşaat' };
@@ -125,7 +129,7 @@ export async function showroomEditorTick(db: Db) {
       try { const t = await writeShowroomTexts(db, m); caption = `${t.social_caption}\n\n${t.hashtags.join(' ')}`; }
       catch { caption = `${m.title}${m.subtitle ? ` — ${m.subtitle}` : ''}\n\nDetaylar ve teklif için DM atın veya arayın 👇\n📞 ${PHONE}\n\n${BASE_TAGS.join(' ')}`; }
     }
-    const link = `${SITE}/ev/${m.slug}`;
+    const link = `${PUBLIC_SITE}/ev/${m.slug}`;
     const body = `${caption}\n\n🔗 Tüm detaylar: ${link}`;
     const rows = (['instagram', 'facebook'] as const).map((p) => ({
       client_id: m.client_id, bot_id: bot.id, brand: 'Embay Yapı', title: `${p.toUpperCase()} · Ev Vitrini · ${m.title}`.slice(0, 200), headline: m.title, body, caption,
@@ -152,4 +156,117 @@ export async function showroomEditorTick(db: Db) {
     }
   }
   return out;
+}
+
+// ── SİTE YAZILARI (Ev & Yapı Rehberi) ───────────────────────────────────────
+// Editör Bot her gün (10:00 sonrası, İstanbul) sitede 1 görselli, ön yazılı paylaşım yayınlar:
+//  • İlçe rehberi: "<İlçe>'de müstakil ev / villa yaptırmak" — 39 ilçe sırayla; Google'da ilçe aramalarında görünmek için
+//  • Proje tanıtımı: yayındaki gerçek projelerimiz (14 günde bir aynı proje tekrar edilmez)
+// Fotoğraflar yalnızca bizim gerçek proje fotoğraflarımız; yazı fotoğrafların o ilçede çekildiğini İDDİA ETMEZ.
+
+const TOPICS = [
+  (d: string) => `${locative(d)} müstakil ev veya villa yaptırmak: adım adım rehber`,
+  (d: string) => `${locative(d)} anahtar teslim ev yapımı: süreç ve dikkat edilecekler`,
+  (d: string) => `${locative(d)} çelik ev mi betonarme mi? Doğru yapı sistemini seçmek`,
+  (d: string) => `${locative(d)} arsanıza ev yaptırmadan önce bilmeniz gerekenler`,
+];
+const POST_RULES = `${RULES}
+Bu bir web sitesi rehber yazısı: Google'da arama yapan ev sahibine gerçekten faydalı, genel ve DOĞRU bilgi ver.
+İlçe hakkında doğrulanamayan özel bilgi (imar oranı, arsa fiyatı, nüfus, yasal madde numarası, belirli mahalle iddiası) YAZMA; bunlar için "ilgili belediyenin imar müdürlüğünden öğrenin" de.
+Embay Yapı'nın o ilçede proje yaptığını İDDİA ETME; "İstanbul genelinde ve ${'{ilçe}'} için de teklif hazırlıyoruz" gibi hizmet diliyle yaz. Fiyat, süre, garanti rakamı yazma.
+Ara başlıkları kısa tut; her bölüm 2-4 cümle. Son bölüm: teklif için telefon ${PHONE} ve sitedeki teklif formu.`;
+const POST_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'Yazı başlığı (60-75 karakter), ilçe adını içersin' },
+    excerpt: { type: 'string', description: 'Kart özeti, 140-180 karakter' },
+    sections: { type: 'array', items: { type: 'object', properties: { heading: { type: 'string' }, text: { type: 'string' } }, required: ['heading', 'text'] }, description: '4-6 bölüm' },
+    seo_title: { type: 'string', description: 'Google başlığı, en fazla 60 karakter' },
+    seo_description: { type: 'string', description: 'Google açıklaması, 140-160 karakter' },
+  },
+  required: ['title', 'excerpt', 'sections', 'seo_title', 'seo_description'],
+};
+
+async function realPhotos(db: Db, n: number, seed: number) {
+  const { data } = await db.from('showroom_models').select('cover_url,gallery').eq('is_real_project', true).neq('status', 'archived');
+  const all = [...new Set(((data ?? []) as Array<{ cover_url: string | null; gallery: string[] }>).flatMap((m) => [m.cover_url, ...m.gallery]).filter(Boolean) as string[])];
+  if (!all.length) return [];
+  const out: string[] = [];
+  for (let i = 0; i < Math.min(n, all.length); i++) out.push(all[(seed * 3 + i * 5) % all.length]);
+  return [...new Set(out)];
+}
+
+function bodyFrom(sections: Array<{ heading?: string; text?: string }>) {
+  return sections.filter((s) => s.text).map((s) => `${s.heading ? `## ${String(s.heading).trim()}\n` : ''}${String(s.text).trim()}`).join('\n\n').slice(0, 9000);
+}
+
+/** Bir ilçe rehberi yaz ve yayınla (bot). */
+export async function writeDistrictPost(db: Db, districtName?: string, actorId: string | null = null) {
+  const { data: bot } = await db.from('automation_bots').select('id,client_id').eq('slug', 'vitrin-editoru').maybeSingle();
+  const { data: used } = await db.from('site_posts').select('district_slug,title').eq('kind', 'ilce');
+  const counts = new Map<string, number>();
+  for (const r of (used ?? []) as Array<{ district_slug: string | null }>) if (r.district_slug) counts.set(r.district_slug, (counts.get(r.district_slug) ?? 0) + 1);
+  const d = districtName ? DISTRICTS.find((x) => x.name === districtName) ?? DISTRICTS[0]
+    : [...DISTRICTS].sort((a, b) => (counts.get(a.slug) ?? 0) - (counts.get(b.slug) ?? 0))[0];
+  const n = counts.get(d.slug) ?? 0;
+  const topic = TOPICS[n % TOPICS.length](d.name);
+  const agent = await loadAgent(db, null);
+  const r = await aiComplete({ db, runId: null, actorId: actorId as string, tokens: { in: 0, out: 0 }, agent }, 'site_post',
+    `Konu: ${topic}\nİlçe: ${d.name} (İstanbul)\nFirma: Embay Yapı — müstakil ev, villa, çelik ve betonarme yapı, anahtar teslim inşaat.`, POST_SCHEMA, POST_RULES.replace('{ilçe}', d.name));
+  const j = r.json as { title?: string; excerpt?: string; sections?: Array<{ heading?: string; text?: string }>; seo_title?: string; seo_description?: string };
+  const title = String(j.title || topic).trim().slice(0, 140);
+  const images = await realPhotos(db, 4, DISTRICTS.indexOf(d) + n);
+  const base = slugTr(title).slice(0, 100) || `${d.slug}-ev-yapimi`;
+  const { data: clash } = await db.from('site_posts').select('id').eq('slug', base).maybeSingle();
+  const row = {
+    client_id: bot?.client_id ?? null, slug: clash ? `${base}-${Date.now().toString(36).slice(-4)}` : base, kind: 'ilce', title,
+    excerpt: String(j.excerpt ?? '').slice(0, 300), body: bodyFrom(j.sections ?? []), cover_url: images[0] ?? null, images,
+    district: d.name, district_slug: d.slug, tags: [d.name, 'müstakil ev', 'villa', 'anahtar teslim'], seo_title: String(j.seo_title ?? title).slice(0, 70),
+    seo_description: String(j.seo_description ?? j.excerpt ?? '').slice(0, 170), source: 'bot', status: 'published',
+  };
+  const { data, error } = await db.from('site_posts').insert(row).select('slug,title').single();
+  if (error) throw error;
+  return data as { slug: string; title: string };
+}
+
+/** Yayındaki gerçek bir projeyi sitede tanıtım yazısı olarak paylaş (bot). */
+async function writeProjectPost(db: Db) {
+  const { data: models } = await db.from('showroom_models').select(COLS).eq('status', 'published').eq('is_real_project', true);
+  const { data: recent } = await db.from('site_posts').select('model_slug').eq('kind', 'proje').gte('published_at', new Date(Date.now() - 14 * 86400_000).toISOString());
+  const skip = new Set(((recent ?? []) as Array<{ model_slug: string | null }>).map((x) => x.model_slug));
+  const m = ((models ?? []) as Model[]).find((x) => !skip.has(x.slug));
+  if (!m) return null;
+  const agent = await loadAgent(db, null);
+  const r = await aiComplete({ db, runId: null, actorId: null as unknown as string, tokens: { in: 0, out: 0 }, agent }, 'site_post',
+    `Teslim ettiğimiz bu projeyi sitede tanıtan bir yazı yaz (proje hikâyesi + bu tarz bir ev isteyenlere öneriler).\n\n${facts(m)}`, POST_SCHEMA, POST_RULES.replace('{ilçe}', m.location || 'İstanbul'));
+  const j = r.json as { title?: string; excerpt?: string; sections?: Array<{ heading?: string; text?: string }>; seo_title?: string; seo_description?: string };
+  const images = [...new Set([m.cover_url, ...m.gallery].filter(Boolean) as string[])].slice(0, 8);
+  const title = String(j.title || m.title).slice(0, 140);
+  const base = `proje-${slugTr(title).slice(0, 90)}`;
+  const { data: clash } = await db.from('site_posts').select('id').eq('slug', base).maybeSingle();
+  const { data, error } = await db.from('site_posts').insert({
+    client_id: m.client_id, slug: clash ? `${base}-${Date.now().toString(36).slice(-4)}` : base, kind: 'proje', title, excerpt: String(j.excerpt ?? '').slice(0, 300),
+    body: bodyFrom(j.sections ?? []), cover_url: images[0] ?? null, images, district: m.location, district_slug: m.location ? slugTr(m.location) : null, model_slug: m.slug,
+    tags: ['teslim ettik', 'villa'], seo_title: String(j.seo_title ?? title).slice(0, 70), seo_description: String(j.seo_description ?? j.excerpt ?? '').slice(0, 170), source: 'bot', status: 'published',
+  }).select('slug,title').single();
+  if (error) throw error;
+  return data as { slug: string; title: string };
+}
+
+/** Worker adımı: günde 1 site paylaşımı (10:00 sonrası). */
+export async function sitePostTick(db: Db) {
+  const { data: bot } = await db.from('automation_bots').select('status').eq('slug', 'vitrin-editoru').maybeSingle();
+  if (!bot || bot.status !== 'active') return { skipped: 'bot pasif' };
+  const now = new Date();
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(now));
+  if (hour < 10 || hour >= 21) return { skipped: 'saat dışı' };
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(now);
+  const { count } = await db.from('site_posts').select('id', { count: 'exact', head: true }).eq('source', 'bot').gte('created_at', `${day}T00:00:00+03:00`);
+  if (count) return { skipped: 'bugün paylaşıldı' };
+  const dow = new Date(`${day}T12:00:00+03:00`).getUTCDay();
+  const post = (dow % 3 === 0 ? await writeProjectPost(db).catch(() => null) : null) ?? await writeDistrictPost(db);
+  await loadAppSecrets(db);
+  if (post && appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID'))
+    await telegramSend(`📝 Sitede yeni paylaşım (Editör Bot)\n${post.title}\n${PUBLIC_SITE}/blog/${post.slug}\nBeğenmezseniz panel → Ev Vitrini → Site yazıları → Arşivle`).catch(() => null);
+  return { posted: post };
 }

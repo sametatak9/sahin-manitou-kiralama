@@ -16,7 +16,7 @@ if (isPanelHost) {
 const PanelApp = lazy(() => import('./App.tsx'));
 const ShowroomView = lazy(() => import('./components/views/ShowroomView').then((m) => ({ default: m.ShowroomView })));
 // Ev modelleri vitrini (/evler, /ev/<slug>) — herkese açık
-const isShowroom = () => /^\/(evler|ev\/)/.test(window.location.pathname);
+const isShowroom = () => /^\/(evler|ev\/|blog|ilce\/)/.test(window.location.pathname);
 
 function Root() {
   if (isShowroom()) return <Suspense fallback={<div className="min-h-screen bg-[#F4F7FC]" />}><ShowroomView /></Suspense>;

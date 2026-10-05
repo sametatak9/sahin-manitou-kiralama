@@ -20,7 +20,7 @@ import { morningBrief, notifyPublished, telegramSetupWebhook, telegramWebhook } 
 import { aiImage, aiImageLastError, factoryTick, planTick, renderBanner, renderBannerToPool, runContentFactory } from '../_shared/factory.ts';
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
-import { showroomEditorTick, writeShowroomTexts } from '../_shared/showroom.ts';
+import { PUBLIC_SITE, showroomEditorTick, sitePostTick, writeDistrictPost, writeShowroomTexts } from '../_shared/showroom.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
 
@@ -80,7 +80,8 @@ async function runWorker(db: Db, workerId: string) {
   const archive = await archiveTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const digest = await radarDigest(db).catch((e) => ({ error: String(e).slice(0, 200) }));
   const showroom = await showroomEditorTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
-  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, showroom, morning, autopilot };
+  const sitePost = await sitePostTick(db).catch((e) => ({ error: String(e).slice(0, 200) }));
+  return { tasks: taskResults, approvals, content, metrics, factory, drive, plan, inbox, radar, growth, archive, digest, showroom, sitePost, morning, autopilot };
 }
 
 /** Uzun işleri (içerik fabrikası) isteği bekletmeden arka planda sürdürür. */
@@ -792,6 +793,28 @@ Deno.serve(async (req) => {
     }
     // Seri görseli (yalnızca iç gizli anahtarla): yapay zekâ görselini üretir, havuza "temsilî" notuyla kaydeder, herkese açık adresini döndürür.
     // Örn. "Ev Tarzları" kaydırmalı serisi; slaytlar GitHub Actions'ta bu adreslerden çizilir. Aynı yol varsa yeniden üretmez.
+    // Herkese açık site haritası (Google): ev modelleri, site yazıları, ilçe sayfaları. Vercel /sitemap.xml buraya yönlendirir.
+    if (path.startsWith('/sitemap') && req.method === 'GET') {
+      const [{ data: models }, { data: posts }] = await Promise.all([
+        db.from('showroom_models').select('slug,updated_at').eq('status', 'published'),
+        db.from('site_posts').select('slug,updated_at,district_slug').eq('status', 'published'),
+      ]);
+      const { DISTRICTS } = await import('../_shared/istanbul.ts');
+      const u = (loc: string, mod?: string, pr = '0.6') => `<url><loc>${PUBLIC_SITE}${loc}</loc>${mod ? `<lastmod>${mod.slice(0, 10)}</lastmod>` : ''}<priority>${pr}</priority></url>`;
+      const xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        u('/evler', undefined, '1.0'), u('/blog', undefined, '0.8'),
+        ...((models ?? []) as Array<{ slug: string; updated_at: string }>).map((m) => u(`/ev/${m.slug}`, m.updated_at, '0.9')),
+        ...((posts ?? []) as Array<{ slug: string; updated_at: string }>).map((p) => u(`/blog/${p.slug}`, p.updated_at, '0.7')),
+        ...DISTRICTS.map((d) => u(`/ilce/${d.slug}`, undefined, '0.6')), '</urlset>'].join('');
+      return new Response(xml, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+    }
+    // Editör Bot: şimdi bir ilçe rehberi yaz ve yayınla (iç anahtarla; ilk içerikleri hazırlamak için)
+    if (path.startsWith('/site-post') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { district?: string };
+      return json(await writeDistrictPost(db, b.district));
+    }
     // Takip listesindeki belirli işletme hesaplarının herkese açık metrikleri (resmi Business Discovery) — yalnızca iç gizli anahtarla (günlük denetim / Claude).
     if (path.startsWith('/ig-benchmark') && req.method === 'POST') {
       const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });

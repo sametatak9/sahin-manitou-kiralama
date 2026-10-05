@@ -3,4 +3,5 @@ User-agent: *
 Allow: /
 Disallow: /panel
 
-Sitemap: https://sahin-manitou-kiralama.vercel.app/sitemap.xml
+Sitemap: https://sahinmanitou.com/sitemap.xml
+Sitemap: https://sahinmanitou.com/sitemap-evler.xml
