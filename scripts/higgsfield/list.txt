@@ -5,9 +5,9 @@
 5-ust-kat-merdiven.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1T28HxlJgK7ZVcqw_5a-MySjSZbl_3V-Z.jpg
 6-misafir-lavabo.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1eRHPW9RNj8_mKUb2r6dfeHxku9KKPLOz.jpg
 7-villa-dis.jpg https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1zOI5qM9-hooh8CL_MJiGAi9VHj7eZE_y.jpg
-video-1-yemek-salon.mp4 https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/12yBQfw9L8TugcPfb9ewcM-wH4G2dY9TN.mov
-video-2-galeri-bakis.mp4 https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1LUHpzNo0v3gCd56L1R1w04PXSkp_yXhB.mov
-video-3-galeri-pencere.mp4 https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1QSMOygUzt40lrA-Au815T_O9BDSvyMOd.mov
-video-4-oturma-odasi.mp4 https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1kqBSybuZ5VkB1bYsGRKOMqLDmc_hf2qk.mov
-video-5-iki-katli-dis.mp4 https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/17UNFekK28O8G3DPGlGhR0Xsls8TPHSvo.mov
-video-6-villa-teras.mp4 https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1BCXqgs2x8EkamKzGEDoEnzj-seQSf0WJ.mov
+video-1-yemek-salon.mov https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/12yBQfw9L8TugcPfb9ewcM-wH4G2dY9TN.mov
+video-2-galeri-bakis.mov https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1LUHpzNo0v3gCd56L1R1w04PXSkp_yXhB.mov
+video-3-galeri-pencere.mov https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1QSMOygUzt40lrA-Au815T_O9BDSvyMOd.mov
+video-4-oturma-odasi.mov https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1kqBSybuZ5VkB1bYsGRKOMqLDmc_hf2qk.mov
+video-5-iki-katli-dis.mov https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/17UNFekK28O8G3DPGlGhR0Xsls8TPHSvo.mov
+video-6-villa-teras.mov https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1BCXqgs2x8EkamKzGEDoEnzj-seQSf0WJ.mov

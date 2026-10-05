@@ -2,9 +2,6 @@
 name: Higgsfield-CapCut Medya
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['scripts/higgsfield/list.txt']
 permissions:
   contents: write
 jobs:
@@ -22,10 +19,10 @@ jobs:
             [ -z "$name" ] && continue
             [ -s "public/higgsfield/$name" ] && continue
             case "$name" in
-              *.mp4)
+              *.mp4|*.mov)
                 # iPhone .mov → telefonda ve CapCut'ta sorunsuz açılan H.264 mp4 (dikey, 1080 genişlik, sessiz değil)
                 curl -sSfL --retry 3 -o /tmp/src.mov "$url"
-                ffmpeg -nostdin -loglevel error -y -i /tmp/src.mov -vf "scale='min(1080,iw)':-2" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "public/higgsfield/$name" ;;
+                ffmpeg -nostdin -loglevel error -y -i /tmp/src.mov -vf "scale='min(1080,iw)':-2" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "public/higgsfield/${name%.*}.mp4" ;;
               *) curl -sSfL --retry 3 -o "public/higgsfield/$name" "$url" ;;
             esac
             echo "$name $(stat -c %s public/higgsfield/$name) bayt"

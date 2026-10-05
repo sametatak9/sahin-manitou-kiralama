@@ -1,5 +1,18 @@
 {
   "rewrites": [
+    { "source": "/higgsfield/1-salon-somine.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1EzMB-L1mEojIzXEa8Frj3DxWelgEklzh.jpg" },
+    { "source": "/higgsfield/2-galeri-kat.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1LD5GifUnk4a0BIpZ-ilovWHoTcyP9pn3.jpg" },
+    { "source": "/higgsfield/3-yemek-alani.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1xDDsnsmOFLiJ-kt8TCH6z3rzF6j50Z8I.jpg" },
+    { "source": "/higgsfield/4-kemerli-nis.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1aBgoAK860_XcAewVVgmIKq99jBf7Cqzs.jpg" },
+    { "source": "/higgsfield/5-ust-kat-merdiven.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1T28HxlJgK7ZVcqw_5a-MySjSZbl_3V-Z.jpg" },
+    { "source": "/higgsfield/6-misafir-lavabo.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1eRHPW9RNj8_mKUb2r6dfeHxku9KKPLOz.jpg" },
+    { "source": "/higgsfield/7-villa-dis.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1zOI5qM9-hooh8CL_MJiGAi9VHj7eZE_y.jpg" },
+    { "source": "/higgsfield/video-1-yemek-salon.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/12yBQfw9L8TugcPfb9ewcM-wH4G2dY9TN.mov" },
+    { "source": "/higgsfield/video-2-galeri-bakis.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1LUHpzNo0v3gCd56L1R1w04PXSkp_yXhB.mov" },
+    { "source": "/higgsfield/video-3-galeri-pencere.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1QSMOygUzt40lrA-Au815T_O9BDSvyMOd.mov" },
+    { "source": "/higgsfield/video-4-oturma-odasi.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1kqBSybuZ5VkB1bYsGRKOMqLDmc_hf2qk.mov" },
+    { "source": "/higgsfield/video-5-iki-katli-dis.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/17UNFekK28O8G3DPGlGhR0Xsls8TPHSvo.mov" },
+    { "source": "/higgsfield/video-6-villa-teras.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1BCXqgs2x8EkamKzGEDoEnzj-seQSf0WJ.mov" },
     { "source": "/sitemap-evler.xml", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/sitemap" },
     { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embayyapi.vercel.app" }], "destination": "/embay.html" },
     { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embayyapi.com.tr" }], "destination": "/embay.html" },
