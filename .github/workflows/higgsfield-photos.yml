@@ -1,5 +1,5 @@
 # Higgsfield'a yüklenecek gerçek proje fotoğrafları: depodan herkese açık adresle indirilebilsin (public/higgsfield).
-name: Higgsfield Fotoğrafları
+name: Higgsfield-CapCut Medya
 on:
   workflow_dispatch:
   push:
@@ -10,16 +10,24 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with: { ref: main, fetch-depth: 1 }
-      - name: Fotoğrafları indir
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+      - name: Fotoğraf ve videoları indir
         run: |
           mkdir -p public/higgsfield
           while read -r name url; do
             [ -z "$name" ] && continue
-            curl -sSfL --retry 3 -o "public/higgsfield/$name" "$url"
+            [ -s "public/higgsfield/$name" ] && continue
+            case "$name" in
+              *.mp4)
+                # iPhone .mov → telefonda ve CapCut'ta sorunsuz açılan H.264 mp4 (dikey, 1080 genişlik, sessiz değil)
+                curl -sSfL --retry 3 -o /tmp/src.mov "$url"
+                ffmpeg -nostdin -loglevel error -y -i /tmp/src.mov -vf "scale='min(1080,iw)':-2" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "public/higgsfield/$name" ;;
+              *) curl -sSfL --retry 3 -o "public/higgsfield/$name" "$url" ;;
+            esac
             echo "$name $(stat -c %s public/higgsfield/$name) bayt"
           done < scripts/higgsfield/list.txt
       - name: Depoya yaz
@@ -28,5 +36,5 @@ jobs:
           git config user.email "embay-reels-bot@users.noreply.github.com"
           git add public/higgsfield
           git diff --cached --quiet && exit 0
-          git commit -q -m "Higgsfield için gerçek proje fotoğrafları"
+          git commit -q -m "Higgsfield/CapCut için gerçek proje fotoğraf ve videoları"
           for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
