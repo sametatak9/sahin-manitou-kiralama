@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
+  Blocks, Bot, Briefcase, Store, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -17,6 +17,7 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'queue', label: 'Yayın Merkezi', icon: CalendarClock, hint: 'Takvim · içerikler · havuz · onay' },
     { id: 'leads', label: 'Müşteri Adayları', icon: Inbox, hint: 'Fiyat soranlar · başvurular' },
     { id: 'growth', label: 'Büyüme', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
+    { id: 'showroom', label: 'Ev Vitrini', icon: Store, hint: 'Sitedeki ev modelleri' },
   ] },
   { title: 'İş', items: [
     { id: 'construction', label: 'Müşteriler', icon: Building2, hint: 'Görüşme · teklif · sözleşme' },

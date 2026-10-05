@@ -79,6 +79,7 @@ export const PublicWebsiteView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 shrink-0 font-medium">
+            <a href="/evler" className="rounded-full bg-emerald-500/15 px-3 py-1 font-bold text-emerald-200 ring-1 ring-emerald-500/40 hover:bg-emerald-500/25">Ev Modellerimiz →</a>
             <a
               href={`tel:${PHONE_CLEAN}`}
               className="flex items-center gap-1.5 text-white hover:text-emerald-300 font-bold tracking-wider"
