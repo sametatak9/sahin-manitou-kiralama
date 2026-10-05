@@ -777,6 +777,28 @@ Deno.serve(async (req) => {
     }
     // Seri görseli (yalnızca iç gizli anahtarla): yapay zekâ görselini üretir, havuza "temsilî" notuyla kaydeder, herkese açık adresini döndürür.
     // Örn. "Ev Tarzları" kaydırmalı serisi; slaytlar GitHub Actions'ta bu adreslerden çizilir. Aynı yol varsa yeniden üretmez.
+    // Takip listesindeki belirli işletme hesaplarının herkese açık metrikleri (resmi Business Discovery) — yalnızca iç gizli anahtarla (günlük denetim / Claude).
+    if (path.startsWith('/ig-benchmark') && req.method === 'POST') {
+      const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
+      if (!ok) return json({ error: 'forbidden' }, 403);
+      const b = await req.json().catch(() => ({})) as { handles?: string[] };
+      const handles = (b.handles ?? []).map((h) => String(h).replace(/[^a-z0-9._]/gi, '')).filter(Boolean).slice(0, 10);
+      const { data: accs } = await db.from('social_accounts').select('*').eq('connector_key', 'instagram').eq('connection_status', 'connected');
+      // deno-lint-ignore no-explicit-any
+      const acc = (accs || []).find((a: any) => a.metadata?.login !== 'instagram');
+      if (!acc) throw new HttpError(409, 'Instagram işletme hesabı Facebook sayfası üzerinden bağlı değil', 'META_REQUIRED');
+      const token = await tokenFor(db, acc);
+      const out: Record<string, unknown> = {};
+      for (const h of handles) {
+        try {
+          const m = await businessDiscovery(acc.external_account_id, token, h);
+          out[h] = m;
+          await db.from('social_prospects').update({ followers: m.followers ?? null, media_count: m.media_count ?? null, avg_engagement: m.avg_engagement, engagement_rate: m.engagement_rate,
+            metrics: { posts_per_week: m.posts_per_week, by_type: m.by_type, top_posts: m.top_posts, name: m.name }, last_benchmarked_at: new Date().toISOString() }).eq('platform', 'instagram').eq('handle', h);
+        } catch (e) { out[h] = { error: String((e as Error).message).slice(0, 200) }; }
+      }
+      return json(out);
+    }
     if (path.startsWith('/ai-image') && req.method === 'POST') {
       const { data: ok } = await db.rpc('verify_worker_secret', { p_secret: req.headers.get('x-worker-secret') || '' });
       if (!ok) return json({ error: 'forbidden' }, 403);
