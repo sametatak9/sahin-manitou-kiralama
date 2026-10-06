@@ -16,14 +16,25 @@ W, H, FPS = 1080, 1920, 30
 SKY_TOP, SKY_BOT = (22, 66, 158), (120, 178, 232)
 NAVY, WHITE = (24, 42, 104), (255, 255, 255)
 
-REEL = {
+REELS = [{
     'slug': 'villa-teslim',
+    'title': 'Villa Projemiz', 'end_line': 'Siz de böyle bir villaya', 'web': 'embayyapi.com.tr  ·  @embayyapi',
     'music': 'house_120_7',          # yalnızca önizleme kopyası için (telifsiz, kendi üretimimiz)
     'cover': 41,                     # kapağın altındaki villa fotoğrafı (havuz no; None → yalnızca başlık)
     'end': 45,                # kapanış kartının altındaki fotoğraf
     'photos': [61, 63, 57, 67, 53, 71],
     'cover_s': 4.2, 'slide_s': 2.6, 'end_s': 4.2, 'xf': 0.45,
-}
+}, {
+    # Ferhat klasörü (06.10): bahçeli, tek katlı, üçgen camlı yeni teslim ev — yalnızca gerçek fotoğraflar
+    'slug': 'ev-teslim-bahceli',
+    'title': 'Ev Projemiz', 'end_line': 'Siz de böyle bir eve', 'web': '@embayyapi',
+    'music': 'house_120_7',
+    'cover': 137,
+    'end': 148,
+    'photos': [149, 145, 146, 139, 144, 147],
+    'cover_s': 4.2, 'slide_s': 2.6, 'end_s': 4.2, 'xf': 0.45,
+}]
+REEL = REELS[0]
 
 
 def ffmpeg():
@@ -80,7 +91,7 @@ def cover_static(photo=None):
     o = 0 if photo is not None else 330          # fotoğrafsız kapakta blok dikeyde ortaya kayar
     l = logo(210 if photo is None else 190); top.alpha_composite(l, ((W - l.width) // 2, 120 + o - (20 if photo is None else 0)))
     ctext(d, 480 + o, 'Teslim Ettiğimiz', mont(70, 300))
-    ctext(d, 565 + o, 'Villa Projemiz', mont(100, 800))
+    ctext(d, 565 + o, REEL['title'], mont(100, 800))
     ctext(d, 700 + o, 'Detaylarını inceleyin!', mont(44, 600))
     badge(d, 200, 900 + o, ['ANAHTAR', 'TESLİM'])
     badge(d, 880, 900 + o, ['GERÇEK', 'PROJE'])
@@ -133,19 +144,19 @@ def end_static(photo):
     img.paste(ImageOps.fit(photo, (W, ph_h), Image.LANCZOS, centering=(0.5, 0.45)), (0, H - ph_h), mask)
     img = img.convert('RGBA'); d = ImageDraw.Draw(img)
     l = logo(260); img.alpha_composite(l, ((W - l.width) // 2, 170))
-    ctext(d, 540, 'Siz de böyle bir villaya', mont(58, 400))
+    ctext(d, 540, REEL['end_line'], mont(58, 400))
     ctext(d, 616, 'sahip olmak istiyorsanız', mont(58, 400))
     f = mont(58, 800); t = 'Bize DM atın'; tw = d.textlength(t, font=f)
     d.rounded_rectangle([(W - tw) / 2 - 60, 730, (W + tw) / 2 + 60, 850], radius=60, fill=WHITE)
     d.text(((W - tw) / 2, 754), t, font=f, fill=NAVY)
     ctext(d, 920, '0531 436 29 04', mont(42, 700))
-    ctext(d, 990, 'embayyapi.com.tr  ·  @embayyapi', mont(34, 500), (225, 236, 250))
+    ctext(d, 990, REEL['web'], mont(34, 500), (225, 236, 250))
     return img.convert('RGB')
 
 
 def main():
     urls = {it['n']: it['url'] for it in json.load(open(os.path.join(ROOT, 'scripts', 'media-sheets', 'list.json')))}
-    R = REEL; os.makedirs(OUT, exist_ok=True)
+    R = REEL; os.makedirs(OUT, exist_ok=True)  # REEL: modül düzeyinde seçilen yapılandırma
     cov = cover_static(load(R['cover'], urls) if R['cover'] else None)
     photos = [load(n, urls) for n in R['photos']]
     bub = logo_bubble(); end = end_static(load(R['end'], urls))
@@ -183,4 +194,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    only = os.environ.get('REEL_SLUG')
+    for r in REELS:
+        if only and r['slug'] != only: continue
+        REEL = r
+        main()
