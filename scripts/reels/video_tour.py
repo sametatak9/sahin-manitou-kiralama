@@ -51,9 +51,9 @@ def caption_layer(text):
 def hook_layer(text):
     """İlk 1,5 sn'lik merak cümlesi: ekranın üst-orta bölgesinde büyük ince yazı (Reels'te ilk saniye izlenmeyi belirler)."""
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
-    f = T.mont(84, 300); words = text.split(); lines, cur = [], ''
+    f = T.mont(76, 500); words = text.split(); lines, cur = [], ''
     for w in words:
-        if d.textlength((cur + ' ' + w).strip(), font=f) > W - 2 * 110: lines.append(cur); cur = w
+        if d.textlength((cur + ' ' + w).strip(), font=f) > W - 2 * 60: lines.append(cur); cur = w
         else: cur = (cur + ' ' + w).strip()
     lines.append(cur)
     y = 560
