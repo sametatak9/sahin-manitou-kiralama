@@ -5,6 +5,7 @@ import { ConnectorError, resolveStatus, type AccountRow } from './connectors/typ
 import { getHandler } from './tools/registry.ts';
 import { instagramRefresh } from './connectors/meta.ts';
 import { logActivity } from './activity.ts';
+import { checkContext, checkDraft, type Draft as CheckDraft } from './contentcheck.ts';
 
 export async function tokenFor(db: Db, account: AccountRow) {
   if (!account.credential_secret_id) throw new ConnectorError('Hesap token’ı yok — yeniden bağlanın', 'OAUTH_REQUIRED');
@@ -86,6 +87,19 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
       external_url: dup.external_url ?? null, summary: `${def.name}: “${(draft.headline || draft.title || '').slice(0, 60)}” atlandı — ${note}` });
     await ctx.log('warn', note, { previous_publication: dup.id });
     return { published: false, duplicate: true, previous_publication_id: dup.id, reason: note };
+  }
+
+  // İçerik kontrol botu kapısı: telefon, boş/yer tutuculu metin, marka adı ve medya hatası olan içerik paylaşılmaz
+  const { data: full } = await ctx.db.from('social_drafts').select('id,title,headline,caption,body,hashtags,media_urls,video_url,format,primary_platform,scheduled_at,workflow_status,design_url,brand').eq('id', draft.id).maybeSingle();
+  if (full) {
+    const chk = await checkDraft(ctx.db, { ...(full as CheckDraft), media_urls: media.length ? media : (full as CheckDraft).media_urls }, { ...(await checkContext(ctx.db)), published: [] });
+    const blockers = chk.items.filter((i) => i.level === 'error' && ['phone', 'text', 'brand', 'media'].includes(i.key));
+    if (blockers.length) {
+      const note = `Kontrol botu durdurdu: ${blockers.map((b) => `${b.label} — ${b.detail}`).join(' · ')}`.slice(0, 500);
+      await ctx.db.from('social_drafts').update({ workflow_status: 'failed', status: 'hata', error: note }).eq('id', draft.id);
+      await logActivity(ctx.db, { connector_key: platform, action: 'publish', status: 'skipped', bot_id: draft.bot_id ?? null, ref_type: 'social_drafts', ref_id: draft.id, summary: note });
+      return { published: false, blocked: true, reason: note };
+    }
   }
 
   const { data: pub, error } = await ctx.db.from('social_publications').insert({

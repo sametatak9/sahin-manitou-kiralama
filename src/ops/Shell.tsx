@@ -14,29 +14,28 @@ interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Ana', items: [
     { id: 'home', label: 'Ana Sayfa', icon: Gauge, hint: 'Bugün · yapılacaklar · sonuçlar' },
-    { id: 'queue', label: 'Yayın Merkezi', icon: CalendarClock, hint: 'Takvim · içerikler · havuz · onay' },
+    { id: 'queue', label: 'İçerik Merkezi', icon: Clapperboard, hint: 'Takvim · video · kontrol · üret · medya' },
     { id: 'leads', label: 'Müşteri Adayları', icon: Inbox, hint: 'Fiyat soranlar · başvurular' },
     { id: 'growth', label: 'Büyüme', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
-    { id: 'showroom', label: 'Ev Vitrini', icon: Store, hint: 'Sitedeki ev modelleri' },
+  ] },
+  { title: 'Web sitesi', items: [
+    { id: 'showroom', label: 'Ev Vitrini', icon: Store, hint: 'Sitedeki ev modelleri · yazılar' },
   ] },
   { title: 'İş', items: [
     { id: 'construction', label: 'Müşteriler', icon: Building2, hint: 'Görüşme · teklif · sözleşme' },
     { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'İş ortakları · hatırlatma' },
-    { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
     { id: 'bots', label: 'Botlar', icon: Bot, hint: 'Görev ver · zamanla' },
+    { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
   ] },
-  { title: 'Diğer', items: [
+  { title: 'Ayarlar', items: [
     { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
-    { id: 'videos', label: 'Medya Havuzu', icon: Film, hint: 'Ham foto · video' },
-    { id: 'studio', label: 'İçerik Stüdyosu', icon: Sparkles, hint: 'AI + tasarım' },
-    { id: 'planner', label: 'İçerik Takvimi', icon: CalendarRange, hint: 'Ay · hafta planı' },
     { id: 'clients', label: 'Ajans Müşterileri', icon: Users, hint: 'İşletmeler · hesaplar' },
     { id: 'skills', label: 'Yetenekler', icon: Blocks, hint: 'Skill kütüphanesi' },
     { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'queue', 'leads', 'growth'];
+const MOBILE: Route[] = ['home', 'queue', 'leads', 'bots'];
 const MOBILE_LABEL: Partial<Record<Route, string>> = {
   home: 'Ana',
   leads: 'Adaylar',
@@ -45,7 +44,7 @@ const MOBILE_LABEL: Partial<Record<Route, string>> = {
   clients: 'Müşteri',
   approvals: 'Onay',
   bots: 'Botlar',
-  queue: 'Yayın',
+  queue: 'İçerik',
   connections: 'Uygulamalar',
 };
 
@@ -95,13 +94,12 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-3 py-4">
-        <div className="relative w-10 h-10 rounded-2xl bg-ink-800 ring-1 ring-ink-600 flex items-center justify-center overflow-hidden">
-          <Radar className="w-5 h-5 text-brand-green relative z-10" />
-          <span className="absolute inset-0 ops-sweep" style={{ background: 'conic-gradient(from 0deg, rgba(61,170,92,.35), transparent 25%)' }} />
+        <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'linear-gradient(135deg,#16428F,#1E5BC6 60%,#78B2E8)' }}>
+          <img src="/reels/kit/embay_logo_beyaz.png" alt="Embay" className="w-7 h-7 object-contain" />
         </div>
         <div>
-          <div className="font-display text-sm font-bold tracking-wide text-ink-100">AJANS OPS</div>
-          <div className="text-[10px] font-mono tracking-[0.2em] text-ink-400">REKLAM AJANSI BOTLARI</div>
+          <div className="font-display text-sm font-bold tracking-wide text-ink-100">EMBAY PANEL</div>
+          <div className="text-[10px] tracking-[0.18em] text-ink-400">İÇERİK · MÜŞTERİ · BOT</div>
         </div>
       </div>
       <div className="px-2 pb-3"><ClientSwitcher /></div>

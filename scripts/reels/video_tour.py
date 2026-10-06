@@ -34,15 +34,15 @@ def probe(p):
     return 0.0
 
 
-def caption_layer(text):
+def caption_layer(text, label='EMBAY YAPI · YENİ TESLİM'):
     """Alt üçte bir: yumuşak gölgeli ince beyaz yazı + üstte küçük marka satırı."""
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     sh = Image.new('RGBA', (W, H), (0, 0, 0, 0)); sd = ImageDraw.Draw(sh); d = ImageDraw.Draw(lay)
     f = T.mont(66, 300); small = T.mont(28, 600)
     y = 1290
     for dd, fill in ((sd, (0, 0, 0, 170)), (d, (255, 255, 255, 255))):
-        dd.text(((W - dd.textlength('EMBAY YAPI · YENİ TESLİM', font=small)) / 2, y - 56), 'EMBAY YAPI · YENİ TESLİM', font=small, fill=fill)
-        dd.text(((W - dd.textlength(text, font=f)) / 2, y), text, font=f, fill=fill)
+        if label: dd.text(((W - dd.textlength(label, font=small)) / 2, y - 56), label, font=small, fill=fill)
+        if text: dd.text(((W - dd.textlength(text, font=f)) / 2, y), text, font=f, fill=fill)
     sh = sh.filter(ImageFilter.GaussianBlur(10))
     sh.alpha_composite(lay)
     return sh

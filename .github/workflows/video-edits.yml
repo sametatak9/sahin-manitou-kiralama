@@ -1,0 +1,75 @@
+# EMBAY · Panel video düzenleyici: panelde "Video Stüdyosu"ndan verilen kurgu/düzeltme işlerini render eder.
+# Gizli anahtar gerekmez — kuyruk yalnızca herkese açık medya adreslerini ve metinleri verir; video depoya (public/reels/edits)
+# yazılır, Vercel yayınlayınca panel işi tamamlar (yalnızca kendi alan adımızdaki dosyayı kabul eder).
+name: Panel video düzenleyici
+on:
+  schedule:
+    - cron: '*/15 4-20 * * *'   # İstanbul 07:00–23:45 arası 15 dakikada bir
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: video-edits
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Sırada iş var mı?
+        id: peek
+        run: |
+          n=$(curl -s https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/video-edits/queue | tee /tmp/queue.json | python3 -c "import json,sys;print(len(json.load(sys.stdin).get('items',[])))")
+          echo "Sıradaki iş: $n"; echo "n=$n" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.peek.outputs.n != '0'
+        with: { ref: main, fetch-depth: 1 }
+      - name: Araçlar
+        if: steps.peek.outputs.n != '0'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          pip install -q pillow numpy
+          mkdir -p scripts/marvel/fonts
+          curl -sSfL -o scripts/marvel/fonts/Montserrat-VF.ttf "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"
+      - name: Render
+        if: steps.peek.outputs.n != '0'
+        env:
+          EDITS_SUMMARY: ${{ runner.temp }}/edits.json
+          LOCAL_JOBS: /tmp/queue_items.json
+        run: |
+          python3 -c "import json;json.dump(json.load(open('/tmp/queue.json')).get('items',[]),open('/tmp/queue_items.json','w'))"
+          python3 scripts/reels/edit_jobs.py
+      - name: Depoya yaz
+        if: steps.peek.outputs.n != '0'
+        run: |
+          git config user.name "embay-reels-bot"
+          git config user.email "embay-reels-bot@users.noreply.github.com"
+          mkdir -p public/reels/edits
+          git add public/reels/edits public/reels/qc || true
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Panel video düzenleyici ($(date -u +%Y-%m-%dT%H:%MZ))"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
+      - name: İşleri tamamla
+        if: steps.peek.outputs.n != '0'
+        env:
+          EDITS_SUMMARY: ${{ runner.temp }}/edits.json
+        run: |
+          API=https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/video-edits/done
+          python3 - <<'PY' > /tmp/failed.txt
+          import json,os
+          s=json.load(open(os.environ['EDITS_SUMMARY']))
+          for f in s.get('failed',[]): print(json.dumps({'id':f['id'],'ok':False,'error':f['error']}))
+          PY
+          while read -r body; do [ -n "$body" ] && curl -s -X POST -H 'content-type: application/json' -d "$body" $API; echo; done < /tmp/failed.txt
+          ids=$(python3 -c "import json,os;print(' '.join(json.load(open(os.environ['EDITS_SUMMARY'])).get('rendered',[])))")
+          [ -z "$ids" ] && exit 0
+          for try in $(seq 1 15); do
+            left=""
+            for id in $ids; do
+              r=$(curl -s -X POST -H 'content-type: application/json' -d "{\"id\":\"$id\"}" $API)
+              echo "$id → $r"
+              echo "$r" | grep -q '"done":true' || left="$left $id"
+            done
+            ids="$left"; [ -z "$ids" ] && break
+            sleep 40
+          done

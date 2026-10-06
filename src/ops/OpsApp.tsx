@@ -20,10 +20,7 @@ function RoutedBoundary() {
   );
 }
 
-const ApprovalsScreen = lazy(() => import('./screens/Approvals').then((m) => ({ default: m.ApprovalsScreen })));
 const BotsScreen = lazy(() => import('./screens/Bots').then((m) => ({ default: m.BotsScreen })));
-const PlannerScreen = lazy(() => import('./screens/Planner').then((m) => ({ default: m.PlannerScreen })));
-const StudioScreen = lazy(() => import('./screens/Studio').then((m) => ({ default: m.StudioScreen })));
 const ConnectionsScreen = lazy(() => import('./screens/Connections').then((m) => ({ default: m.ConnectionsScreen })));
 const CustomersScreen = lazy(() => import('./screens/Customers').then((m) => ({ default: m.CustomersScreen })));
 const LeadsScreen = lazy(() => import('./screens/Leads').then((m) => ({ default: m.LeadsScreen })));
@@ -31,22 +28,19 @@ const SkillsScreen = lazy(() => import('./screens/Skills').then((m) => ({ defaul
 const SettingsScreen = lazy(() => import('./screens/Settings').then((m) => ({ default: m.SettingsScreen })));
 const PortfolioScreen = lazy(() => import('./screens/Portfolio').then((m) => ({ default: m.PortfolioScreen })));
 const SystemScreen = lazy(() => import('./screens/System').then((m) => ({ default: m.SystemScreen })));
-const QueueScreen = lazy(() => import('./screens/Queue').then((m) => ({ default: m.QueueScreen })));
 const ReportsScreen = lazy(() => import('./screens/Reports').then((m) => ({ default: m.ReportsScreen })));
 const GrowthScreen = lazy(() => import('./screens/Growth').then((m) => ({ default: m.GrowthScreen })));
-const EditedVideosScreen = lazy(() => import('./screens/EditedVideos').then((m) => ({ default: m.EditedVideosScreen })));
 const ClientsScreen = lazy(() => import('./screens/Clients').then((m) => ({ default: m.ClientsScreen })));
 const ShowroomScreen = lazy(() => import('./screens/Showroom').then((m) => ({ default: m.ShowroomScreen })));
-const VideoStudioScreen = lazy(() => import('./screens/VideoStudio').then((m) => ({ default: m.VideoStudioScreen })));
-import { PoolsScreen } from './screens/Pools';
+const ContentHubScreen = lazy(() => import('./screens/ContentHub').then((m) => ({ default: m.ContentHubScreen })));
 
 function Screens() {
   const { state } = useRouter();
   switch (state.route) {
-    case 'approvals': return <QueueScreen initialTab="approval" />;
+    case 'approvals': return <ContentHubScreen initial="plan" queueTab="approval" />;
     case 'bots': return <BotsScreen />;
-    case 'planner': return <PlannerScreen />;
-    case 'studio': return <StudioScreen />;
+    case 'planner': return <ContentHubScreen initial="create" />;
+    case 'studio': return <ContentHubScreen initial="create" />;
     case 'connections': return <ConnectionsScreen />;
     case 'construction': return <CustomersScreen module="construction" />;
     case 'rental': return <CustomersScreen module="rental" />;
@@ -57,10 +51,10 @@ function Screens() {
     case 'growth': return <GrowthScreen />;
     case 'clients': return <ClientsScreen />;
     case 'showroom': return <ShowroomScreen />;
-    case 'reels': return <QueueScreen initialTab="content" />;
+    case 'reels': return <ContentHubScreen initial="video" />;
     case 'portfolio': return <PortfolioScreen />;
-    case 'queue': return <QueueScreen />;
-    case 'videos': return <PoolsScreen />;
+    case 'queue': return <ContentHubScreen />;
+    case 'videos': return <ContentHubScreen initial="media" />;
     case 'system': return <SystemScreen />;
     default: return <HomeScreen />;
   }

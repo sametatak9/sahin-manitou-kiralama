@@ -35,13 +35,13 @@ export function PageGuide({ route }: { route: Route }) {
     </button>
   );
   return (
-    <div className="mb-4 rounded-2xl bg-emerald-50/70 ring-1 ring-emerald-200 px-3.5 py-2.5 flex gap-2.5">
-      <Info className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+    <div className="mb-4 rounded-2xl bg-[#EAF1FC] ring-1 ring-[#C9DAF5] px-3.5 py-2.5 flex gap-2.5">
+      <Info className="w-4 h-4 text-[#1E5BC6] shrink-0 mt-0.5" />
       <div className="min-w-0 flex-1 text-xs text-ink-200">
         <div className="font-semibold text-ink-100">{g.what}</div>
         <ul className="mt-1 space-y-0.5 text-ink-300">{g.tips.map((t) => <li key={t}>• {t}</li>)}</ul>
       </div>
-      <button type="button" aria-label="Rehberi gizle" onClick={() => { setHidden(true); try { localStorage.setItem(key, '1'); } catch { /* yok */ } }} className="self-start p-1 rounded-lg text-ink-500 hover:bg-emerald-100"><X className="w-3.5 h-3.5" /></button>
+      <button type="button" aria-label="Rehberi gizle" onClick={() => { setHidden(true); try { localStorage.setItem(key, '1'); } catch { /* yok */ } }} className="self-start p-1 rounded-lg text-ink-500 hover:bg-[#DCE8FA]"><X className="w-3.5 h-3.5" /></button>
     </div>
   );
 }

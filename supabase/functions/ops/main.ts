@@ -23,6 +23,8 @@ import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { PUBLIC_SITE, showroomEditorTick, sitePostTick, writeDistrictPost, writeShowroomTexts } from '../_shared/showroom.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
+import { createEditJob, editDone, editQueue, editToPool } from '../_shared/videoedit.ts';
+import { checkUpcoming, fixDraftText } from '../_shared/contentcheck.ts';
 
 const PANEL_URL = () => Deno.env.get('PANEL_URL') || 'https://embay-panel.vercel.app';
 const REDIRECT_URI = () => `${Deno.env.get('SUPABASE_URL')}/functions/v1/ops/oauth/callback`;
@@ -33,7 +35,7 @@ const cors = {
   'access-control-allow-methods': 'GET, POST, OPTIONS',
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'content-type': 'application/json' } });
-class HttpError extends Error { constructor(public status: number, message: string, public code = 'ERROR') { super(message); } }
+import { HttpError } from '../_shared/http.ts';
 
 async function requireUser(db: Db, req: Request, minRole: 'staff' | 'admin' = 'staff') {
   const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -635,6 +637,17 @@ async function api(db: Db, req: Request) {
       await db.from('showroom_models').update({ ...patch, ai_written_at: new Date().toISOString(), ai_requested_at: null }).eq('id', m.id);
       return { ...t, applied: m.status !== 'published' };
     }
+    // Panelden video düzenleme (kurgu / düzeltme) → GitHub Actions render kuyruğu
+    // İçerik kontrol botu: tam kontrol listesi + "Bot düzeltsin"
+    case 'content_check': { await requireUser(db, req); return checkUpcoming(db, Array.isArray(body.ids) ? (body.ids as string[]).slice(0, 100) : undefined); }
+    case 'content_fix': { const u = await requireUser(db, req); return fixDraftText(db, String(body.id || ''), u.userId); }
+    case 'video_edit_create': { const u = await requireUser(db, req); return createEditJob(db, body, u.userId); }
+    case 'video_edit_pool': { const u = await requireUser(db, req); return editToPool(db, String(body.id || ''), u.userId); }
+    case 'video_edit_cancel': {
+      await requireUser(db, req);
+      const { data } = await db.from('video_edit_jobs').update({ status: 'cancelled' }).eq('id', String(body.id || '')).in('status', ['queued', 'failed']).select('id');
+      return { cancelled: (data || []).length > 0 };
+    }
     case 'banner_render': {
       const u = await requireUser(db, req);
       const t = body.template as { headline?: string } | undefined;
@@ -951,6 +964,9 @@ Deno.serve(async (req) => {
       return json({ hook, brief: b.brief ? await morningBrief(db, true).catch((e) => ({ error: String(e) })) : null });
     }
     if (path.startsWith('/reels/queue') && req.method === 'GET') return json(await reelQueue(db));
+    // Panel video düzenleyici kuyruğu (GitHub Actions): yalnızca herkese açık medya adresleri + metinler
+    if (path.startsWith('/video-edits/queue') && req.method === 'GET') return json(await editQueue(db));
+    if (path.startsWith('/video-edits/done') && req.method === 'POST') return json(await editDone(db, await req.json().catch(() => ({}))));
     if (path.startsWith('/reels/attach') && req.method === 'POST') return json(await reelAttach(db, await req.json().catch(() => ({}))));
     // Meta (Facebook/Instagram) gelen olaylar: yorum, mesaj, bahsetme. Doğrulama belirteci Vault'ta; imza uygulama gizli anahtarıyla kontrol edilir.
     if (path.startsWith('/webhook/meta')) return await metaWebhook(db, req, url);

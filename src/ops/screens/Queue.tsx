@@ -395,7 +395,7 @@ export function QueueScreen({ initialTab = 'calendar' }: { initialTab?: CenterTa
       </section>
       {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : msg.tone === 'warn' ? 'warn' : 'error'}>{msg.text}</Notice>}
       <Tabs value={tab} onChange={setTab} items={[
-        { id: 'calendar', label: 'Takvim' }, { id: 'content', label: 'Editli içerikler' }, { id: 'pool', label: 'Havuz', count: groupsOf(lists.pool) },
+        { id: 'calendar', label: 'Takvim' }, { id: 'pool', label: 'Havuz', count: groupsOf(lists.pool) },
         { id: 'approval', label: 'Onay', count: groupsOf(lists.approval) }, { id: 'done', label: 'Yayınlanan' }]} />
       {['calendar', 'pool', 'approval', 'done'].includes(tab) && (
         <div className="flex flex-wrap gap-1.5">
