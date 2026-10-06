@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['scripts/reels/teslim_reel.py']
+    paths: ['scripts/reels/teslim_reel.py', 'scripts/reels/video_tour.py']
 permissions:
   contents: write
 concurrency:
@@ -25,6 +25,7 @@ jobs:
           mkdir -p scripts/marvel/fonts
           curl -sSfL -o scripts/marvel/fonts/Montserrat-VF.ttf "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"
       - run: python3 scripts/reels/teslim_reel.py
+      - run: python3 scripts/reels/video_tour.py
       - name: Depoya yaz
         run: |
           git config user.name "embay-reels-bot"

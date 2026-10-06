@@ -46,6 +46,21 @@
         {"type": "photo", "n": 47, "label": "Bitmiş giriş"}
       ],
       "cta": "teklif"
+    },
+    {
+      "slug": "c4-bahceli-ev",
+      "title": ["YENİ TESLİM", "BAHÇELİ EV"],
+      "sub": "Gerçek proje · Embay Yapı",
+      "cover": 149,
+      "slides": [
+        {"type": "photo", "n": 147, "label": "Üçgen camlı cephe"},
+        {"type": "photo", "n": 144, "label": "Aydınlık salon"},
+        {"type": "photo", "n": 146, "label": "Köşe şömine"},
+        {"type": "photo", "n": 145, "label": "Yaşam alanı"},
+        {"type": "photo", "n": 139, "label": "Mutfak"},
+        {"type": "photo", "n": 137, "label": "Bahçe ve teras"}
+      ],
+      "cta": "teklif"
     }
   ]
 }
