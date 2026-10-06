@@ -344,13 +344,90 @@ export async function aiImage(prompt: string, w: number, h: number, _seed: numbe
   return null;
 }
 
+// ── İKRANUR TARZI (varsayılan, 06.10): gökyüzü mavisi degrade, ortada beyaz logo, iki ağırlıklı başlık
+//    (ilk satır ince 300, ikinci satır kalın 800 — "Teslim Ettiğimiz / Villa Projemiz" gibi), yuvarlak beyaz rozet,
+//    "BİLGİ & TEKLİF" + telefon, alt yarıda gökyüzüne yumuşak geçen fotoğraf, beyaz hap şeklinde CTA. Yazı tipi: Montserrat.
+const IK = { top: '#16428F', mid: '#2E6CC4', bot: '#78B2E8', navy: '#182A68', white: '#FFFFFF', soft: '#E1ECFA' };
+function splitHeadline(t: string): [string, string] {
+  const words = t.trim().split(/\s+/);
+  if (words.length < 3) return ['', words.join(' ')];
+  const cut = Math.max(1, Math.round(words.length * 0.45));
+  return [words.slice(0, cut).join(' '), words.slice(cut).join(' ')];
+}
+function ikLogo(cx: number, y0: number, s: number) {
+  // beyaz çizgi ev amblemi + EMBAY (kalın) + geniş aralıklı ince YAPI, ortalı
+  const k = s / 60;
+  return `<g transform="translate(${cx - 30 * k} ${y0}) scale(${k})" fill="none" stroke="${IK.white}" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+<path d="M6 44V26L24 12l18 14v18z"/><path d="M24 12l10-8 24 18v22H42"/><rect x="14" y="28" width="6" height="6"/><rect x="26" y="28" width="6" height="6"/><path d="M19 44v-6h10v6"/><rect x="47" y="26" width="5" height="5"/></g>
+<text x="${cx}" y="${y0 + s * 1.12}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${s * 0.36}" fill="${IK.white}" letter-spacing="${s * 0.03}">EMBAY</text>
+<text x="${cx + s * 0.06}" y="${y0 + s * 1.38}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${s * 0.17}" fill="${IK.white}" letter-spacing="${s * 0.12}">YAPI</text>`;
+}
+function ikBadge(cx: number, cy: number, r: number, lines: string[]) {
+  const longest = Math.max(...lines.slice(0, 2).map((l) => l.length), 1);
+  const f1 = Math.min(r * 0.27, (r * 1.6) / (longest * 0.62)), f2 = Math.min(r * 0.36, (r * 1.62) / (longest * 0.7));   // uzun kelime daireden taşmasın
+  return `<circle cx="${cx}" cy="${cy}" r="${r * 1.07}" fill="${IK.white}" fill-opacity="0.35"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="${IK.white}"/>
+${lines.slice(0, 2).map((l, i) => `<text x="${cx}" y="${cy + (lines.length > 1 ? (i === 0 ? -r * 0.06 : r * 0.36) : r * 0.13)}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="${i === 0 && lines.length > 1 ? 500 : 800}" font-size="${i === 0 && lines.length > 1 ? f1 : f2}" fill="${IK.navy}">${x(l)}</text>`).join('')}`;
+}
+export function renderIkranur(o: BannerOpts) {
+  const { w, h } = o; const wide = w / h > 1.3; const u = Math.min(w, h);
+  const phone = o.brand?.phone || '0531 436 29 04';
+  const [l1, l2] = splitHeadline(o.headline);
+  const textW = wide ? w * 0.5 : w;          // yatayda metin sol yarıda, fotoğraf sağ yarıda
+  const cx = textW / 2;
+  const pad = Math.round(u * 0.06);
+  const fit = (t: string, size: number, k: number) => Math.min(size, Math.floor((textW - pad * 2) / Math.max(1, t.length * k)));
+  const s1 = fit(l1, Math.round(u * 0.058), 0.56);
+  const s2 = fit(l2, Math.round(u * 0.084), 0.66);
+  const l2Lines = s2 < u * 0.06 ? wrap(l2, Math.floor((textW - pad * 2) / (u * 0.066 * 0.64)), 2) : [l2];
+  const s2b = l2Lines.length > 1 ? Math.round(u * 0.066) : s2;
+  const logoS = Math.round(u * (wide ? 0.11 : 0.1));
+  const logoY = Math.round(u * 0.05);
+  const y1 = logoY + logoS * 1.38 + u * (wide ? 0.09 : 0.1);
+  const y2 = y1 + (l1 ? s1 * 0.4 + s2b * 1.05 : 0);
+  const ySub = y2 + (l2Lines.length - 1) * s2b * 1.1 + u * 0.06;
+  const subS = Math.round(u * 0.03);
+  const sub = o.subtitle ? wrap(o.subtitle, Math.floor((textW - pad * 2) / (subS * 0.58)), 2) : [];
+  const yRow = ySub + sub.length * subS * 1.35 + u * 0.08;
+  const bR = Math.round(u * 0.075);
+  const badgeLines = wrap(o.badge.toLocaleUpperCase('tr-TR'), 10, 2);
+  const ctaTxt = (o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').replace(/^WhatsApp$/i, '').trim() || 'Bize DM atın');
+  const photoTop = wide ? 0 : Math.min(h * 0.62, yRow + bR + u * 0.04);
+  const photoX = wide ? textW : 0; const photoW = w - photoX; const photoH = h - photoTop;
+  const fade = wide ? 0 : Math.round(u * 0.22);
+  const photo = o.photo ? `<image href="data:${o.photoMime || 'image/jpeg'};base64,${b64(o.photo)}" x="${photoX}" y="${photoTop}" width="${photoW}" height="${photoH}" preserveAspectRatio="xMidYMid slice"/>` : '';
+  const cf = Math.round(u * 0.032); const cw = Math.min(textW - pad * 2, ctaTxt.length * cf * 0.62 + cf * 2.6); const chh = cf * 2.3;
+  const ctaY = wide ? yRow + bR + u * 0.07 : h - chh - u * 0.075;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${IK.top}"/><stop offset="0.55" stop-color="${IK.mid}"/><stop offset="1" stop-color="${IK.bot}"/></linearGradient>
+<linearGradient id="fd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${IK.mid}" stop-opacity="1"/><stop offset="1" stop-color="${IK.mid}" stop-opacity="0"/></linearGradient>
+<linearGradient id="bt" x1="0" y1="0" x2="0" y2="1"><stop offset="0.6" stop-color="#0B1E4A" stop-opacity="0"/><stop offset="1" stop-color="#0B1E4A" stop-opacity="0.45"/></linearGradient>
+</defs>
+<rect width="${w}" height="${h}" fill="url(#sky)"/>
+${photo}
+${!wide && o.photo ? `<rect x="0" y="${photoTop - 1}" width="${w}" height="${fade}" fill="url(#fd)"/><rect x="0" y="${photoTop}" width="${w}" height="${photoH}" fill="url(#bt)"/>` : ''}
+${ikLogo(cx, logoY, logoS)}
+${l1 ? `<text x="${cx}" y="${y1}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="300" font-size="${s1}" fill="${IK.white}">${x(l1)}</text>` : ''}
+${l2Lines.map((l, i) => `<text x="${cx}" y="${y2 + i * s2b * 1.1}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="800" font-size="${s2b}" fill="${IK.white}">${x(l)}</text>`).join('')}
+${sub.map((l, i) => `<text x="${cx}" y="${ySub + i * subS * 1.35}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="600" font-size="${subS}" fill="${IK.white}">${x(l)}</text>`).join('')}
+${ikBadge(pad + bR * 1.1, yRow, bR, badgeLines)}
+<text x="${cx}" y="${yRow - u * 0.012}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="600" font-size="${Math.round(u * 0.022)}" fill="${IK.soft}" letter-spacing="${u * 0.002}">BİLGİ &amp; TEKLİF</text>
+<text x="${cx}" y="${yRow + u * 0.04}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="800" font-size="${Math.round(u * 0.045)}" fill="${IK.white}">${x(phone)}</text>
+${icon(iconFor(o.badge), textW - pad - bR * 2.1, yRow - bR, bR * 2, IK.white, 5, 0.9)}
+<rect x="${cx - cw / 2}" y="${ctaY}" width="${cw}" height="${chh}" rx="${chh / 2}" fill="${IK.white}"/>
+<text x="${cx}" y="${ctaY + chh * 0.66}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="700" font-size="${cf}" fill="${IK.navy}">${x(ctaTxt)}</text>
+<text x="${wide ? cx : w / 2}" y="${h - u * 0.028}" text-anchor="middle" font-family="Montserrat, DejaVu Sans" font-weight="500" font-size="${Math.round(u * 0.022)}" fill="${IK.white}" fill-opacity="0.92">@embayyapi</text>
+</svg>`;
+}
+
 const LEGACY_SAHIN_DESIGN = false as boolean;
 const LUXURY_DESIGN = true as boolean; // lacivert+altın lüks tasarım (false → önceki mavi Embay tasarımı)
+const IKRANUR_DESIGN = true as boolean; // 06.10: İkranur tarzı gökyüzü mavisi + ince/kalın Montserrat (varsayılan)
 export async function renderBanner(o: BannerOpts) {
   await ensureRenderer();
   // Tüm banner'lar Embay Yapı kimliğiyle (Manitou kiralama da Embay çatısı altında; eski sarı Şahin Manitou tasarımı yedekte duruyor)
   if (!LEGACY_SAHIN_DESIGN) {
-    const r = new Resvg(LUXURY_DESIGN ? renderLuxury(o) : renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'Montserrat' }, fitTo: { mode: 'original' } });
+    const r = new Resvg(IKRANUR_DESIGN ? renderIkranur(o) : LUXURY_DESIGN ? renderLuxury(o) : renderEmbay(o), { font: { fontBuffers: fonts!, defaultFontFamily: 'Montserrat' }, fitTo: { mode: 'original' } });
     const img = r.render();
     const out = jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, 88).data;
     img.free?.(); r.free?.();

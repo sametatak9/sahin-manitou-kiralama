@@ -24,6 +24,30 @@ export async function tokenFor(db: Db, account: AccountRow) {
   return data as string;
 }
 
+// ── Tekrar paylaşım engeli ──────────────────────────────────────────────────────────────────────
+// Aynı Reels'in sessiz/müzikli kopyası, sunuculu ikizi ya da aynı kaydırmalı gönderi aynı platformda ikinci kez paylaşılmaz.
+// Sunuculu (sesli) Reels → temel Reels eşlemesi: scripts/marvel/narration.json
+const REEL_TWINS: Record<string, string> = {"19-sesli-karkastan-eve": "11-karkastan-eve", "20-sesli-once-sonra": "13-once-sonra-villa", "22-sesli-orman-evi": "16-mimari-orman-evi", "24-sesli-evin-sirri": "12-evin-sirri", "25-sesli-villa": "14-iscilik-detayda", "26-sesli-dis-cephe": "15-dis-cephe-tamam", "27-sesli-beyaz-villa": "17-mimari-beyaz-villa", "28-sesli-hayalinizdeki-villa": "18-mimari-isik-tas-ahsap"};
+export function mediaKey(url: string): string {
+  const clean = String(url || '').split('?')[0];
+  const parts = clean.split('/').filter(Boolean);
+  const file = parts[parts.length - 1] || '';
+  if (/\.(mp4|mov)$/i.test(file)) {
+    const slug = file.replace(/\.(mp4|mov)$/i, '').replace(/-sessiz$/i, '');
+    return 'video:' + (REEL_TWINS[slug] ?? slug);
+  }
+  return 'media:' + parts.slice(-2).join('/');   // kaydırmalıda klasör + dosya (ör. c4-bahceli-ev/01.jpg)
+}
+
+async function alreadyPublished(db: Db, platform: string, media: string[], excludeDraft: string) {
+  if (!media.length) return null;
+  const key = mediaKey(media[0]);
+  const since = new Date(Date.now() - 180 * 86400000).toISOString();
+  const { data } = await db.from('social_publications').select('id,content_id,media_urls,published_at,external_url')
+    .eq('platform', platform).in('status', ['published', 'processing']).gte('created_at', since).order('created_at', { ascending: false }).limit(500);
+  return (data || []).find((r: { content_id: string | null; media_urls: string[] | null }) => r.content_id !== excludeDraft && (r.media_urls || []).length && mediaKey(r.media_urls![0]) === key) ?? null;
+}
+
 export async function publishContent(ctx: EngineCtx, input: Record<string, unknown>) {
   const platform = String(input.platform || '');
   const def = connectorByKey(platform);
@@ -53,6 +77,16 @@ export async function publishContent(ctx: EngineCtx, input: Record<string, unkno
     throw new ConnectorError(`${def.name} hesabı bağlı değil (${status})`, status.toUpperCase());
   }
   const started = Date.now();
+
+  const dup = await alreadyPublished(ctx.db, platform, media, draft.id);
+  if (dup) {
+    const note = `Aynı içerik bu platformda zaten paylaşıldı (${String(dup.published_at || '').slice(0, 10)}) — tekrar paylaşılmadı`;
+    await ctx.db.from('social_drafts').update({ workflow_status: 'cancelled', error: note }).eq('id', draft.id);
+    await logActivity(ctx.db, { connector_key: platform, action: 'publish', status: 'skipped', bot_id: draft.bot_id ?? null, ref_type: 'social_drafts', ref_id: draft.id,
+      external_url: dup.external_url ?? null, summary: `${def.name}: “${(draft.headline || draft.title || '').slice(0, 60)}” atlandı — ${note}` });
+    await ctx.log('warn', note, { previous_publication: dup.id });
+    return { published: false, duplicate: true, previous_publication_id: dup.id, reason: note };
+  }
 
   const { data: pub, error } = await ctx.db.from('social_publications').insert({
     content_id: draft.id, design_id: draft.design_id, approval_request_id: input.approval_request_id ?? null, platform, account_id: account.id,
