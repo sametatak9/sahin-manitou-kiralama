@@ -348,9 +348,12 @@ def render(item, work, out_dir, music):
     total = fr[-1] / FPS
     out_mp4 = os.path.join(out_dir, f"{item['id']}.mp4")
     args = [ffmpeg_bin(), '-hide_banner', '-loglevel', os.environ.get('FFLOG', 'error'), '-y', '-f', 'concat', '-safe', '0', '-i', lst]
-    if music: args += ['-i', music, '-map', '0:v', '-map', '1:a', '-af', f'afade=t=out:st={total - 1.2:.2f}:d=1.2', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2']
+    if music: args += ['-i', music, '-map', '0:v', '-map', '1:a', '-af', f'afade=t=out:st={total - 1.2:.2f}:d=1.2,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2']
     args += ['-c:v', 'copy', '-t', f'{total:.3f}', '-movflags', '+faststart', out_mp4]
     subprocess.run(args, check=True)
+    try:
+        import reelkit; reelkit.qc(ffmpeg_bin(), out_mp4)   # kalite kontrolü (süre, çözünürlük, ses düzeyi) → public/reels/qc/
+    except Exception as e: print('qc atlandı:', e)
     Image.open(intro).convert('RGB').save(os.path.join(out_dir, f"{item['id']}.jpg"), quality=88)
     return out_mp4
 

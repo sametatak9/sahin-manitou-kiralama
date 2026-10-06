@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import teslim_reel as T  # noqa: E402  (ortak marka yardımcıları: font, logo rozeti, kapanış kartı)
+import reelkit  # noqa: E402
 
 W, H, FPS = T.W, T.H, T.FPS
 TOURS = [{
@@ -15,11 +16,12 @@ TOURS = [{
     'end_photo': 148, 'end_line': 'Siz de böyle bir eve', 'web': '@embayyapi',
     'music': 'house_120_7',
     # (havuz no, başlangıç sn, süre sn, alt yazı)
+    'hook': 'Bu evin içine girelim mi?',
     'clips': [(150, 0.4, 3.6, 'Bahçesinden başlıyor'),
               (152, 0.0, 3.0, 'Dört mevsim kış bahçesi'),
               (151, 0.6, 4.0, 'Ferah ve aydınlık salon'),
               (153, 0.4, 3.6, 'Köşe şömine, sıcak bir yuva')],
-    'end_s': 4.2, 'xf': 0.35,
+    'end_s': 4.2, 'xf': 0.2,
 }]
 
 
@@ -46,10 +48,27 @@ def caption_layer(text):
     return sh
 
 
+def hook_layer(text):
+    """İlk 1,5 sn'lik merak cümlesi: ekranın üst-orta bölgesinde büyük ince yazı (Reels'te ilk saniye izlenmeyi belirler)."""
+    lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    f = T.mont(84, 300); words = text.split(); lines, cur = [], ''
+    for w in words:
+        if d.textlength((cur + ' ' + w).strip(), font=f) > W - 2 * 110: lines.append(cur); cur = w
+        else: cur = (cur + ' ' + w).strip()
+    lines.append(cur)
+    y = 560
+    sh = Image.new('RGBA', (W, H), (0, 0, 0, 0)); sd = ImageDraw.Draw(sh)
+    for ln in lines:
+        x = (W - d.textlength(ln, font=f)) / 2
+        sd.text((x, y), ln, font=f, fill=(0, 0, 0, 190)); d.text((x, y), ln, font=f, fill=(255, 255, 255, 255)); y += 104
+    sh = sh.filter(ImageFilter.GaussianBlur(12)); sh.alpha_composite(lay)
+    return np.asarray(sh, dtype=np.float32) / 255.0
+
+
 def clip_frames(path, ss, dur):
     """Videoyu dikey 1080x1920'ye ölçekleyip ortadan kırpar; kareleri numpy dizisi olarak döndürür."""
     cmd = [T.ffmpeg(), '-loglevel', 'error', '-ss', f'{ss:.2f}', '-t', f'{dur:.2f}', '-i', path,
-           '-vf', f'scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},eq=contrast=1.04:saturation=1.08',
+           '-vf', f'{reelkit.STABILIZE},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},{reelkit.GRADE}',
            '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     return np.frombuffer(raw, np.uint8).reshape(-1, H, W, 3)
@@ -75,11 +94,18 @@ def render(R, urls, tmp):
         for n, ss, dur, text in R['clips']:
             src = os.path.join(tmp, f'{n}.mov'); urllib.request.urlretrieve(urls[n], src)
             total = probe(src)
+            dur = reelkit.on_beat(dur, R['music'])   # kesme müziğin vuruşunda
             dur = max(1.0, min(dur, total - ss - 0.05)) if total else dur
-            cap = caption_layer(text); cap.alpha_composite(bub, (44, H - bub.height - 250))
+            cap = caption_layer(text); cap.alpha_composite(bub, reelkit.bubble_pos(bub))
             a = np.asarray(cap, dtype=np.float32) / 255.0
             alpha, rgb = a[..., 3:4], a[..., :3] * 255
-            yield [(f.astype(np.float32) * (1 - alpha) + rgb * alpha).astype(np.uint8) for f in clip_frames(src, ss, dur)]
+            out = [(f.astype(np.float32) * (1 - alpha) + rgb * alpha) for f in clip_frames(src, ss, dur)]
+            if R.get('hook') and n == R['clips'][0][0]:
+                hk = hook_layer(R['hook']); ha, hr = hk[..., 3:4], hk[..., :3] * 255
+                for k in range(min(len(out), int(1.6 * FPS))):
+                    o = 1.0 if k < int(1.2 * FPS) else 1 - (k - int(1.2 * FPS)) / (0.4 * FPS)   # 1,2 sn sabit, 0,4 sn'de söner
+                    out[k] = out[k] * (1 - ha * o) + hr * (ha * o)
+            yield [f.astype(np.uint8) for f in out]
         yield [end] * int(R['end_s'] * FPS)
 
     tail = None   # önceki sahnenin son xf karesi (yumuşak geçiş için); bellekte yalnızca bir sahne tutulur
@@ -95,10 +121,9 @@ def render(R, urls, tmp):
     total = state['count'] / FPS
     Image.fromarray(state['thumb']).save(os.path.join(T.OUT, R['slug'] + '.jpg'), quality=88)
     music = os.path.join(T.ROOT, 'scripts', 'reels', 'music', R['music'] + '.m4a')
-    subprocess.run([T.ffmpeg(), '-y', '-loglevel', 'error', '-i', silent, '-i', music, '-filter_complex',
-                    f'[1:a]atrim=0:{total:.2f},afade=t=in:d=0.6,afade=t=out:st={total - 1.5:.2f}:d=1.5,volume=0.8[a]',
-                    '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart',
-                    '-t', f'{total:.2f}', os.path.join(T.OUT, R['slug'] + '.mp4')], check=True)
+    out = os.path.join(T.OUT, R['slug'] + '.mp4')
+    reelkit.mix_music(T.ffmpeg(), silent, music, out, total)
+    reelkit.qc(T.ffmpeg(), silent); reelkit.qc(T.ffmpeg(), out)
     print(f"{R['slug']}: {len(R['clips']) + 1} sahne, {total:.1f} sn")
 
 

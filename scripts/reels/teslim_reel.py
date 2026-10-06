@@ -7,6 +7,7 @@ Kaynak: scripts/media-sheets/list.json (Drive'daki gerçek proje fotoğrafları)
 Kullanım: python3 scripts/reels/teslim_reel.py"""
 import io, json, os, subprocess, urllib.request
 import numpy as np
+import reelkit  # ortak kalite kuralları (güvenli alan, ritim, ses, kalite kontrol)
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
 
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -125,7 +126,7 @@ def slide_frame(photo, bubble, t):
     z = 1.0 + 0.07 * t
     fw, fh = int(W * z), int(H * z)
     f = ImageOps.fit(photo, (fw, fh), Image.BILINEAR).crop(((fw - W) // 2, (fh - H) // 2, (fw - W) // 2 + W, (fh - H) // 2 + H)).convert('RGBA')
-    f.alpha_composite(bubble, (44, H - bubble.height - 250))
+    f.alpha_composite(bubble, reelkit.bubble_pos(bubble))
     return f.convert('RGB')
 
 
@@ -162,7 +163,8 @@ def main():
     bub = logo_bubble(); end = end_static(load(R['end'], urls))
     # sahneler: (süre, kare üretici)
     scenes = [(R['cover_s'], lambda t: cover_frame(cov, t))]
-    for p in photos: scenes.append((R['slide_s'], lambda t, p=p: slide_frame(p, bub, t)))
+    slide_s = reelkit.on_beat(R['slide_s'], R['music'])   # kesmeler müziğin vuruşunda
+    for p in photos: scenes.append((slide_s, lambda t, p=p: slide_frame(p, bub, t)))
     scenes.append((R['end_s'], lambda t: end))
     xf = R['xf']; starts = []; t0 = 0.0
     for d, _ in scenes: starts.append(t0); t0 += d - xf
@@ -184,12 +186,11 @@ def main():
         p.stdin.write(fr.tobytes())
     p.stdin.close(); p.wait()
     Image.fromarray(first).save(os.path.join(OUT, R['slug'] + '.jpg'), quality=88)
-    # önizleme: kendi telifsiz müziğimizle
+    # önizleme: kendi telifsiz müziğimizle (−14 LUFS)
     music = os.path.join(ROOT, 'scripts', 'reels', 'music', R['music'] + '.m4a')
-    subprocess.run([ffmpeg(), '-y', '-loglevel', 'error', '-i', silent, '-i', music, '-filter_complex',
-                    f'[1:a]atrim=0:{total:.2f},afade=t=in:d=0.8,afade=t=out:st={total - 1.5:.2f}:d=1.5,volume=0.8[a]',
-                    '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart',
-                    '-t', f'{total:.2f}', os.path.join(OUT, R['slug'] + '.mp4')], check=True)
+    out = os.path.join(OUT, R['slug'] + '.mp4')
+    reelkit.mix_music(ffmpeg(), silent, music, out, total)
+    reelkit.qc(ffmpeg(), silent); reelkit.qc(ffmpeg(), out)
     print(f"{R['slug']}: {len(scenes)} sahne, {total:.1f} sn")
 
 
