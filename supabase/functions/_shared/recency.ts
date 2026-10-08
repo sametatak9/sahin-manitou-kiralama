@@ -35,6 +35,17 @@ export function parseFindingDate(s?: string | null): Date | null {
 /** Maksimum yaş (gün). 60 = yaklaşık 2 ay; 1 yıl önceki ihale asla geçmez. */
 export const MAX_FINDING_AGE_DAYS = 60;
 
+/** Görev açıkça güncel bir pencere istiyorsa tarih kanıtı olmadan bulgu kabul edilmez. */
+export function requiresRecentEvidence(m: {
+  title?: string | null;
+  goal?: string | null;
+  search_for?: string | null;
+  report_spec?: string | null;
+}): boolean {
+  const text = [m.title, m.goal, m.search_for, m.report_spec].filter(Boolean).join(' ').toLocaleLowerCase('tr-TR');
+  return /(?:son\s+(?:\d+|bir|iki|üç|dört|beş|on|otuz)\s*(?:gün|hafta|ay)|güncel|bugün|bu\s+hafta|bu\s+ay)/i.test(text);
+}
+
 export function isStaleFinding(f: {
   title: string;
   detail: string;

@@ -10,7 +10,7 @@ import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { logActivity } from './activity.ts';
 import { tavilySearchDetailed, type WebResult } from './search.ts';
 import { isSearchUnavailable, searchScopeStatus } from './pure/search.ts';
-import { isStaleFinding, RECENCY_RULES } from './recency.ts';
+import { isStaleFinding, parseFindingDate, RECENCY_RULES, requiresRecentEvidence } from './recency.ts';
 import { classifyFinishReason } from './pure/outcome.ts';
 
 type Db = SupabaseClient;
@@ -126,10 +126,12 @@ const TARGET_REGION = ['istanbul', 'kocaeli', 'tekirdag', 'gebze', 'tuzla', 'pen
 const OTHER_CITIES = ['ankara', 'izmir', 'bursa', 'iznik', 'antalya', 'adana', 'konya', 'mersin', 'gaziantep', 'kayseri', 'samsun', 'trabzon', 'eskisehir', 'diyarbakir', 'sakarya', 'yalova', 'bolu', 'duzce', 'manisa', 'balikesir', 'canakkale', 'edirne', 'kirklareli', 'malatya', 'erzurum', 'van', 'hatay', 'denizli', 'aydin', 'mugla', 'afyon', 'sivas', 'tokat', 'ordu', 'rize', 'zonguldak', 'karabuk', 'kastamonu', 'corum', 'yozgat', 'nevsehir', 'aksaray', 'nigde', 'karaman', 'isparta', 'burdur', 'usak', 'kutahya', 'bilecik', 'elazig', 'batman', 'mardin', 'sanliurfa', 'adiyaman', 'kahramanmaras', 'osmaniye', 'kilis'];
 // Rakip/hizmet tanıtım sayfaları ve alakasız iş ilanları elenir (eski liste + yeni meslek dışı ilanlar)
 const NEG = ['is ilanlari', 'ilanlari', 'hizmetleri', 'guclendirme hizmet', 'tadilat firmasi', 'tadilat hizmet', 'dekorasyon', 'en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire', 'temizlik personeli', 'garson', 'kurye', 'sofor', 'cagri merkezi', 'guvenlik gorevlisi', 'muhasebe', 'kasiyer'];
-export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title'>): Array<Omit<Finding, 'at' | 'step'>> {
+export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title' | 'goal' | 'report_spec'>): Array<Omit<Finding, 'at' | 'step'>> {
   const anchors = anchorWords(m);
+  const recentRequired = requiresRecentEvidence(m);
   const out: Array<Omit<Finding, 'at' | 'step'>> = [];
   for (const r of results) {
+    if (recentRequired && !r.posted) continue;
     const prof = socialProfile(r.url);
     if (prof) { // sektör hesap keşfi: işletme profil sayfası (gönderi/hashtag/grup değil)
       out.push({ title: r.title.slice(0, 200), detail: (r.snippet || r.title).slice(0, 600), url: r.url, evidence: r.snippet?.slice(0, 300) || r.title,
@@ -503,6 +505,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   const findings: Finding[] = [...(m.findings || [])];
   const sources: Source[] = [...(m.sources || [])];
   const visited = new Set((m.visited || []).map(canonical));
+  const recentRequired = requiresRecentEvidence(m);
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const ctx = await botContext(db, m.bot_id, m);
@@ -517,6 +520,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   }
   const addFinding = (f: Omit<Finding, 'at' | 'step'>) => {
     if (!f.url || !f.title) return false;
+    if (recentRequired && !f.posted) return false;
     if (seenBefore.has(canonical(f.url))) return false;
     if (isStaleFinding(f)) return false; // 60 günden eski / sonuçlanmış ihale
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
@@ -616,6 +620,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         COMPLIANCE_RULES,
         RELEVANCE_RULES,
         RECENCY_RULES,
+        recentRequired ? 'TARİH KAPISI (ZORUNLU): Bu görev güncel bir zaman penceresi istiyor. Her bulguda posted alanı arama sonucunun gerçek yayın tarihiyle doldurulmalı; kaynakta tarih yoksa bulguyu yazma. “2 saat önce”, “bugün” veya benzeri göreli tarihleri kendin çıkarma ya da uydurma.' : '',
         newsNote ? 'BU ADIMIN İŞİ: İnternette arama yapmana GEREK YOK — arama sunucu tarafında yapıldı ve sonuçları aşağıda. Listedeki HER sonucu tek tek oku; başlığı görevin AMACINA uyan somut kayıtları (proje, ihale, ilan, talep, firma duyurusu), o sonucun linkini AYNEN kullanarak ayrı bulgu yap. Başlık + kaynak + tarih geçerli kanıttır (evidence = başlık). "veri yok" deme: listede uygun kayıt varsa mutlaka yaz; hiçbiri uymuyorsa boş liste döndür.' :
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
@@ -637,13 +642,16 @@ export async function stepMission(db: Db, m: MissionRow) {
       const anchors = anchorWords(m);
       for (const f of j?.new_findings ?? []) {
         if (!f.url || !allowed.has(canonical(f.url))) { dropped++; continue; }
+        const sourceDate = stepResults.find((s) => canonical(s.url) === canonical(String(f.url)))?.posted ?? null;
+        const posted = sourceDate || (typeof f.posted === 'string' && f.posted.trim() ? f.posted.trim().slice(0, 60) : undefined);
+        if (recentRequired && !posted) { dropped++; continue; }
         // Alaka kapısı: AI puanı ≥ 7 + gerekçe + görevin anahtar kelimelerinden en az biri metinde geçmeli
         const rel = Number(f.relevance);
         const text = norm(`${f.title ?? ''} ${f.detail ?? ''} ${f.evidence ?? ''} ${f.fit ?? ''}`);
         if (!(rel >= MIN_RELEVANCE) || !String(f.fit ?? '').trim() || (anchors.length && !anchors.some((a) => text.includes(a)))) { offTopic++; continue; }
         const opt = (v: unknown, n = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined);
         if (addFinding({ title: String(f.title || '').slice(0, 200), detail: String(f.detail || '').slice(0, 1500), url: f.url, evidence: opt(f.evidence, 500),
-          company: opt(f.company), location: opt(f.location), posted: opt(f.posted, 60), phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
+          company: opt(f.company), location: opt(f.location), posted, phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
           relevance: Math.min(10, Math.round(rel)), fit: opt(f.fit, 300) })) added++;
       }
       // AI cevap veremediyse (boş/okunamaz) veri akışı durmasın: kural tabanlı ön eleme, denetçi sonra doğrular
@@ -939,6 +947,7 @@ const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicio
  *  verified = kaynak bulguyu doğruluyor, somut ve güncel · suspicious = gerçek ama belirsiz/eski/dolaylı · rejected = uydurma, kaynakla çelişen veya amaç dışı. */
 async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[]): Promise<MissionAudit> {
   const srcTitle = new Map(sources.map((s) => [canonical(s.url), s.title || '']));
+  const recentRequired = requiresRecentEvidence(cur);
   const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
     const inSources = srcTitle.has(canonical(f.url));
     let host = ''; try { host = new URL(f.url).hostname; } catch { /* */ }
@@ -971,6 +980,11 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
   checks.forEach((c, i) => {
+    if (recentRequired && !parseFindingDate(c.f.posted)) {
+      c.f.verdict = 'rejected';
+      c.f.verdict_reason = 'Güncel görevde kaynak yayın tarihi doğrulanamadı; göreli tarih çıkarımı kabul edilmez';
+      return;
+    }
     // AI hakemi yoksa "doğrulandı" verilmez: kural yalnızca kaynağın var olduğunu gösterir, amaca uygunluğu değil
     const v = verdicts.get(i) ?? (c.reachable && c.match ? { v: 'suspicious' as const, r: 'Kaynak var ve başlık kaynakta geçiyor; AI hakemi çalışmadığı için amaca uygunluk doğrulanmadı' }
       : c.reachable ? { v: 'suspicious' as const, r: 'Kaynak açıldı ama bulgu metinde net görülmedi (kural tabanlı)' } : { v: 'suspicious' as const, r: 'Kaynak sayfası okunamadı (kural tabanlı)' });
