@@ -3,7 +3,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 
 export interface ActivityRow {
-  connector_key: string; action: 'connect' | 'disconnect' | 'token_refresh' | 'verify' | 'publish' | 'metrics_sync' | 'manual_share' | 'message_send' | 'webhook' | 'rate_limit' | 'error';
+  connector_key: string; action: 'connect' | 'disconnect' | 'token_refresh' | 'verify' | 'publish' | 'metrics_sync' | 'inbox_sync' | 'manual_share' | 'message_send' | 'webhook' | 'rate_limit' | 'error';
   status: 'ok' | 'failed' | 'skipped' | 'pending';
   account_id?: string | null; bot_id?: string | null; ref_type?: string | null; ref_id?: string | null;
   external_id?: string | null; external_url?: string | null; duration_ms?: number | null; summary?: string | null;

@@ -1,7 +1,6 @@
-# Herkese açık site aranabilir; yönetim paneli aranmaz (panel alan adı ayrıca X-Robots-Tag: noindex gönderir).
 User-agent: *
 Allow: /
 Disallow: /panel
+Disallow: /ops
 
-Sitemap: https://sahinmanitou.com/sitemap.xml
-Sitemap: https://embayyapi.vercel.app/sitemap-evler.xml
+Sitemap: https://embayyapi.vercel.app/sitemap.xml

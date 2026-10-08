@@ -35,7 +35,7 @@ export const CONNECTORS: ConnectorDef[] = [
   { key: 'yandex_webmaster', name: 'Yandex Webmaster', category: 'search', authType: 'oauth', officialApi: true, implemented: false, requiredEnv: ['YANDEX_CLIENT_ID', 'YANDEX_CLIENT_SECRET'], capabilities: cap(false, true),
     docsUrl: 'https://yandex.com/dev/webmaster/', note: 'Site Yandex Webmaster’da doğrulanmalı.' },
   { key: 'website', name: 'Web Sitesi (teknik SEO)', category: 'search', authType: 'none', officialApi: true, implemented: true, requiredEnv: [], capabilities: cap(false, true),
-    docsUrl: 'https://sahin-manitou-kiralama.vercel.app/', note: 'Herkese açık site HTTP ile denetlenir; hesap gerekmez.' },
+    docsUrl: 'https://embayyapi.vercel.app/', note: 'Herkese açık site HTTP ile denetlenir; hesap gerekmez.' },
   // ── CommunicationConnector ──
   { key: 'email', name: 'E-posta (Resend)', category: 'communication', authType: 'api_key', officialApi: true, implemented: true, requiredEnv: ['RESEND_API_KEY', 'EMAIL_FROM'], capabilities: cap(false, false, true),
     docsUrl: 'https://resend.com/docs/api-reference/emails/send-email', note: 'Gönderen alan adı Resend’de doğrulanmalı.' },

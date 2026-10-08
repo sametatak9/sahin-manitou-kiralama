@@ -13,6 +13,7 @@
     { "source": "/higgsfield/video-4-oturma-odasi.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1kqBSybuZ5VkB1bYsGRKOMqLDmc_hf2qk.mov" },
     { "source": "/higgsfield/video-5-iki-katli-dis.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/17UNFekK28O8G3DPGlGhR0Xsls8TPHSvo.mov" },
     { "source": "/higgsfield/video-6-villa-teras.mov", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1BCXqgs2x8EkamKzGEDoEnzj-seQSf0WJ.mov" },
+    { "source": "/sitemap.xml", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/sitemap" },
     { "source": "/sitemap-evler.xml", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/functions/v1/ops/sitemap" },
     { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embayyapi.vercel.app" }], "destination": "/embay.html" },
     { "source": "/((?!assets/|.*\\..*).*)", "has": [{ "type": "host", "value": "embayyapi.com.tr" }], "destination": "/embay.html" },
