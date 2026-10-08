@@ -5,6 +5,7 @@ import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { approvalLabel, approvalTone, BOT_STATUS, dayKey, fmtDateTime, istanbulToIso, platformMeta, relTime, RUN_LABELS, runTone, TASK_LABELS, taskTone, timeOf } from '../lib/format';
 import { computeNextRun, describeSchedule, isValidCron } from '../../../supabase/functions/_shared/pure/schedule.ts';
+import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
 import type { Approval, Bot, Run, RunLog, Skill, Task, Tool } from '../lib/types';
 import { useRouter, useSession } from '../session';
 import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, SavedStamp, Stat, StateView, Tabs } from '../ui';
@@ -26,10 +27,10 @@ async function loadPortfolio(): Promise<Portfolio> {
   // Görev (mission) bazlı canlılık: şu an çalışan görevler + son görev ve bulgu sayısı (hata olursa ekran yine açılır)
   const live: Record<string, number> = {}; const lastMission: Portfolio['lastMission'] = {};
   const ms = await s.from('bot_missions').select('bot_id,status,created_at,findings').gte('created_at', since).order('created_at', { ascending: false }).limit(400);
-  for (const m of (ms.data ?? []) as Array<{ bot_id: string | null; status: string; created_at: string; findings: unknown[] | null }>) {
+  for (const m of (ms.data ?? []) as Array<{ bot_id: string | null; status: string; created_at: string; findings: Array<{ verdict?: string }> | null }>) {
     if (!m.bot_id) continue;
     if (m.status === 'running' || m.status === 'finalizing') live[m.bot_id] = (live[m.bot_id] ?? 0) + 1;
-    if (!lastMission[m.bot_id]) lastMission[m.bot_id] = { at: m.created_at, findings: Array.isArray(m.findings) ? m.findings.length : 0 };
+    if (!lastMission[m.bot_id]) lastMission[m.bot_id] = { at: m.created_at, findings: findingCounts(m.findings ?? []).verified };
   }
   return { bots: unwrap(bots), skills: unwrap(skills), tools: unwrap(tools), tasks: unwrap(tasks), runs: unwrap(runs), agents: unwrap(agents), live, lastMission };
 }
@@ -129,7 +130,7 @@ function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; 
       </div>
       <div className="grid grid-cols-4 gap-2 border-t border-ink-800 bg-ink-900/40 px-4 py-2.5 text-[10px]">
         <div><div className="font-mono text-ink-500">SON GÖREV</div><div className="text-ink-200 truncate">{lm ? relTime(lm.at) : st.last ? relTime(st.last.created_at) : '—'}</div></div>
-        <div><div className="font-mono text-ink-500">BULGU</div><div className="text-ink-200">{lm ? lm.findings : '—'}</div></div>
+        <div><div className="font-mono text-ink-500">DOĞRULANDI</div><div className="text-ink-200">{lm ? lm.findings : '—'}</div></div>
         <div><div className="font-mono text-ink-500">BAŞARI</div><div className={cx('font-semibold', st.success === null ? 'text-ink-400' : st.success >= 80 ? 'text-emerald-700' : 'text-amber-700')}>{st.success === null ? '—' : `%${st.success}`}</div></div>
         <div><div className="font-mono text-ink-500">HATA</div><div className={st.errors ? 'text-rose-700 font-semibold' : 'text-ink-300'}>{st.errors}{st.blocked ? ` · ${st.blocked}⛔` : ''}</div></div>
       </div>

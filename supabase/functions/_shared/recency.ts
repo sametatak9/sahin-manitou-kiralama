@@ -1,107 +1,83 @@
-/** Bulgu güncelliği: 60 günden eski / sonuçlanmış ihale elemesi. mission.ts ile paylaşılır.
- *  Bugün (2026-09): 1 yıl önceki ihale çoktan alınmış/yapılmıştır — BULGU DEĞİLDİR.
- */
+/** Bulgu güncelliği: kaynak yayın tarihi ve görevin istediği takvim aralığı. */
 export function parseFindingDate(s?: string | null): Date | null {
-  if (!s) return null;
+  if (!s || typeof s !== 'string') return null;
   const t = s.trim();
-  const iso = t.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) {
-    const d = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00+03:00`);
-    return isNaN(d.getTime()) ? null : d;
+  const make = (y: number, m: number, d: number): Date | null => {
+    if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const day = new Date(Date.UTC(y, m - 1, d));
+    if (day.getUTCFullYear() !== y || day.getUTCMonth() !== m - 1 || day.getUTCDate() !== d) return null;
+    return new Date(`${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T12:00:00+03:00`);
+  };
+  // Eksik yıl, yıl tek başına, göreli süre ve JS Date'in 31 Şubat normalizasyonu kabul edilmez.
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)?)?$/);
+  if (iso) return make(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  const numeric = t.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if (numeric) return make(Number(numeric[3]), Number(numeric[2]), Number(numeric[1]));
+  const named = t.toLocaleLowerCase('tr-TR').match(/^(\d{1,2})\s+(ocak|oca|şubat|şub|mart|mar|nisan|nis|mayıs|may|haziran|haz|temmuz|tem|ağustos|ağu|eylül|eyl|ekim|eki|kasım|kas|aralık|ara)\.?\s+(\d{4})$/);
+  if (named) {
+    const months: Record<string, number> = { ocak: 1, oca: 1, şubat: 2, şub: 2, mart: 3, mar: 3, nisan: 4, nis: 4, mayıs: 5, may: 5, haziran: 6, haz: 6, temmuz: 7, tem: 7, ağustos: 8, ağu: 8, eylül: 9, eyl: 9, ekim: 10, eki: 10, kasım: 11, kas: 11, aralık: 12, ara: 12 };
+    return make(Number(named[3]), months[named[2]], Number(named[1]));
   }
-  const tr = t.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
-  if (tr) {
-    const d = new Date(`${tr[3]}-${tr[2].padStart(2, '0')}-${tr[1].padStart(2, '0')}T12:00:00+03:00`);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  // "15 Eylül 2025", "Eylül 2025", "2025 yılı"
-  const trMonth = t.match(/(\d{1,2})?\s*(ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık)\s*(\d{4})/i);
-  if (trMonth) {
-    const months: Record<string, string> = {
-      ocak: '01', şubat: '02', mart: '03', nisan: '04', mayıs: '05', haziran: '06',
-      temmuz: '07', ağustos: '08', eylül: '09', ekim: '10', kasım: '11', aralık: '12',
-    };
-    const m = months[trMonth[2].toLocaleLowerCase('tr-TR')];
-    const day = (trMonth[1] || '15').padStart(2, '0');
-    if (m) {
-      const d = new Date(`${trMonth[3]}-${m}-${day}T12:00:00+03:00`);
-      return isNaN(d.getTime()) ? null : d;
-    }
-  }
-  const d2 = new Date(t);
-  return isNaN(d2.getTime()) ? null : d2;
+  return null;
 }
 
-/** Maksimum yaş (gün). 60 = yaklaşık 2 ay; 1 yıl önceki ihale asla geçmez. */
 export const MAX_FINDING_AGE_DAYS = 60;
-
-/** Görev açıkça güncel bir pencere istiyorsa tarih kanıtı olmadan bulgu kabul edilmez. */
-export function requiresRecentEvidence(m: {
-  title?: string | null;
-  goal?: string | null;
-  search_for?: string | null;
-  report_spec?: string | null;
-}): boolean {
-  const text = [m.title, m.goal, m.search_for, m.report_spec].filter(Boolean).join(' ').toLocaleLowerCase('tr-TR');
-  return /(?:son\s+(?:\d+|bir|iki|üç|dört|beş|on|otuz)\s*(?:gün|hafta|ay)|güncel|bugün|bu\s+hafta|bu\s+ay)/i.test(text);
+export interface RecencyMission { title?: string | null; goal?: string | null; search_for?: string | null; report_spec?: string | null }
+const missionText = (m: RecencyMission) => [m.title, m.goal, m.search_for, m.report_spec].filter(Boolean).join(' ').toLocaleLowerCase('tr-TR');
+export function requiresRecentEvidence(m: RecencyMission): boolean {
+  return /(?:\bson\s*(?:\d+|bir|iki|üç|dört|beş|on|otuz)\s*(?:gün|hafta|ay)|güncel|bugün|bu\s+hafta|bu\s+ay)/i.test(missionText(m));
 }
 
-export function isStaleFinding(f: {
-  title: string;
-  detail: string;
-  posted?: string;
-  fit?: string;
-  summary?: string;
-  evidence?: string;
-}): string | null {
+/** Günler İstanbul takvimine göre; saat bulunmadığı için günün ilerleyen saati gelecek tarih sayılmaz. */
+export function publicationDay(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  return ['year', 'month', 'day'].map((key) => parts.find((p) => p.type === key)?.value).join('-');
+}
+export function recencyWindow(m: RecencyMission, now = new Date()): { required: boolean; from: string; to: string; days: number } {
+  const text = missionText(m);
+  const to = publicationDay(now);
+  const today = new Date(`${to}T00:00:00Z`);
+  let days = MAX_FINDING_AGE_DAYS;
+  const words: Record<string, number> = { bir: 1, iki: 2, üç: 3, dört: 4, beş: 5, on: 10, otuz: 30 };
+  for (const hit of text.matchAll(/\bson\s*(\d+|bir|iki|üç|dört|beş|on|otuz)\s*(gün|hafta|ay)/gi)) {
+    const n = words[hit[1]] ?? Number(hit[1]);
+    if (Number.isFinite(n) && n > 0) days = Math.min(days, n * (hit[2] === 'hafta' ? 7 : hit[2] === 'ay' ? 30 : 1));
+  }
+  let start = new Date(today.getTime() - days * 86400_000);
+  if (/bugün/.test(text)) { start = today; days = 0; }
+  else if (/bu\s+hafta/.test(text)) { days = (today.getUTCDay() + 6) % 7; start = new Date(today.getTime() - days * 86400_000); }
+  else if (/bu\s+ay/.test(text)) { start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)); days = Math.round((today.getTime() - start.getTime()) / 86400_000); }
+  return { required: requiresRecentEvidence(m), from: start.toISOString().slice(0, 10), to, days };
+}
+
+/** Kaynak metadata tarihi bu kapıdan geçer; AI'nin posted iddiası tarih kanıtı değildir. */
+export function publicationDateIssue(posted: string | null | undefined, m: RecencyMission, now = new Date()): string | null {
+  const window = recencyWindow(m, now);
+  const d = parseFindingDate(posted);
+  if (!d) return window.required ? 'Kaynak yayın tarihi doğrulanamadı; göreli veya AI tarafından üretilmiş tarih kabul edilmez' : null;
+  const day = publicationDay(d);
+  if (day > window.to) return `Yayın tarihi ${day} gelecekte; doğrulanabilir yayın değil`;
+  if (day < window.from) return `Yayın tarihi ${day}, görev tarih aralığı dışında (${window.from}–${window.to})`;
+  return null;
+}
+
+export function isStaleFinding(f: { title: string; detail: string; posted?: string; fit?: string; summary?: string; evidence?: string }, now = new Date()): string | null {
   const blob = `${f.title} ${f.detail} ${f.posted ?? ''} ${f.fit ?? ''} ${f.summary ?? ''} ${f.evidence ?? ''}`.toLocaleLowerCase('tr-TR');
-
-  // Sonuçlanmış / kapanmış işler
-  if (/ihale\s*sonu[cç]|sonu[cç]\s*ilan|y[uü]klenici\s*belirlendi|s[oö]zle[sş]me\s*imzaland|i[sş]\s*tamamland|kesinle[sş]en\s*y[uü]klenici|ihale\s*iptal|ihaleyi\s*kazan|sözleşme\s*imza|iş\s*bit(ti|miş)|teslim\s*edildi|kabul\s*yapıldı/.test(blob)) {
-    return 'Sonuçlanmış / kapanmış ihale veya tamamlanmış iş — güncel fırsat değil';
-  }
-
-  const now = new Date();
-  const currentYear = now.getFullYear(); // 2026
+  if (/ihale\s*sonu[cç]|sonu[cç]\s*ilan|y[uü]klenici\s*belirlendi|s[oö]zle[sş]me\s*imzaland|i[sş]\s*tamamland|kesinle[sş]en\s*y[uü]klenici|ihale\s*iptal|ihaleyi\s*kazan|sözleşme\s*imza|iş\s*bit(ti|miş)|teslim\s*edildi|kabul\s*yapıldı/.test(blob)) return 'Sonuçlanmış / kapanmış ihale veya tamamlanmış iş — güncel fırsat değil';
+  const issue = publicationDateIssue(f.posted, {}, now);
+  if (issue) return issue;
   const d = parseFindingDate(f.posted);
-
-  if (d) {
-    const ageDays = (Date.now() - d.getTime()) / 86400_000;
-    if (ageDays > MAX_FINDING_AGE_DAYS) {
-      return `Tarih ${f.posted} — ${MAX_FINDING_AGE_DAYS} günden eski (yaş ~${Math.round(ageDays)} gün)`;
-    }
-    if (d.getFullYear() < currentYear - 0 && ageDays > 30) {
-      // 2025 veya daha eski yıl + 30 günden fazla → reddet
-      if (d.getFullYear() < currentYear) {
-        return `Tarih yılı ${d.getFullYear()} — geçmiş dönem, güncel değil`;
-      }
-    }
-  }
-
-  // Metinde açıkça eski yıl geçiyorsa (2025, 2024, ...) ve güncel yıl yoksa reddet
+  const currentYear = Number(publicationDay(now).slice(0, 4));
   for (let yy = 2018; yy < currentYear; yy++) {
-    const hasOld = blob.includes(String(yy));
-    const hasCurrent = blob.includes(String(currentYear));
-    if (hasOld && !hasCurrent) {
-      if (
-        new RegExp(`${yy}\\s*(yılı|yil|ihale|ilan|tarih|dönem|sezon)|${yy}[./-]|\\b${yy}\\b`).test(blob) ||
-        !d // posted yoksa metindeki yıl yeterli kanıt
-      ) {
-        return `Metinde ${yy} — geçmiş dönem (güncel yıl ${currentYear} yok)`;
-      }
-    }
+    if (blob.includes(String(yy)) && !blob.includes(String(currentYear)) && (new RegExp(`${yy}\\s*(yılı|yil|ihale|ilan|tarih|dönem|sezon)|${yy}[./-]|\\b${yy}\\b`).test(blob) || !d)) return `Metinde ${yy} — geçmiş dönem (güncel yıl ${currentYear} yok)`;
   }
-
-  // "geçen yıl", "2024-2025", "eski ihale" gibi ifadeler
-  if (/\b(geçen\s*yıl|geçtiğimiz\s*yıl|bir\s*yıl\s*önce|eski\s*ihale|eski\s*ilan|202[0-4]\s*[-–]\s*202[0-5])\b/.test(blob)) {
-    return 'Metinde geçmiş dönem ifadesi — güncel fırsat değil';
-  }
-
+  if (/\b(geçen\s*yıl|geçtiğimiz\s*yıl|bir\s*yıl\s*önce|eski\s*ihale|eski\s*ilan|202[0-4]\s*[-–]\s*202[0-5])\b/.test(blob)) return 'Metinde geçmiş dönem ifadesi — güncel fırsat değil';
   return null;
 }
 
 export const RECENCY_RULES = [
-  `GÜNCELLİK (ZORUNLU — ${MAX_FINDING_AGE_DAYS} GÜN): Yalnızca SON ${MAX_FINDING_AGE_DAYS} GÜN içindeki ilan/ihale/talep/haberler. Tercihen son 21–30 gün. 1 yıl veya daha eski ihale, sonuçlanmış ihale, “ihale sonuçlandı / yüklenici belirlendi / iş tamamlandı” kayıtları BULGU DEĞİLDİR. Tarih yoksa ve metinden 2025 veya daha eski olduğu anlaşılıyorsa ele.`,
-  'İHALE: Açık / başvurusu süren / henüz sonuçlanmamış. “Sonuç ilanı”, “kesinleşen yüklenici”, “sözleşme imzalandı” → reject.',
-  'ARAMA: Sorgulara “2026”, “güncel”, “son ilan”, “yeni duyuru” ekle; eski arşiv sayfalarını atla.',
+  `GÜNCELLİK: Görevin istediği gerçek yayın tarih aralığına uy. Genel üst sınır ${MAX_FINDING_AGE_DAYS} gündür; görev son 7/30 gün istiyorsa daha dar olan pencere geçerlidir. Sonuçlanmış ihale ve tamamlanmış işler güncel müşteri fırsatı değildir.`,
+  'TARİH KAYNAĞI: Sunucunun arama metadata veya sayfa yayın metadata bilgisini kullan. dateModified, taranma/ziyaret tarihi, AI tahmini, bugünkü yıl veya “2 saat önce” ifadesi yayın tarihi yerine geçmez.',
+  'İHALE: Açık / başvurusu süren / henüz sonuçlanmamış olmalı. İhale günü yayın günüyle aynı değildir; başvuru bitişi ayrı bilgidir.',
+  'ARAMA: Kısa ve somut sorgular kullan; tarih filtresi gerçek metadata üzerinden uygulanır, güncel yıl başlığa eklenerek eski kaynak yenilenmiş sayılmaz.',
 ].join('\n');

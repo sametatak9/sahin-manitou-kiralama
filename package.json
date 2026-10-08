@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "test:search": "tsx tests/search-contract.test.ts",
     "test:mission-outcome": "tsx tests/mission-outcome.test.ts",
-    "test:recency": "tsx tests/recency-contract.test.ts"
+    "test:recency": "tsx tests/recency-contract.test.ts",
+    "test:publication": "tsx tests/publication-contract.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

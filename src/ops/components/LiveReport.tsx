@@ -6,20 +6,25 @@ import { FindingCard } from './FindingCard';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
 import type { Mission } from '../lib/types';
-import { Button, cx, Modal, Pill, StateView } from '../ui';
+import { Button, cx, Modal, Notice, Pill, StateView } from '../ui';
+import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
 
 export { waNumber } from './FindingCard';
 
 export function LiveReport({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useQuery(async () => unwrap(await db().from('bot_missions').select('*').eq('id', id).single()) as Mission, null as Mission | null, [id], ['bot_missions']);
   const [term, setTerm] = useState('');
+  const [filter, setFilter] = useState<'active' | 'verified' | 'pending' | 'rejected'>('active');
   const m = q.data;
   const live = m && (m.status === 'running' || m.status === 'finalizing');
+  const counts = findingCounts(m?.findings ?? []);
   const list = useMemo(() => {
     const t = term.trim().toLocaleLowerCase('tr-TR');
-    return (m?.findings ?? []).map((f, i) => ({ f, i })).reverse().filter(({ f }) => !t || `${f.title} ${f.detail} ${f.company ?? ''} ${f.location ?? ''}`.toLocaleLowerCase('tr-TR').includes(t));
-  }, [m?.findings, term]);
-  const withPhone = (m?.findings ?? []).filter((f) => f.phone).length;
+    return (m?.findings ?? []).map((f, i) => ({ f, i })).reverse().filter(({ f }) => {
+      const matches = filter === 'active' ? f.verdict !== 'rejected' : filter === 'pending' ? f.verdict !== 'verified' && f.verdict !== 'rejected' : f.verdict === filter;
+      return matches && (!t || `${f.title} ${f.detail} ${f.company ?? ''} ${f.location ?? ''}`.toLocaleLowerCase('tr-TR').includes(t));
+    });
+  }, [m?.findings, term, filter]);
 
   const openHtml = (print: boolean) => {
     if (!m?.report_html) return;
@@ -44,16 +49,24 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-              <div className="rounded-xl bg-white/15 py-2"><div className="text-xl font-bold tabular-nums">{m.findings.length}</div><div className="text-[10px] opacity-80">KAYIT</div></div>
-              <div className="rounded-xl bg-white/15 py-2"><div className="text-xl font-bold tabular-nums">{withPhone}</div><div className="text-[10px] opacity-80">İLETİŞİMLİ</div></div>
+              <div className="rounded-xl bg-white/15 py-2"><div className="text-xl font-bold tabular-nums">{counts.verified}</div><div className="text-[10px] opacity-80">DOĞRULANDI</div></div>
+              <div className="rounded-xl bg-white/15 py-2"><div className="text-xl font-bold tabular-nums">{counts.pending}</div><div className="text-[10px] opacity-80">İNCELEME BEKLİYOR</div></div>
               <div className="rounded-xl bg-white/15 py-2"><div className="text-xl font-bold tabular-nums">{m.sources.length}</div><div className="text-[10px] opacity-80">KAYNAK</div></div>
             </div>
             <div className="flex items-center gap-2 mt-3 text-[11px]">
               {live ? <span className="inline-flex items-center gap-1.5 rounded-full bg-white text-emerald-700 px-2.5 py-0.5 font-bold"><Radio className="w-3.5 h-3.5 animate-pulse" />CANLI · bitiş {fmtDateTime(m.deadline_at)}</span>
-                : <Pill tone={m.status === 'failed' ? 'stop' : 'go'}>{m.status === 'failed' ? 'HATA İLE BİTTİ' : 'TAMAMLANDI'}</Pill>}
+                : <Pill tone={m.status === 'failed' ? 'stop' : counts.verified ? 'go' : 'wait'}>{m.status === 'failed' ? 'HATA İLE BİTTİ' : counts.verified ? 'DOĞRULANMIŞ SONUÇ VAR' : 'DOĞRULANMIŞ SONUÇ YOK'}</Pill>}
               <span className="opacity-80">Adım {m.step_count}/{m.max_steps}</span>
             </div>
           </div>
+          {m.error && <Notice tone={m.status === 'failed' ? 'error' : 'warn'}>{m.error}</Notice>}
+          {m.summary && <div className="rounded-xl bg-ink-900/40 p-3 text-xs text-ink-300 whitespace-pre-line">{m.summary}</div>}
+          <div className="flex flex-wrap gap-1.5">
+            {([{ key: 'active', label: 'Aday ve sonuçlar', count: counts.verified + counts.pending }, { key: 'verified', label: 'Doğrulandı', count: counts.verified }, { key: 'pending', label: 'İnceleme', count: counts.pending }, { key: 'rejected', label: 'Elendi', count: counts.rejected }] as const).map((item) => (
+              <button type="button" key={item.key} onClick={() => setFilter(item.key)} aria-pressed={filter === item.key} className={cx('rounded-lg px-3 py-2 text-[11px] ring-1', filter === item.key ? 'bg-brand-green text-white ring-brand-green' : 'text-ink-300 ring-ink-700')}>{item.label} · {item.count}</button>
+            ))}
+          </div>
+          {counts.pending > 0 && <Notice tone="warn">İnceleme bekleyen adaylar doğrulanmış müşteri değildir; otomatik müşteri portföyüne aktarılmaz.</Notice>}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
             <input className="ops-input !pl-9" placeholder="Kayıtlarda ara (firma, ilçe, iş…)" value={term} onChange={(e) => setTerm(e.target.value)} />

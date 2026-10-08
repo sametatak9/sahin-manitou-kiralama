@@ -9,6 +9,7 @@ import { useRouter } from '../session';
 import { LiveReport } from './LiveReport';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
 import { getPreferredModel } from '../lib/agency';
+import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
 
 export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: Tone }> = {
   running: { label: 'ÇALIŞIYOR', tone: 'run' }, finalizing: { label: 'RAPOR HAZIRLANIYOR', tone: 'run' }, completed: { label: 'TAMAMLANDI', tone: 'go' },
@@ -35,13 +36,13 @@ export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'> 
 }
 
 export function outcomeOf(m: Mission): { tone: 'ok' | 'warn' | 'error' | 'info'; title: string; text: string } {
+  const counts = findingCounts(m.findings);
   if (m.status === 'failed') return { tone: 'error', title: m.error_kind === 'search_unavailable' ? 'Arama kaynağı kullanılamadı' : 'Hata ile bitti',
     text: m.error_kind === 'search_unavailable' ? (m.error ?? ERROR_KIND.search_unavailable) : ERROR_KIND[m.error_kind ?? ''] ?? m.error ?? 'Bilinmeyen hata' };
-  if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı — sayfa taraması yapıldı', text: `${m.findings.length} bulgu (AI'sız).` };
-  if (m.finish_reason === 'completed_no_findings') return { tone: 'warn', title: 'Tamamlandı — gerçek sıfır bulgu', text: `${m.sources?.length ?? 0} kaynak incelendi; doğrulanabilir müşteri/lead çıktısı yok.` };
-  if (m.status === 'stopped') return { tone: 'info', title: 'Yönetici durdurdu', text: `${m.findings.length} bulgu ile raporlandı.` };
-  if (!m.findings.length) return { tone: 'warn', title: 'Sonuç bulunamadı', text: 'Kaynağı doğrulanabilen bulgu çıkmadı.' };
-  return { tone: 'ok', title: 'Başarılı', text: `${m.findings.length} kaynaklı bulgu · ${FINISH_REASON[m.finish_reason ?? ''] ?? ''}` };
+  if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı — sayfa taraması yapıldı', text: `${counts.verified} doğrulandı · ${counts.pending} aday denetim bekliyor.` };
+  if (m.status === 'stopped') return { tone: 'info', title: 'Yönetici durdurdu', text: `${counts.verified} doğrulanmış bulgu ile raporlandı.` };
+  if (!counts.verified) return { tone: 'warn', title: counts.pending ? 'Doğrulanmış sonuç yok — adaylar inceleme bekliyor' : 'Tamamlandı — gerçek sıfır bulgu', text: `${m.sources?.length ?? 0} kaynak · ${counts.pending} inceleme bekleyen aday · ${counts.rejected} elendi. Başarılı lead çıktısı değildir.` };
+  return { tone: 'ok', title: 'Doğrulanmış sonuçlar hazır', text: `${counts.verified} doğrulanmış bulgu · ${counts.pending} inceleme bekleyen aday · ${FINISH_REASON[m.finish_reason ?? ''] ?? ''}` };
 }
 
 /** Minimal görev formu: bot + ne yapılsın + süre. Hazır görev / Manitou yok. */
@@ -141,8 +142,9 @@ export function MissionList({ bots, botId, compact = false, review }: { bots: Bo
         <div className="space-y-2">
           {q.data.map((m) => {
             const st = MISSION_STATUS[m.status]; const live = m.status === 'running' || m.status === 'finalizing';
+            const counts = findingCounts(m.findings);
             return (
-              <button key={m.id} onClick={() => setOpen(m.id)} className={cx('w-full text-left bg-white rounded-2xl p-3.5 ring-1 ring-ink-700/70 shadow-sm hover:ring-brand-green/50 transition border-l-4', live ? 'border-l-sky-400' : m.status === 'failed' ? 'border-l-rose-400' : (m.findings?.length ?? 0) > 0 ? 'border-l-emerald-400' : 'border-l-slate-300')}>
+              <button key={m.id} onClick={() => setOpen(m.id)} className={cx('w-full text-left bg-white rounded-2xl p-3.5 ring-1 ring-ink-700/70 shadow-sm hover:ring-brand-green/50 transition border-l-4', live ? 'border-l-sky-400' : m.status === 'failed' ? 'border-l-rose-400' : counts.verified > 0 ? 'border-l-emerald-400' : 'border-l-slate-300')}>
                 <div className="flex flex-wrap items-center gap-2">
                   {!botId && <span className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-[#262A6B] to-[#1E3FA0] text-white grid place-items-center text-[11px] font-bold">{botName(m.bot_id).slice(0, 2).toLocaleUpperCase('tr-TR')}</span>}
                   <span className="font-semibold text-sm text-ink-100 flex-1 min-w-[180px] truncate">{m.title}</span>
@@ -151,7 +153,7 @@ export function MissionList({ bots, botId, compact = false, review }: { bots: Bo
                 <div className="text-[11px] text-ink-400 mt-1 line-clamp-1">{m.goal}</div>
                 {live && <div className="mt-2 h-1.5 rounded-full bg-ink-800 overflow-hidden"><div className="h-full bg-signal-run" style={{ width: `${progress(m)}%` }} /></div>}
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-ink-500 font-mono">
-                  <span>{m.duration_minutes} dk</span><span>ADIM {m.step_count}</span><span>BULGU {m.findings?.length ?? 0}</span>
+                  <span>{m.duration_minutes} dk</span><span>ADIM {m.step_count}</span><span>DOĞRULANDI {counts.verified}</span><span>ADAY {counts.pending}</span>{counts.rejected > 0 && <span>ELENDİ {counts.rejected}</span>}
                   <span>{live ? `bitiş ${fmtDateTime(m.deadline_at)}` : `bitti ${relTime(m.finished_at)}`}</span>
                 </div>
               </button>
