@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Blocks, Bot, Briefcase, Store, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
+  Blocks, Bot, Briefcase, Store, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, ChevronDown, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
 import { useRouter, useSession, type Route } from './session';
 import { cx } from './ui';
 import { PageGuide } from './components/PageGuide';
+import { AgencyControlStrip } from './components/AgencyControlStrip';
 import { ClientSwitcher, useClient } from './client';
 
 interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
@@ -17,20 +18,20 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'queue', label: 'İçerik Merkezi', icon: Clapperboard, hint: 'Takvim · video · kontrol · üret · medya' },
     { id: 'leads', label: 'Müşteri Adayları', icon: Inbox, hint: 'Fiyat soranlar · başvurular' },
     { id: 'growth', label: 'Büyüme', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
+    { id: 'bots', label: 'Botlar', icon: Bot, hint: 'Görev ver · sonucu gör' },
   ] },
-  { title: 'Web sitesi', items: [
+  { title: 'Müşteri & web', items: [
     { id: 'showroom', label: 'Ev Vitrini', icon: Store, hint: 'Sitedeki ev modelleri · yazılar' },
-  ] },
-  { title: 'İş', items: [
     { id: 'construction', label: 'Müşteriler', icon: Building2, hint: 'Görüşme · teklif · sözleşme' },
+    { id: 'clients', label: 'Ajans Müşterileri', icon: Users, hint: 'İşletmeler · hesaplar' },
+  ] },
+  { title: 'İş & otomasyon', items: [
     { id: 'portfolio', label: 'Firma Portföyü', icon: Briefcase, hint: 'İş ortakları · hatırlatma' },
-    { id: 'bots', label: 'Botlar', icon: Bot, hint: 'Görev ver · zamanla' },
     { id: 'reports', label: 'Bot Sonuçları', icon: FileText, hint: 'Ne bulundu · ne yapacağız' },
+    { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
+    { id: 'skills', label: 'Yetenekler', icon: Blocks, hint: 'Skill kütüphanesi' },
   ] },
   { title: 'Ayarlar', items: [
-    { id: 'connections', label: 'Uygulamalar', icon: PlugZap, hint: 'IG · FB bağlantıları' },
-    { id: 'clients', label: 'Ajans Müşterileri', icon: Users, hint: 'İşletmeler · hesaplar' },
-    { id: 'skills', label: 'Yetenekler', icon: Blocks, hint: 'Skill kütüphanesi' },
     { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
@@ -70,10 +71,12 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
   const { state, go } = useRouter();
   const session = useSession();
   const [drawer, setDrawer] = useState(false);
+  const [more, setMore] = useState(false);
   const badges = useBadges();
   const { client } = useClient();
   const all = GROUPS.flatMap((g) => g.items);
   const current = all.find((i) => i.id === state.route) ?? all[0];
+  const activeInMore = GROUPS.slice(1).some((g) => g.items.some((i) => i.id === state.route));
 
   const NavLink = ({ item, compact = false }: { item: NavItem; compact?: boolean }) => {
     const active = state.route === item.id;
@@ -104,7 +107,16 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
       </div>
       <div className="px-2 pb-3"><ClientSwitcher /></div>
       <nav className="flex-1 overflow-y-auto ops-scroll px-2 space-y-4 pb-4">
-        {GROUPS.map((g) => (
+        {GROUPS.slice(0, 1).map((g) => (
+          <div key={g.title}>
+            <div className="px-3 pb-1.5 text-[10px] font-mono uppercase tracking-[0.2em] text-ink-500">{g.title}</div>
+            <div className="space-y-0.5">{g.items.map((i) => <NavLink key={i.id} item={i} />)}</div>
+          </div>
+        ))}
+        <button type="button" onClick={() => setMore((v) => !v)} className={cx('w-full flex items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] font-semibold transition', activeInMore ? 'bg-ink-750 text-ink-100 ring-1 ring-ink-600' : 'text-ink-400 hover:bg-ink-850 hover:text-ink-100')}>
+          <span className="inline-flex items-center gap-2"><Sparkles className="w-4 h-4 text-violet-500" />Daha fazla</span><ChevronDown className={cx('w-4 h-4 transition-transform', (more || activeInMore) && 'rotate-180')} />
+        </button>
+        {(more || activeInMore) && GROUPS.slice(1).map((g) => (
           <div key={g.title}>
             <div className="px-3 pb-1.5 text-[10px] font-mono uppercase tracking-[0.2em] text-ink-500">{g.title}</div>
             <div className="space-y-0.5">{g.items.map((i) => <NavLink key={i.id} item={i} />)}</div>
@@ -202,7 +214,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
           </div>
         </header>
         <main className="flex-1 px-4 sm:px-6 py-5 pb-28 lg:pb-8 ops-grid-bg">
-          <div className="max-w-[1400px] mx-auto"><PageGuide route={current.id} />{children}</div>
+          <div className="max-w-[1400px] mx-auto"><AgencyControlStrip /><div className="mt-4"><PageGuide route={current.id} />{children}</div></div>
         </main>
       </div>
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-ink-700 bg-ink-900/95 backdrop-blur px-2 pb-[env(safe-area-inset-bottom)]">

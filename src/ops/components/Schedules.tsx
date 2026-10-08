@@ -4,6 +4,7 @@ import { AlarmClock, Play, Plus, Trash2 } from 'lucide-react';
 import { callMissions, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
+import { getPreferredModel } from '../lib/agency';
 import type { Bot } from '../lib/types';
 import { useSession } from '../session';
 import { Button, cx, Field, Modal, Notice, Pill, SavedStamp, StateView } from '../ui';
@@ -86,7 +87,7 @@ function NewSchedule({ bots, onClose, onSaved }: { bots: Bot[]; onClose: () => v
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const save = async () => {
     setBusy(true); setErr(null);
-    const { error } = await db().from('mission_schedules').insert({ ...f, bot_id: f.bot_id || null, model: 'claude-sonnet-5', created_by: session.userId, last_run_at: new Date().toISOString() });
+    const { error } = await db().from('mission_schedules').insert({ ...f, bot_id: f.bot_id || null, model: getPreferredModel(), created_by: session.userId, last_run_at: new Date().toISOString() });
     setBusy(false); if (error) setErr(errorText(error)); else onSaved();
   };
   return (
