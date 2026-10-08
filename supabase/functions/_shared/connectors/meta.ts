@@ -20,7 +20,7 @@ export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 // Meta Dashboard > Facebook Login for Business > Configurations içindeki
 // kullanıcı tarafından oluşturulan yapılandırma. config_id kullanıldığında
 // izinleri OAuth URL'sinde tekrar scope olarak göndermeyiz.
-const META_LOGIN_CONFIG_ID = () => appSecret('META_LOGIN_CONFIG_ID') || '2984327711905674';
+export const META_LOGIN_CONFIG_ID = '2984327711905674';
 
 async function call(method: 'GET' | 'POST', path: string, params: Record<string, string>, host?: string) {
   const url = new URL(graph(path, host));
@@ -41,9 +41,10 @@ export function metaAuthorizeUrl(state: string, redirectUri: string, switchAccou
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
   u.searchParams.set('response_type', 'code');
-  const configId = META_LOGIN_CONFIG_ID();
-  if (configId) u.searchParams.set('config_id', configId);
-  else u.searchParams.set('scope', (withInstagram ? META_SCOPES : META_PAGE_SCOPES).join(','));
+  // Login for Business yapılandırması elle scope gönderiminden önceliklidir.
+  // Bu parametre yoksa Meta v26 akışı “config_id gerekli” hatası verir.
+  u.searchParams.set('config_id', META_LOGIN_CONFIG_ID);
+  u.searchParams.delete('scope');
   // Hesap değiştir: Facebook izin/sayfa seçim ekranını yeniden gösterir (başka sayfa/IG hesabı seçilebilir)
   // Her girişte izin/sayfa seçim ekranı yeniden gösterilir (eski "hiç sayfa seçilmedi" ayarı tekrar kullanılmasın)
   u.searchParams.set('auth_type', 'rerequest');
