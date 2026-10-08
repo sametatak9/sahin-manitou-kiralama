@@ -40,9 +40,10 @@ export function metaAuthorizeUrl(state: string, redirectUri: string, switchAccou
   u.searchParams.set('client_id', appSecret('META_APP_ID') || '');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
-  u.searchParams.set('response_type', 'code');
   // Login for Business yapılandırması elle scope gönderiminden önceliklidir.
-  // Bu parametre yoksa Meta v26 akışı “config_id gerekli” hatası verir.
+  // User access token yapılandırmasında response_type zorlanmaz; config_id
+  // yapılandırmanın varsayılan yanıt türünü seçer. System-user akışı için
+  // gereken response_type=code + override_default_response_type burada yoktur.
   u.searchParams.set('config_id', META_LOGIN_CONFIG_ID);
   u.searchParams.delete('scope');
   // Hesap değiştir: Facebook izin/sayfa seçim ekranını yeniden gösterir (başka sayfa/IG hesabı seçilebilir)
