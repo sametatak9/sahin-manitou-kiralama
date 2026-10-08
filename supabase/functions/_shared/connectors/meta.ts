@@ -13,8 +13,8 @@ const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram'
 // Facebook Login for Business için yalnızca bu akışta geçerli Page izinlerini isteriz.
 // Meta'nın güncel izin kümesinde bazı Messenger/legacy izinleri bu OAuth isteğinde
 // geçerli değildir; Instagram mesajları instagram_manage_messages ile, Page okuma
-// ve etkileşimleri ise pages_read_engagement / pages_read_user_engagement ile yürür.
-export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_read_user_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_manage_engagement'];
+// ve etkileşimleri ise pages_read_engagement / pages_manage_engagement ile yürür.
+export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_manage_engagement'];
 export const META_IG_SCOPES = ['instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights', 'instagram_manage_messages', 'business_management'];
 export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 
