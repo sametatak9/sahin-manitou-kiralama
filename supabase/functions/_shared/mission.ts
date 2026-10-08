@@ -8,7 +8,8 @@ import { COMPAT, getAiKey, GROQ_URL } from './ai/keys.ts';
 import { telegramSend } from './connectors/messaging.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { logActivity } from './activity.ts';
-import { tavilySearch, type WebResult } from './search.ts';
+import { tavilySearchDetailed, type WebResult } from './search.ts';
+import { isSearchUnavailable, searchScopeStatus } from './pure/search.ts';
 import { isStaleFinding, RECENCY_RULES } from './recency.ts';
 
 type Db = SupabaseClient;
@@ -17,7 +18,7 @@ export interface MissionRow {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: string; finish_reason: string | null; started_at: string; deadline_at: string;
   finished_at: string | null; step_count: number; max_steps: number; provider: string | null; model: string | null; error_count?: number; error_kind?: string | null; schedule_id?: string | null;
-  findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; tokens_in: number; tokens_out: number; created_by: string | null; cost_usd?: number; web_searches?: number;
+  findings: Finding[]; sources: Source[]; visited: string[]; summary: string | null; error?: string | null; tokens_in: number; tokens_out: number; created_by: string | null; cost_usd?: number; web_searches?: number;
   skill_ids?: string[]; purpose?: string; audit?: MissionAudit | null; coach_note?: string | null;
 }
 export interface Finding {
@@ -148,22 +149,30 @@ export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_f
 }
 
 // ── Haber/duyuru araması (herkese açık Google Haberler RSS) ───────────────────
-// Ücretsiz AI modellerinde internet araması yok: her adımda bir arama terimi için son 7 günün haber/duyuru
-// başlıkları (gerçek link + yayın tarihi + kaynak) çekilir ve AI'a yalnızca bunlardan seçmesi söylenir.
+// Tavily genel web ana kaynaktır; başarısız/boş olduğunda Google News RSS dar kapsamlı tarihli yedektir.
+// Araştırma logları arama sağlayıcısının durumunu ayrı kaydeder; AI yalnızca gerçek kaynaklardan bulgu üretir.
 export interface NewsItem { title: string; url: string; posted: string | null; source: string | null }
-export async function newsSearch(q: string, limit = 15, days = 7): Promise<NewsItem[]> {
+export interface NewsSearchAttempt { status: 'ok' | 'network_error' | 'http_error' | 'invalid_response'; http_status: number | null; results: NewsItem[]; detail: string }
+export async function newsSearchDetailed(q: string, limit = 15, days = 7): Promise<NewsSearchAttempt> {
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:${days}d`)}&hl=tr&gl=TR&ceid=TR:tr`;
   const res = await fetch(url, { headers: { 'user-agent': 'EmbayOpsBot/1.0 (+https://embay-panel.vercel.app)' }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
-  if (!res?.ok) return [];
-  const xml = await res.text();
+  if (!res) return { status: 'network_error', http_status: null, results: [], detail: 'Google News bağlantısı başarısız veya zaman aşımına uğradı' };
+  if (!res.ok) return { status: 'http_error', http_status: res.status, results: [], detail: `Google News HTTP ${res.status}` };
+  const xml = await res.text().catch(() => '');
+  if (!/<(?:rss|feed|item)\b/i.test(xml)) return { status: 'invalid_response', http_status: res.status, results: [], detail: 'Google News yanıtı RSS biçiminde değil' };
   const tag = (block: string, t: string) => decode((block.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`))?.[1] ?? '').replace(/<!\[CDATA\[|\]\]>/g, '').trim());
-  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, limit).map((mm) => {
+  const results = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, limit).map((mm) => {
     const b = mm[1];
     const pub = tag(b, 'pubDate');
     const d = pub ? new Date(pub) : null;
     return { title: tag(b, 'title'), url: tag(b, 'link'), source: tag(b, 'source') || null,
       posted: d && !isNaN(d.getTime()) ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium' }).format(d) : null };
   }).filter((n) => n.title && /^https?:\/\//.test(n.url));
+  return { status: 'ok', http_status: res.status, results, detail: `Google News RSS yanıt verdi (${results.length} sonuç)` };
+}
+export async function newsSearch(q: string, limit = 15, days = 7): Promise<NewsItem[]> {
+  const attempt = await newsSearchDetailed(q, limit, days);
+  return attempt.status === 'ok' ? attempt.results : [];
 }
 
 // ── Sayfa çekme (gerçek HTTP) ───────────────────────────────────────────────
@@ -239,6 +248,7 @@ export class AiFatalError extends Error {
 export const ERROR_KIND: Record<string, string> = {
   ai_credit: 'AI kredisi / bakiyesi bitti — sağlayıcı hesabına bakiye yüklenmeli',
   ai_auth: 'AI anahtarı geçersiz veya yetkisiz — anahtar yenilenmeli',
+  search_unavailable: 'Canlı genel web araması kullanılamadı — Tavily anahtarı/kotası ve AI arama yetkisi kontrol edilmeli',
   budget: 'Harcama sınırı doldu — Ayarlar → Harcama sınırı',
   repeated_error: 'Üst üste 3 adım hata verdi',
   timeout: 'Adım zaman aşımına uğradı',
@@ -511,6 +521,14 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
     findings.push({ ...f, at: new Date().toISOString(), step }); return true;
   };
+  async function failSearchUnavailable(details: string) {
+    const error = `Canlı genel web araması yapılamadı; görev yeni AI adımları ve gereksiz harcama oluşmaması için durduruldu. ${details}`.slice(0, 500);
+    m.error_kind = 'search_unavailable'; m.error = error;
+    await db.from('bot_missions').update({ error_kind: 'search_unavailable', error, web_searches: m.web_searches ?? 0 }).eq('id', m.id);
+    await logStep(db, m, step, 'error', error);
+    await persist();
+    return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut, error_kind: 'search_unavailable', error }, 'error');
+  }
 
   try {
     let pageNote = '';
@@ -540,21 +558,32 @@ export async function stepMission(db: Db, m: MissionRow) {
     let useScan = !ai; let lastResults: WebResult[] = [];
     if (ai) try {
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
-      // Her adımda (AI hangisi olursa olsun; Claude kredisi yoksa zincir aramasız modellere düşer) bu adımın terimiyle gerçek haber/duyuru sonuçları
+      // Her adımda önce gerçek genel web araması yapılır; başarısız/boşsa dar kapsamlı Google News RSS yedeği kullanılır.
       let newsNote = ''; let stepResults: WebResult[] = [];
+      const searchProviders = new Set<string>(); const searchFailures = new Set<string>();
+      let broadSearchSucceeded = false;
       if (!m.target_url && terms.length) {
         // Her adımda 2 konu. Önce gerçek web araması (Tavily, anahtar varsa), yoksa/boşsa Google Haberler yedeği.
         const qs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
-        const results: WebResult[] = []; const counts: string[] = []; let engine = 'haber';
+        const results: WebResult[] = []; const counts: string[] = [];
         for (const q of qs) {
           const qq = /stanbul|kocaeli|tekirda|türkiye/i.test(q) ? q : `${q} İstanbul`;
           let got: WebResult[] = [];
-          const web = await tavilySearch(qq, { max: 8, domains: ctx.sources.length && step % 2 === 0 ? ctx.sources : undefined });
-          if (web) { engine = 'web'; got = web; m.web_searches = (m.web_searches ?? 0) + 1; }
+          const web = await tavilySearchDetailed(qq, { max: 8, domains: ctx.sources.length && step % 2 === 0 ? ctx.sources : undefined });
+          if (web.status === 'ok') { searchProviders.add('Tavily'); broadSearchSucceeded = true; got = web.results; m.web_searches = (m.web_searches ?? 0) + 1; }
+          else searchFailures.add(web.detail);
           if (!got.length) {
-            let news = await newsSearch(qq, 12);
-            if (news.length < 3) news = [...news, ...(await newsSearch(q, 12, 14))];
-            got = news.map((n) => ({ title: n.title, url: n.url, snippet: '', posted: n.posted, source: n.source }));
+            const newsAttempt = await newsSearchDetailed(qq, 12);
+            if (newsAttempt.status === 'ok') {
+              searchProviders.add('Google News RSS'); m.web_searches = (m.web_searches ?? 0) + 1;
+              let news = newsAttempt.results;
+              if (news.length < 3) {
+                const widerNews = await newsSearchDetailed(q, 12, 14);
+                if (widerNews.status === 'ok') { searchProviders.add('Google News RSS'); m.web_searches = (m.web_searches ?? 0) + 1; news = [...news, ...widerNews.results]; }
+                else searchFailures.add(widerNews.detail);
+              }
+              got = news.map((n) => ({ title: n.title, url: n.url, snippet: '', posted: n.posted, source: n.source }));
+            } else searchFailures.add(newsAttempt.detail);
           }
           let n = 0;
           for (const g of got) if (!results.some((x) => x.url === g.url || x.title === g.title)) { results.push(g); n++; }
@@ -562,8 +591,16 @@ export async function stepMission(db: Db, m: MissionRow) {
         }
         results.splice(24); stepResults = results; lastResults = results;
         for (const n of results) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
-        await logStep(db, m, step, 'news_search', `${engine === 'web' ? 'Web araması' : 'Haber/duyuru araması'}: ${counts.join(' · ')} sonuç`, null, { engine, queries: qs, count: results.length, titles: results.map((n) => n.title).slice(0, 24) });
+        const engine = searchProviders.size ? [...searchProviders].join(' + ') : 'none';
+        const searchStatus = searchScopeStatus(broadSearchSucceeded, searchProviders.has('Google News RSS'));
+        await logStep(db, m, step, 'news_search', `Arama sağlayıcıları: ${engine} · ${counts.join(' · ')} · toplam ${results.length} kaynak${searchFailures.size ? ` · sorun: ${[...searchFailures].slice(0, 3).join(' | ')}` : ''}`, null,
+          { engine, search_status: searchStatus, broad_search_available: broadSearchSucceeded, provider_errors: [...searchFailures].slice(0, 5), queries: qs, count: results.length, titles: results.map((n) => n.title).slice(0, 24) });
         if (results.length) newsNote = results.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}${n.snippet ? `\n   Özet: ${n.snippet}` : ''}\n   ${n.url}`).join('\n');
+        const nativeSearchCapable = ['anthropic', 'gemini', 'groq'].includes(ai.provider);
+        if (!nativeSearchCapable && stepResults.length === 0 && isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: false, findingCount: findings.length })) {
+          const limited = searchProviders.has('Google News RSS') ? 'Google News RSS çalıştı fakat genel web araması sağlayıcısı değildir.' : '';
+          return await failSearchUnavailable([...searchFailures, limited, `${AI_LABEL[ai.provider] ?? ai.provider} sağlayıcısında yerleşik web araması yok`].filter(Boolean).join(' · '));
+        }
       }
       const prompt = [
         `GÖREV: ${m.title}`, `AMAÇ / AÇIKLAMA: ${m.goal}`,
@@ -582,7 +619,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
         'Adım başına EN FAZLA 8 bulgu ver; detail en fazla 2 kısa cümle, evidence en fazla 1 cümle olsun (yanıt kesilmesin). Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
-        newsNote ? `GÜNCEL ARAMA SONUÇLARI (son 7 gün; başlık — kaynak (tarih) + link):\n${newsNote}` : '',
+        newsNote ? `GERÇEK ARAMA SONUÇLARI (Tavily genel web ve/veya Google News RSS; tarih varsa gösterilir; başlık — kaynak + link):\n${newsNote}` : '',
         'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)","relevance":8,"fit":"görevle neden ilgili (tek cümle)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
       const t0 = Date.now();
@@ -616,6 +653,11 @@ export async function stepMission(db: Db, m: MissionRow) {
       await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
         null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
+      const aiSearchSucceeded = r.searches > 0 || r.sources.length > 0;
+      if (isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: aiSearchSucceeded, findingCount: findings.length })) {
+        const limited = searchProviders.has('Google News RSS') ? 'Google News RSS çalıştı fakat genel web araması sağlayıcısı değildir.' : '';
+        return await failSearchUnavailable([...searchFailures, limited, ...(r.toolErrors ?? []).slice(0, 3)].filter(Boolean).join(' · ') || 'Tavily, RSS ve yerleşik AI araması sonuç üretmedi');
+      }
     } catch (e) {
       if (e instanceof AiFatalError && !m.target_url && lastResults.length) {
         let n = 0; for (const f of ruleFindings(lastResults, m)) if (addFinding(f)) n++;
@@ -660,7 +702,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   }
 
   async function persist() {
-    await db.from('bot_missions').update({ step_count: step, findings, sources: sources.slice(0, 200), visited: [...visited].slice(0, 200), tokens_in: tokensIn, tokens_out: tokensOut, ...(stepFailed ? {} : { error_count: 0 }),
+    await db.from('bot_missions').update({ step_count: step, findings, sources: sources.slice(0, 200), visited: [...visited].slice(0, 200), tokens_in: tokensIn, tokens_out: tokensOut, web_searches: m.web_searches ?? 0, ...(stepFailed ? {} : { error_count: 0 }),
       next_step_at: new Date(Date.now() + stepIntervalMs(m)).toISOString(), locked_until: null }).eq('id', m.id);
   }
   await persist();
@@ -715,7 +757,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
   }
   if (!summary && reason === 'error') {
-    summary = `Görev hata ile bitti: ${ERROR_KIND[cur.error_kind ?? ''] ?? 'bilinmeyen hata'}.${findings.length ? ` Hata öncesi ${findings.length} kaynaklı bulgu toplanmıştı.` : ''}`;
+    summary = `Görev hata ile bitti: ${ERROR_KIND[cur.error_kind ?? ''] ?? 'bilinmeyen hata'}.${cur.error ? ` Ayrıntı: ${cur.error}` : ''}${findings.length ? ` Hata öncesi ${findings.length} kaynaklı bulgu toplanmıştı.` : ''}`;
   }
   if (!summary) {
     summary = findings.length

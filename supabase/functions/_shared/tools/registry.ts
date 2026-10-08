@@ -234,7 +234,7 @@ const handlers: Record<string, ToolHandler> = {
   },
 
   async seo_audit(ctx, input) {
-    const url = str(input.url, Deno.env.get('PUBLIC_SITE_URL') || 'https://sahin-manitou-kiralama.vercel.app/');
+    const url = str(input.url, Deno.env.get('PUBLIC_SITE_URL') || 'https://embayyapi.vercel.app/');
     const started = Date.now();
     const res = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 'EmbaySEOBot/1.0 (+panel)' } });
     const html = await res.text();

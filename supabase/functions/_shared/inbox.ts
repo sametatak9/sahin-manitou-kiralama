@@ -4,6 +4,7 @@
 import type { Db } from './context.ts';
 import { tokenFor } from './publisher.ts';
 import type { AccountRow } from './connectors/types.ts';
+import { logActivity } from './activity.ts';
 import { telegramSend } from './connectors/messaging.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 
@@ -66,14 +67,28 @@ export async function inboxTick(db: Db, force = false) {
   if (!force && st?.inbox_synced_at && Date.now() - new Date(st.inbox_synced_at).getTime() < 10 * 60_000) return null;
   await db.from('ops_autopilot').update({ inbox_synced_at: new Date().toISOString() }).eq('id', 1);
   const { acc, token } = await igAccess(db);
-  if (!acc || !token) return { skipped: 'instagram bağlı değil' };
-  const me = await g(`${acc.external_account_id}?fields=id,username`, token);
-  const media = await g(`${acc.external_account_id}/media?fields=id,permalink,comments_count&limit=60`, token);
+  if (!acc || !token) {
+    await logActivity(db, { connector_key: 'instagram', action: 'inbox_sync', status: 'skipped', summary: 'Instagram yorum senkronu atlandı: bağlı işletme hesabı veya token yok', error_code: 'NOT_CONNECTED' });
+    return { status: 'skipped', skipped: 'instagram bağlı değil' };
+  }
+  let me: { id: string; username?: string };
+  let media: { data?: Array<{ id: string; permalink: string; comments_count: number }> };
+  try {
+    me = await g(`${acc.external_account_id}?fields=id,username`, token) as typeof me;
+    media = await g(`${acc.external_account_id}/media?fields=id,permalink,comments_count&limit=60`, token) as typeof media;
+  } catch (e) {
+    const detail = String((e as Error).message || e).slice(0, 500);
+    await logActivity(db, { connector_key: 'instagram', action: 'inbox_sync', status: 'failed', account_id: acc.id, summary: 'Instagram gönderileri/yorumları okunamadı; izin veya token sorunu olabilir', error_code: 'GRAPH_READ_FAILED', error: detail });
+    return { status: 'error', found: 0, replied: 0, errors: 1, error: 'Instagram Graph API yorum okuması başarısız' };
+  }
   const since = st?.auto_reply_since ? new Date(st.auto_reply_since).getTime() : Date.now();
-  let found = 0; let replied = 0; const fresh: string[] = [];
+  let found = 0; let replied = 0; let commentReadErrors = 0; let replyErrors = 0; const syncErrors: string[] = []; const fresh: string[] = [];
   for (const m of (media.data ?? []) as Array<{ id: string; permalink: string; comments_count: number }>) {
     if (!m.comments_count) continue;
-    const cs = await g(`${m.id}/comments?fields=id,text,timestamp,username,user,replies{user,username}&limit=50`, token).catch(() => ({ data: [] }));
+    const cs = await g(`${m.id}/comments?fields=id,text,timestamp,username,user,replies{user,username}&limit=50`, token).catch((e) => {
+      commentReadErrors++; syncErrors.push(`${m.id}: ${String((e as Error).message || e).slice(0, 180)}`); return null;
+    });
+    if (!cs) continue;
     for (const c of (cs.data ?? []) as Array<{ id: string; text?: string; timestamp?: string; username?: string; user?: { id?: string }; replies?: { data?: Array<{ username?: string; user?: { id?: string } }> } }>) {
       // Meta, yorum yapanın kullanıcı adını her zaman vermez; bizim yorum/yanıtlarımız 'user.id' ile tanınır
       if (c.user?.id === me.id || (c.username && c.username === me.username)) continue;
@@ -100,6 +115,7 @@ export async function inboxTick(db: Db, force = false) {
           await db.from('social_inbox').update({ replied: true, replied_at: new Date().toISOString(), reply_text: text, reply_source: 'bot', status: 'replied', updated_at: new Date().toISOString() }).eq('external_id', c.id);
           replied++;
         } catch (e) {
+          replyErrors++;
           await db.from('social_inbox').update({ reply_source: `hata: ${String((e as Error).message).slice(0, 180)}`, updated_at: new Date().toISOString() }).eq('external_id', c.id);
         }
       }
@@ -112,14 +128,18 @@ export async function inboxTick(db: Db, force = false) {
     const r = await fetch(`${GRAPH}/${q.external_id}/replies`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ message: q.reply_text, access_token: token }) });
     const j = await r.json().catch(() => ({}));
     if (r.ok) { await db.from('social_inbox').update({ replied: true, replied_at: new Date().toISOString(), reply_source: 'panel', status: 'replied', updated_at: new Date().toISOString() }).eq('id', q.id); replied++; }
-    else { await db.from('social_inbox').update({ reply_source: `kuyruk: ${String(j?.error?.message || r.status).slice(0, 120)}`, updated_at: new Date().toISOString() }).eq('id', q.id); break; }
+    else { replyErrors++; await db.from('social_inbox').update({ reply_source: `kuyruk: ${String(j?.error?.message || r.status).slice(0, 120)}`, updated_at: new Date().toISOString() }).eq('id', q.id); break; }
   }
   if (fresh.length) {
     await loadAppSecrets(db);
     if (appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID'))
       await telegramSend([`💬 Instagram'da ${fresh.length} yeni soru/talep`, '', ...fresh.slice(0, 10), '', 'Panel → Müşteri Adayları → Fiyat soranlar (hazır DM metni)'].join('\n')).catch(() => null);
   }
-  return { found, replied };
+  const errors = commentReadErrors + replyErrors;
+  await logActivity(db, { connector_key: 'instagram', action: 'inbox_sync', status: errors ? 'failed' : 'ok', account_id: acc.id,
+    summary: errors ? `Yorum senkronu kısmi: ${found} yeni yorum, ${replied} yanıt, ${errors} hata` : `Yorum senkronu tamam: ${found} yeni yorum, ${replied} yanıt`,
+    error_code: commentReadErrors ? 'COMMENT_READ_FAILED' : replyErrors ? 'COMMENT_REPLY_FAILED' : null, error: syncErrors.slice(0, 5).join(' | '), data: { found, replied, comment_read_errors: commentReadErrors, reply_errors: replyErrors } });
+  return { status: errors ? 'partial' : 'ok', found, replied, errors };
 }
 
 /** Panelden tek tek yanıt (yönetici yazısıyla) — yalnızca kendi gönderimizdeki yoruma. */

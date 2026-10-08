@@ -22,7 +22,7 @@ const MAIN: Record<string, string> = {
 // Meta'nın vermesi gereken izinler (sistem kontrolü social_accounts.scopes'a yazar)
 const META_NEED: Record<string, string> = {
   instagram_manage_comments: 'Instagram yorumları', pages_read_user_content: 'Facebook yorumları', instagram_manage_insights: 'Instagram istatistikleri',
-  read_insights: 'Facebook istatistikleri', instagram_content_publish: 'Instagram paylaşımı', pages_manage_posts: 'Facebook paylaşımı',
+  pages_manage_engagement: 'Facebook yorumlarına yanıt', read_insights: 'Facebook istatistikleri', instagram_content_publish: 'Instagram paylaşımı', pages_manage_posts: 'Facebook paylaşımı',
 };
 
 type Msg = { tone: 'ok' | 'error' | 'warn'; text: string };
@@ -58,7 +58,7 @@ export function ConnectionsScreen() {
     if (c.missing_env.length && !provider) { window.scrollTo({ top: 0, behavior: 'smooth' }); setMsg({ tone: 'warn', text: missingEnvText(c) }); return; }
     setBusy(c.key); setMsg(null);
     // return_to: giriş sonrası tam bu panel adresine dönülür (oturum burada)
-    try { const r = await callOps<{ url: string }>('oauth_start', { provider: provider ?? OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount, with_instagram: c.key === 'instagram' }); window.location.href = r.url; }
+    try { const r = await callOps<{ url: string }>('oauth_start', { provider: provider ?? OAUTH_PROVIDER[c.key] ?? c.key, return_to: `${window.location.origin}${window.location.pathname}`, switch_account: switchAccount, with_instagram: c.key === 'instagram' || provider === 'meta' }); window.location.href = r.url; }
     catch (e) { setMsg({ tone: 'warn', text: errorText(e) }); setBusy(null); }
   };
   const disconnect = async (accountId: string) => {

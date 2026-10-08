@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Archive, ArrowLeft, Pause, Play, Plus, RotateCcw, Save, Target, Trash2, Wand2 } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Archive, ArrowLeft, ChevronDown, Pause, Play, Plus, RotateCcw, Save, Target, Trash2, Wand2 } from 'lucide-react';
 import { MissionLauncher, MissionList, SkillPromptModal } from '../components/Missions';
 import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
@@ -137,13 +137,14 @@ function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; 
   );
 }
 
-type Tab = 'missions' | 'overview' | 'tasks' | 'skills' | 'tools' | 'schedule' | 'runs' | 'approvals' | 'logs' | 'results' | 'settings';
+type Tab = 'missions' | 'automation' | 'skills' | 'general';
 
 function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => void }) {
   const { go } = useRouter();
   const session = useSession();
   const [tab, setTab] = useState<Tab>('missions');
   const [launch, setLaunch] = useState(false);
+  const [editingBot, setEditingBot] = useState(false);
   const st = botStats(p, bot.id);
   const botSkills = (bot.automation_bot_skills || []).map((l) => p.skills.find((s) => s.id === l.skill_id)).filter(Boolean) as Skill[];
   const botTools = useMemo(() => { const ids = new Set(botSkills.flatMap((s) => (s.automation_skill_tools || []).map((t) => t.tool_id))); return p.tools.filter((t) => ids.has(t.id)); }, [botSkills, p.tools]);
@@ -166,14 +167,25 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
         </div>
       </section>
       <Tabs value={tab} onChange={setTab} items={[
-        { id: 'missions', label: 'Görevler & Raporlar' }, { id: 'overview', label: 'Genel' }, { id: 'tasks', label: 'Zamanlı işler', count: st.tasks.length }, { id: 'skills', label: 'Yetenekler', count: botSkills.length }, { id: 'tools', label: 'Araçlar', count: botTools.length },
-        { id: 'schedule', label: 'Takvim' }, { id: 'runs', label: 'Koşular', count: st.runs.length }, { id: 'approvals', label: 'Onaylar' }, { id: 'logs', label: 'Günlük' }, { id: 'results', label: 'Sonuçlar' }, { id: 'settings', label: 'Ayarlar' },
+        { id: 'missions', label: 'Görevler', count: p.live[bot.id] ?? 0 },
+        { id: 'automation', label: 'Otomasyon', count: st.tasks.length },
+        { id: 'skills', label: 'Yetenekler', count: botSkills.length + botTools.length },
+        { id: 'general', label: 'Genel & ayarlar' },
       ]} />
 
-      {tab === 'missions' && <MissionList bots={p.bots} botId={bot.id} />}
+      {tab === 'missions' && <div className="space-y-3">
+        <MissionList bots={p.bots} botId={bot.id} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          <Foldout title={`Koşu geçmişi · ${st.runs.length}`}><RunsTable runs={st.runs} p={p} /></Foldout>
+          <Foldout title="Onay istekleri"><BotApprovals botId={bot.id} /></Foldout>
+          <Foldout title="Teknik günlük"><BotLogs runs={st.runs.slice(0, 15)} /></Foldout>
+          <Foldout title="Sonuç kayıtları"><BotResults runs={st.runs.filter((r) => ['completed', 'awaiting_approval'].includes(r.status)).slice(0, 10)} /></Foldout>
+        </div>
+      </div>}
       {launch && <MissionLauncher bots={p.bots} botId={bot.id} onClose={() => setLaunch(false)} onStarted={() => { setLaunch(false); setTab('missions'); }} />}
 
-      {tab === 'overview' && (
+      {tab === 'general' && (
+        <div className="space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Panel title="Çalışma talimatı" kicker="Instructions" className="lg:col-span-2">
             <p className="text-sm text-ink-200 whitespace-pre-line">{bot.instructions || '—'}</p>
@@ -195,13 +207,18 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
             {bot.status === 'waiting_connection' && <div className="mt-3"><Notice tone="warn">Bu bot yayın için {bot.connector_key} bağlantısı bekliyor. İçerik hazırlama görevleri çalışır; yayın bağlantı kurulana kadar yapılmaz.</Notice></div>}
           </Panel>
         </div>
+        {isAdmin && <div className="space-y-3">
+          <div className="flex justify-end"><Button variant="subtle" onClick={() => setEditingBot((value) => !value)}>{editingBot ? 'Düzenlemeyi kapat' : 'Botu düzenle'}</Button></div>
+          {editingBot && <BotEditor p={p} bot={bot} inline onClose={() => setEditingBot(false)} onSaved={() => { reload(); setEditingBot(false); }} />}
+        </div>}
+        </div>
       )}
 
-      {tab === 'tasks' && <TasksTab bot={bot} p={p} skills={botSkills} reload={reload} />}
+      {tab === 'automation' && <TasksTab bot={bot} p={p} skills={botSkills} reload={reload} />}
 
       {tab === 'skills' && <SkillsTab bot={bot} p={p} skills={botSkills} reload={reload} isAdmin={isAdmin} />}
 
-      {tab === 'tools' && (
+      {tab === 'skills' && (
         <Panel title="Kullanabildiği tool’lar" kicker="Skill’lerden türetilir · bot bazında yasaklanabilir">
           {botTools.length === 0 ? <StateView kind="empty" compact /> : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -223,7 +240,7 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
         </Panel>
       )}
 
-      {tab === 'schedule' && (
+      {tab === 'automation' && (
         <Panel title="Zamanlama" kicker="Europe/Istanbul">
           {st.tasks.length === 0 ? <StateView kind="empty" compact title="Zamanlanmış görev yok" /> : (
             <ul className="space-y-2">
@@ -242,12 +259,20 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
         </Panel>
       )}
 
-      {tab === 'runs' && <RunsTable runs={st.runs} p={p} />}
-      {tab === 'approvals' && <BotApprovals botId={bot.id} />}
-      {tab === 'logs' && <BotLogs runs={st.runs.slice(0, 15)} />}
-      {tab === 'results' && <BotResults runs={st.runs.filter((r) => ['completed', 'awaiting_approval'].includes(r.status)).slice(0, 10)} />}
-      {tab === 'settings' && (isAdmin ? <BotEditor p={p} bot={bot} inline onClose={() => setTab('overview')} onSaved={() => { reload(); setTab('overview'); }} /> : <StateView kind="permission" message="Bot ayarlarını yalnızca yöneticiler değiştirebilir." />)}
     </div>
+  );
+}
+
+function Foldout({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="ops-panel overflow-hidden">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="w-full flex items-center justify-between gap-3 p-3 text-left">
+        <span className="text-sm font-semibold text-ink-100">{title}</span>
+        <ChevronDown className={cx('w-4 h-4 shrink-0 text-ink-400 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <div className="border-t border-ink-800 p-3">{children}</div>}
+    </section>
   );
 }
 

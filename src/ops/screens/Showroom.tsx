@@ -17,7 +17,7 @@ interface Model {
 }
 interface Media { id: string; url: string; title: string | null }
 
-const SITE = 'https://embay-panel.vercel.app';
+const SITE = 'https://embayyapi.vercel.app';
 const SYSTEMS: Array<[string, string]> = [['celik', 'Çelik yapı'], ['hafif_celik', 'Hafif çelik'], ['betonarme', 'Betonarme'], ['prefabrik', 'Prefabrik'], ['diger', 'Diğer']];
 const DELIVERIES: Array<[string, string]> = [['anahtar_teslim', 'Anahtar teslim'], ['ileri_kaba', 'İleri kaba'], ['kaba', 'Kaba inşaat']];
 const slugify = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/²/g, '2').replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u')
