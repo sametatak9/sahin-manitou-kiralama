@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildTavilyRequest, isSearchUnavailable, searchScopeStatus } from '../supabase/functions/_shared/pure/search.ts';
+import { buildTavilyRequest, classifyTavilyHttpStatus, isSearchUnavailable, searchScopeStatus } from '../supabase/functions/_shared/pure/search.ts';
 
 const now = new Date('2026-10-08T12:00:00.000Z');
 const general = buildTavilyRequest('çelik yapı taşeron İstanbul', { max: 8, domains: ['sahibinden.com', 'armut.com'] }, now);
@@ -26,5 +26,8 @@ assert.equal(isSearchUnavailable({ hasTargetUrl: false, broadWebSucceeded: true,
 assert.equal(isSearchUnavailable({ hasTargetUrl: false, broadWebSucceeded: false, nativeSearchSucceeded: true, findingCount: 0 }), false);
 assert.equal(isSearchUnavailable({ hasTargetUrl: false, broadWebSucceeded: false, nativeSearchSucceeded: false, findingCount: 1 }), false);
 assert.equal(isSearchUnavailable({ hasTargetUrl: true, broadWebSucceeded: false, nativeSearchSucceeded: false, findingCount: 0 }), false);
+assert.equal(classifyTavilyHttpStatus(432).status, 'credit_error');
+assert.match(classifyTavilyHttpStatus(432).detail, /plan kullanım limiti/);
+assert.equal(classifyTavilyHttpStatus(433).status, 'credit_error');
 
-console.log('search-contract: 20 assertions passed');
+console.log('search-contract: 23 assertions passed');

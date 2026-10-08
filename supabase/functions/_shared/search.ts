@@ -1,6 +1,6 @@
 // Web araması: Tavily. Anahtar panel Vault'undan (TAVILY_API_KEY) okunur; hiçbir yanıt/anahtar gövdesi loglanmaz.
 import { secret as appSecret } from './secrets.ts';
-import { buildTavilyRequest } from './pure/search.ts';
+import { buildTavilyRequest, classifyTavilyHttpStatus } from './pure/search.ts';
 
 export interface WebResult { title: string; url: string; snippet: string; posted: string | null; source: string | null }
 export type TavilyFailure = 'missing_key' | 'network_error' | 'auth_error' | 'credit_error' | 'rate_limited' | 'bad_request' | 'provider_error' | 'http_error' | 'invalid_response';
@@ -13,15 +13,6 @@ export interface TavilySearchAttempt {
 }
 
 export const hasWebSearch = () => Boolean(appSecret('TAVILY_API_KEY'));
-
-const httpFailure = (status: number): { status: TavilyFailure; detail: string } => {
-  if (status === 401 || status === 403) return { status: 'auth_error', detail: `Tavily anahtarı reddedildi (HTTP ${status})` };
-  if (status === 402) return { status: 'credit_error', detail: 'Tavily hesap kredisi yetersiz (HTTP 402)' };
-  if (status === 429) return { status: 'rate_limited', detail: 'Tavily kota veya hız sınırına ulaşıldı (HTTP 429)' };
-  if (status === 400) return { status: 'bad_request', detail: 'Tavily isteği reddedildi (HTTP 400; arama parametrelerini kontrol edin)' };
-  if (status >= 500) return { status: 'provider_error', detail: `Tavily sağlayıcısı geçici olarak hata verdi (HTTP ${status})` };
-  return { status: 'http_error', detail: `Tavily HTTP ${status}` };
-};
 
 /** Gerçek Tavily araması. Başarılı boş liste ile anahtar/ağ/sağlayıcı hatasını ayırır. */
 export async function tavilySearchDetailed(query: string, opts: { max?: number; days?: number; domains?: string[] } = {}): Promise<TavilySearchAttempt> {
@@ -38,7 +29,7 @@ export async function tavilySearchDetailed(query: string, opts: { max?: number; 
   }).catch(() => null);
   if (!res) return { status: 'network_error', http_status: null, result_count: 0, results: [], detail: 'Tavily bağlantısı başarısız veya zaman aşımına uğradı' };
   if (!res.ok) {
-    const failure = httpFailure(res.status);
+    const failure = classifyTavilyHttpStatus(res.status);
     return { status: failure.status, http_status: res.status, result_count: 0, results: [], detail: failure.detail };
   }
 
