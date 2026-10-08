@@ -11,6 +11,7 @@ import { logActivity } from './activity.ts';
 import { tavilySearchDetailed, type WebResult } from './search.ts';
 import { isSearchUnavailable, searchScopeStatus } from './pure/search.ts';
 import { isStaleFinding, RECENCY_RULES } from './recency.ts';
+import { classifyFinishReason } from './pure/outcome.ts';
 
 type Db = SupabaseClient;
 
@@ -724,7 +725,7 @@ function factsHtml(f: Finding) {
     f.phone && `<a href="${telHref(f.phone)}">📞 ${esc(f.phone)}</a>`, f.email && `<a href="mailto:${esc(f.email)}">✉️ ${esc(f.email)}</a>`, f.website && `<a href="${safeHref(f.website)}" target="_blank" rel="noopener">🌐 web</a>`].filter(Boolean);
   return parts.length ? `<div class="facts">${parts.join('')}</div>` : '';
 }
-const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', error: 'Hata', no_ai: 'AI kullanılamadı — yalnızca sayfa taraması yapıldı', budget: 'Harcama sınırı doldu' };
+const REASON: Record<string, string> = { deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırına ulaşıldı', completed_no_findings: 'Tamamlandı — gerçek sıfır bulgu', error: 'Hata', no_ai: 'AI kullanılamadı — yalnızca sayfa taraması yapıldı', budget: 'Harcama sınırı doldu' };
 const fmt = (iso: string | null) => (iso ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '—');
 
 export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
@@ -743,6 +744,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
   const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources) : null;
   const findings = allFindings.filter((f) => f.verdict !== 'rejected');
+  const classifiedReason = classifyFinishReason(reason, findings.length, cur.error_kind);
   if (ai && findings.length) {
     try {
       const r = await aiCall(ai, [
@@ -756,24 +758,26 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
       await db.from('bot_missions').update({ cost_usd: Math.round(((Number(cur.cost_usd) || 0) + c) * 10000) / 10000 }).eq('id', cur.id);
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
   }
-  if (!summary && reason === 'error') {
+  if (!summary && classifiedReason === 'error') {
     summary = `Görev hata ile bitti: ${ERROR_KIND[cur.error_kind ?? ''] ?? 'bilinmeyen hata'}.${cur.error ? ` Ayrıntı: ${cur.error}` : ''}${findings.length ? ` Hata öncesi ${findings.length} kaynaklı bulgu toplanmıştı.` : ''}`;
   }
   if (!summary) {
     summary = findings.length
       ? `${findings.length} kaynaklı bulgu toplandı. ${findings.slice(0, 5).map((f) => `- ${f.title}`).join('\n')}`
-      : `Veri bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; görevin aradığı bilgiye dair doğrulanabilir bir bulgu çıkmadı.`;
+      : classifiedReason === 'completed_no_findings'
+        ? `Görev tamamlandı ancak doğrulanabilir bir bulgu bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; bu sonuç başarılı müşteri/lead çıktısı olarak değerlendirilmemelidir.`
+        : `Veri bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; görevin aradığı bilgiye dair doğrulanabilir bir bulgu çıkmadı.`;
   }
 
   // KOÇ: raporu ve günlüğü inceleyip yeteneği iyileştirme önerisi çıkarır (Akademi'de onayınıza düşer)
-  const coachNote = ai && reason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>) : null;
+  const coachNote = ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>) : null;
   if (cur.purpose === 'skill_test' && cur.skill_ids?.length) {
     const { data: sk } = await db.from('automation_skills').select('lifecycle').eq('id', cur.skill_ids[0]).maybeSingle();
     await db.from('automation_skills').update({ test_score: audit ? audit.accuracy : 0, test_findings: audit?.verified ?? 0, last_tested_at: new Date().toISOString(),
       last_test_mission_id: cur.id, ...(sk?.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', cur.skill_ids[0]);
   }
 
-  const status = reason === 'admin_stop' ? 'stopped' : reason === 'error' ? 'failed' : 'completed';
+  const status = classifiedReason === 'admin_stop' ? 'stopped' : classifiedReason === 'error' ? 'failed' : 'completed';
   const finishedAt = new Date().toISOString();
   const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cur.title)} — Bot Raporu</title>
 <style>body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#0e1e16;background:#f3f9f5;margin:0;padding:24px}main{max-width:860px;margin:0 auto;background:#fff;border:1px solid #d2e7da;border-radius:18px;padding:28px}
@@ -784,7 +788,7 @@ a{color:#16a34a;word-break:break-all}.sum{white-space:pre-wrap;font-size:14px;li
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #16a34a}.brand svg{width:44px;height:44px}.brand b{font-size:15px;display:block}.brand small{color:#5a7266;font-size:11px}
 .facts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px}.v{display:inline-block;border-radius:999px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px}.v-verified{background:#dcfce7;color:#166534}.v-suspicious{background:#fef3c7;color:#92400e}.v-rejected{background:#fee2e2;color:#991b1b}.sum2{background:#f3f9f5;border-left:3px solid #16a34a;border-radius:8px;padding:6px 10px;margin:6px 0;font-size:13px;line-height:1.5}.audit{display:flex;gap:10px;flex-wrap:wrap;font-size:13px}.audit div{background:#f3f9f5;border-radius:10px;padding:6px 10px}.facts span,.facts a{background:#f3f9f5;border-radius:8px;padding:2px 8px;text-decoration:none}
 @media print{body{background:#fff;padding:0}main{border:0}}</style></head>
-<body><main><div class="brand">${LOGO_SVG}<div><b>Embay Yapı & Şahin Manitou</b><small>Bot görev raporu · 0531 436 29 04 · sahin-manitou-kiralama.vercel.app</small></div></div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[reason] ?? reason)}${reason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
+  <body><main><div class="brand">${LOGO_SVG}<div><b>Embay Yapı & Şahin Manitou</b><small>Bot görev raporu · 0531 436 29 04 · sahin-manitou-kiralama.vercel.app</small></div></div><h1>${esc(cur.title)}</h1><span class="badge">${esc(REASON[classifiedReason] ?? classifiedReason)}${classifiedReason === 'error' && cur.error_kind ? ` — ${esc(ERROR_KIND[cur.error_kind] ?? cur.error_kind)}` : ''}</span>
 <h2>Görev</h2><table><tr><td>Bot</td><td>${esc(ctx.name)}</td></tr><tr><td>Amaç</td><td>${esc(cur.goal)}</td></tr>
 ${cur.target_url ? `<tr><td>Hedef link</td><td><a href="${safeHref(cur.target_url)}">${esc(cur.target_url)}</a></td></tr>` : ''}
 ${cur.search_for ? `<tr><td>Aranan</td><td>${esc(cur.search_for)}</td></tr>` : ''}${cur.report_spec ? `<tr><td>Raporda istenen</td><td>${esc(cur.report_spec)}</td></tr>` : ''}
@@ -799,13 +803,13 @@ ${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachN
 <h2>Adım günlüğü</h2><div class="log">${(steps || []).map((s) => `<div>#${s.step_no} [${esc(s.action)}] ${esc(s.message)}</div>`).join('')}</div>
 <p class="k" style="margin-top:24px">Bu rapor gerçek HTTP istekleri ve AI araştırma çağrılarından üretilmiştir; kaynağı doğrulanamayan bilgiler rapora alınmaz. Veriler yalnızca herkese açık kurumsal kaynaklardan, KVKK ve site kullanım koşullarına uygun toplanır.</p></main></body></html>`;
 
-  await db.from('bot_missions').update({ status, finish_reason: reason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null,
+  await db.from('bot_missions').update({ status, finish_reason: classifiedReason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null,
     ...(audit ? { audit, findings: allFindings } : {}), ...(coachNote ? { coach_note: coachNote } : {}) }).eq('id', m.id);
-  await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[reason] ?? reason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
+  await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[classifiedReason] ?? classifiedReason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
   await saveSocialProspects(db, cur, findings);
   await savePortfolio(db, cur, findings);
-  await sendMissionTelegram(db, cur, reason, summary, findings, audit);
-  return { mission_id: m.id, finalized: true, reason, findings: findings.length };
+  await sendMissionTelegram(db, cur, classifiedReason, summary, findings, audit);
+  return { mission_id: m.id, finalized: true, reason: classifiedReason, findings: findings.length };
 }
 
 /** Görev bitince özet + bulgular Telegram'a (yönetici). Telegram tanımlı değilse sessizce atlanır; hata görevi bozmaz, günlüğe yazılır. */
