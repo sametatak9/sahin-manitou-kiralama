@@ -8,6 +8,7 @@ import type { Bot, Mission } from '../lib/types';
 import { useRouter } from '../session';
 import { LiveReport } from './LiveReport';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
+import { getPreferredModel } from '../lib/agency';
 
 export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: Tone }> = {
   running: { label: 'ÇALIŞIYOR', tone: 'run' }, finalizing: { label: 'RAPOR HAZIRLANIYOR', tone: 'run' }, completed: { label: 'TAMAMLANDI', tone: 'go' },
@@ -24,6 +25,7 @@ const MODELS = [
   { id: '', label: 'Otomatik (ekonomik: Sonnet 5)' },
   { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — ekonomik (önerilen)' },
   { id: 'claude-opus-5', label: 'Claude Opus 5 — en güçlü, ~2,5 kat pahalı' },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 — hızlı yardımcı' },
 ];
 const PRICE: Record<string, [number, number]> = { 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10] };
 export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'> & { cost_usd?: number | null }) {
@@ -43,7 +45,7 @@ export function outcomeOf(m: Mission): { tone: 'ok' | 'warn' | 'error' | 'info';
 
 /** Minimal görev formu: bot + ne yapılsın + süre. Hazır görev / Manitou yok. */
 export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot[]; botId?: string; onClose: () => void; onStarted: (id: string) => void }) {
-  const [f, setF] = useState({ bot_id: botId ?? '', goal: '', target_url: '', duration_minutes: 10, model: '' });
+  const [f, setF] = useState({ bot_id: botId ?? '', goal: '', target_url: '', duration_minutes: 10, model: getPreferredModel() });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [search_for, setSearch] = useState('');
