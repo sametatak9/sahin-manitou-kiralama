@@ -21,8 +21,8 @@ const MAIN: Record<string, string> = {
 };
 // Meta'nın vermesi gereken izinler (sistem kontrolü social_accounts.scopes'a yazar)
 const META_NEED: Record<string, string> = {
-  instagram_manage_comments: 'Instagram yorumları', pages_read_user_content: 'Facebook yorumları', instagram_manage_insights: 'Instagram istatistikleri',
-  pages_manage_engagement: 'Facebook yorumlarına yanıt', read_insights: 'Facebook istatistikleri', instagram_content_publish: 'Instagram paylaşımı', pages_manage_posts: 'Facebook paylaşımı',
+  instagram_manage_comments: 'Instagram yorumları', pages_read_user_engagement: 'Facebook yorumları', instagram_manage_insights: 'Instagram istatistikleri',
+  pages_manage_engagement: 'Facebook yorumlarına yanıt', pages_read_engagement: 'Facebook sayfa verileri', instagram_content_publish: 'Instagram paylaşımı', pages_manage_posts: 'Facebook paylaşımı',
 };
 
 type Msg = { tone: 'ok' | 'error' | 'warn'; text: string };

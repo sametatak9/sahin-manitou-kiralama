@@ -8,11 +8,11 @@ const graph = (path: string, host = 'graph.facebook.com') => `https://${host}/${
 /** "Instagram ile giriş" ile bağlanan hesaplar graph.instagram.com'u, Facebook sayfası üzerinden bağlananlar graph.facebook.com'u kullanır. */
 const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram' ? 'graph.instagram.com' : 'graph.facebook.com');
 
-// Facebook sayfası için yalnızca sayfa izinleri istenir. Instagram izinleri, uygulamaya "Instagram (Facebook girişiyle)"
-// kullanım durumu eklenmeden istenirse Meta tüm girişi "Invalid Scopes" ile durdurur → yalnızca "Facebook sayfası üzerinden Instagram" bağlarken eklenir.
-// Yorum yanıtı (instagram_manage_comments / pages_manage_engagement), istatistik (instagram_manage_insights / read_insights),
-// sayfa yorumlarını okuma (pages_read_user_content) ve mesajlar (instagram_manage_messages / pages_messaging) — botların çalışması için gerekli
-export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_read_user_content', 'pages_manage_engagement', 'read_insights', 'pages_messaging'];
+// Facebook Login for Business için yalnızca bu akışta geçerli Page izinlerini isteriz.
+// Meta'nın güncel izin kümesinde bazı Messenger/legacy izinleri bu OAuth isteğinde
+// geçerli değildir; Instagram mesajları instagram_manage_messages ile, Page okuma
+// ve etkileşimleri ise pages_read_engagement / pages_read_user_engagement ile yürür.
+export const META_PAGE_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_read_user_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_manage_engagement'];
 export const META_IG_SCOPES = ['instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights', 'instagram_manage_messages', 'business_management'];
 export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 
