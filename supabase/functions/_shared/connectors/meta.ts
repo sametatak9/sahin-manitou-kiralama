@@ -3,7 +3,9 @@ import { ConnectorError } from './types.ts';
 import type { AccountRow, MetricsOutput, PublishInput, PublishOutput } from './types.ts';
 import { secret as appSecret } from '../secrets.ts';
 
-export const graphVersion = () => Deno.env.get('META_GRAPH_VERSION') || 'v23.0';
+// Meta'nın güncel dokümanı v26.0 örneklerini kullanıyor; eski v23.0 bazı Page
+// izinlerini "Invalid Scope" olarak reddediyor. Ortam değişkeni verilirse onu korur.
+export const graphVersion = () => Deno.env.get('META_GRAPH_VERSION') || 'v26.0';
 const graph = (path: string, host = 'graph.facebook.com') => `https://${host}/${graphVersion()}/${path.replace(/^\//, '')}`;
 /** "Instagram ile giriş" ile bağlanan hesaplar graph.instagram.com'u, Facebook sayfası üzerinden bağlananlar graph.facebook.com'u kullanır. */
 const igHost = (account: AccountRow) => (account.metadata?.login === 'instagram' ? 'graph.instagram.com' : 'graph.facebook.com');
