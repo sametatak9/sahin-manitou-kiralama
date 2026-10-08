@@ -389,6 +389,7 @@ function safeReturnTo(raw: unknown): string | null {
 async function oauthStart(db: Db, userId: string, provider: string, returnTo?: unknown, switchAccount = false, withInstagram = false) {
   const def = connectorByKey(provider === 'meta' || provider === 'facebook' ? 'facebook' : provider === 'google' ? 'youtube' : provider);
   if (!def) throw new HttpError(400, 'Bilinmeyen sağlayıcı');
+  await loadAppSecrets(db);
   const missing = def.requiredEnv.filter((k) => !secret(k));
   if (missing.length) throw new HttpError(409, `Yapılandırma gerekli: ${missing.join(', ')}`, 'CONFIGURATION_REQUIRED');
   const state = crypto.randomUUID().replace(/-/g, '');
