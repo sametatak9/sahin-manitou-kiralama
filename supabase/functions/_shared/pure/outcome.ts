@@ -9,3 +9,13 @@ export function classifyFinishReason(reason: string, findingCount: number, error
   if (findingCount === 0 && !errorKind && NO_FINDING_FINISH_REASONS.has(reason)) return 'completed_no_findings';
   return reason;
 }
+
+/** Denetim izi korunur; başarı sayısı yalnız verified kümesinden hesaplanır. */
+export function findingCounts(findings: ReadonlyArray<{ verdict?: string }> = []) {
+  const verified = findings.filter((f) => f.verdict === 'verified').length;
+  const rejected = findings.filter((f) => f.verdict === 'rejected').length;
+  return { total: findings.length, verified, rejected, pending: findings.length - verified - rejected };
+}
+export function verifiedFindings<T extends { verdict?: string }>(findings: ReadonlyArray<T>): T[] {
+  return findings.filter((f) => f.verdict === 'verified');
+}

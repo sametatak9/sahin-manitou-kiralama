@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
-import { classifyFinishReason } from '../supabase/functions/_shared/pure/outcome.ts';
-
-assert.equal(classifyFinishReason('deadline', 0), 'completed_no_findings');
-assert.equal(classifyFinishReason('max_steps', 0), 'completed_no_findings');
-assert.equal(classifyFinishReason('stop_condition', 0), 'completed_no_findings');
-assert.equal(classifyFinishReason('deadline', 2), 'deadline');
-assert.equal(classifyFinishReason('deadline', 0, 'search_unavailable'), 'deadline');
-assert.equal(classifyFinishReason('error', 0), 'error');
-
-console.log('mission outcome contract: 6 assertions passed');
+import { classifyFinishReason, findingCounts, verifiedFindings } from '../supabase/functions/_shared/pure/outcome.ts';
+let checks = 0;
+const equal = (a: unknown, b: unknown) => { assert.deepEqual(a, b); checks++; };
+equal(classifyFinishReason('deadline', 0), 'completed_no_findings');
+equal(classifyFinishReason('max_steps', 0), 'completed_no_findings');
+equal(classifyFinishReason('stop_condition', 0), 'completed_no_findings');
+equal(classifyFinishReason('deadline', 2), 'deadline');
+equal(classifyFinishReason('deadline', 0, 'search_unavailable'), 'deadline');
+equal(classifyFinishReason('error', 0), 'error');
+equal(findingCounts([{ verdict: 'suspicious' }]), { total: 1, verified: 0, pending: 1, rejected: 0 });
+equal(findingCounts([{ verdict: 'rejected' }]), { total: 1, verified: 0, pending: 0, rejected: 1 });
+equal(findingCounts([{ verdict: 'verified' }, { verdict: 'rejected' }, {}]), { total: 3, verified: 1, pending: 1, rejected: 1 });
+equal(verifiedFindings([{ verdict: 'verified', url: 'a' }, { verdict: 'suspicious', url: 'b' }]).map((f) => f.url), ['a']);
+equal(classifyFinishReason('deadline', findingCounts([{ verdict: 'suspicious' }]).verified), 'completed_no_findings');
+equal(classifyFinishReason('deadline', findingCounts([{ verdict: 'rejected' }]).verified), 'completed_no_findings');
+console.log(`mission outcome contract: ${checks} assertions passed`);

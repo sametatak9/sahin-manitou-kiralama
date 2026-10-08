@@ -10,8 +10,10 @@ import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { logActivity } from './activity.ts';
 import { tavilySearchDetailed, type WebResult } from './search.ts';
 import { isSearchUnavailable, searchScopeStatus } from './pure/search.ts';
-import { isStaleFinding, parseFindingDate, RECENCY_RULES, requiresRecentEvidence } from './recency.ts';
-import { classifyFinishReason } from './pure/outcome.ts';
+import { isStaleFinding, RECENCY_RULES, requiresRecentEvidence, recencyWindow } from './recency.ts';
+import { classifyFinishReason, verifiedFindings } from './pure/outcome.ts';
+import { findingDateIssue, makePublicationEvidence, publicationFromHtml, sourceSupportsTitle, trustedPublication, type PublicationEvidence } from './pure/publication.ts';
+import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './pure/policy.ts';
 
 type Db = SupabaseClient;
 
@@ -28,9 +30,10 @@ export interface Finding {
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
   relevance?: number; fit?: string;
   verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
+  publication?: PublicationEvidence;
 }
 export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
-interface Source { url: string; title?: string }
+interface Source { url: string; title?: string; publication?: PublicationEvidence }
 
 const UA = 'Mozilla/5.0 (compatible; EmbayResearchBot/1.0; +https://embay-panel.vercel.app)';
 // Kullanım koşullarında otomatik veri toplamayı yasaklayan / giriş gerektiren platformlar: doğrudan sayfa okunmaz,
@@ -126,26 +129,33 @@ const TARGET_REGION = ['istanbul', 'kocaeli', 'tekirdag', 'gebze', 'tuzla', 'pen
 const OTHER_CITIES = ['ankara', 'izmir', 'bursa', 'iznik', 'antalya', 'adana', 'konya', 'mersin', 'gaziantep', 'kayseri', 'samsun', 'trabzon', 'eskisehir', 'diyarbakir', 'sakarya', 'yalova', 'bolu', 'duzce', 'manisa', 'balikesir', 'canakkale', 'edirne', 'kirklareli', 'malatya', 'erzurum', 'van', 'hatay', 'denizli', 'aydin', 'mugla', 'afyon', 'sivas', 'tokat', 'ordu', 'rize', 'zonguldak', 'karabuk', 'kastamonu', 'corum', 'yozgat', 'nevsehir', 'aksaray', 'nigde', 'karaman', 'isparta', 'burdur', 'usak', 'kutahya', 'bilecik', 'elazig', 'batman', 'mardin', 'sanliurfa', 'adiyaman', 'kahramanmaras', 'osmaniye', 'kilis'];
 // Rakip/hizmet tanıtım sayfaları ve alakasız iş ilanları elenir (eski liste + yeni meslek dışı ilanlar)
 const NEG = ['is ilanlari', 'ilanlari', 'hizmetleri', 'guclendirme hizmet', 'tadilat firmasi', 'tadilat hizmet', 'dekorasyon', 'en iyi', 'nasil', 'rehber', 'nedir', 'fiyat', 'firmasi', 'firmalari', 'sozluk', 'kac ', 'milyon kisi', 'soru', 'yorum', 'kampanya', 'indirim', 'satilik', 'kiralik daire', 'temizlik personeli', 'garson', 'kurye', 'sofor', 'cagri merkezi', 'guvenlik gorevlisi', 'muhasebe', 'kasiyer'];
-export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title' | 'goal' | 'report_spec'>): Array<Omit<Finding, 'at' | 'step'>> {
+export function ruleFindings(results: WebResult[], m: Pick<MissionRow, 'search_for' | 'title' | 'goal' | 'report_spec'>, policy: MissionPolicy = 'lead'): Array<Omit<Finding, 'at' | 'step'>> {
   const anchors = anchorWords(m);
-  const recentRequired = requiresRecentEvidence(m);
   const out: Array<Omit<Finding, 'at' | 'step'>> = [];
   for (const r of results) {
-    if (recentRequired && !r.posted) continue;
+    const publication = makePublicationEvidence(r.posted, 'search_metadata', r.url);
+    if (findingDateIssue(publication, r.url, m)) continue;
     const prof = socialProfile(r.url);
     if (prof) { // sektör hesap keşfi: işletme profil sayfası (gönderi/hashtag/grup değil)
       out.push({ title: r.title.slice(0, 200), detail: (r.snippet || r.title).slice(0, 600), url: r.url, evidence: r.snippet?.slice(0, 300) || r.title,
-        website: r.url, relevance: 6, fit: `Kural tabanlı ön eleme: ${prof.platform} işletme profili — denetimde doğrulanacak` });
+        website: r.url, posted: publication?.posted, publication, relevance: 6, fit: `Kural tabanlı ön eleme: ${prof.platform} işletme profili — denetimde doğrulanacak` });
       if (out.length >= 8) break;
       continue;
     }
     const t = norm(`${r.title} ${r.snippet}`); const ti = t.replace(/ı/g, 'i');
+    if (policy !== 'lead') {
+      if (!anchors.length || !anchors.some((a) => ti.includes(a.replace(/ı/g, 'i')))) continue;
+      out.push({ title: r.title.slice(0, 200), detail: (r.snippet || r.title).slice(0, 600), url: r.url, evidence: r.snippet?.slice(0, 300) || r.title,
+        posted: publication?.posted, publication, relevance: 6, fit: 'Görev kelimeleriyle eşleşen araştırma adayı — içerik denetiminde doğrulanacak, müşteri talebi değildir' });
+      if (out.length >= 8) break;
+      continue;
+    }
     const pos = POS.find((p) => ti.includes(p.replace(/ı/g, 'i')));
     if (!pos || NEG.some((n) => norm(r.title).replace(/ı/g, 'i').includes(n)) || (anchors.length && !anchors.some((a) => ti.includes(a.replace(/ı/g, 'i'))))) continue;
     // Bölge: hedef bölge dışındaki il geçiyor ve hedef bölge geçmiyorsa ele
     if (OTHER_CITIES.some((c) => ti.includes(c)) && !TARGET_REGION.some((c) => ti.includes(c))) continue;
     out.push({ title: r.title.slice(0, 200), detail: (r.snippet || r.title).slice(0, 600), url: r.url, evidence: r.snippet ? r.snippet.slice(0, 300) : r.title,
-      posted: r.posted ?? undefined, relevance: 6, fit: `Kural tabanlı ön eleme: “${pos.trim()}” işareti var — denetimde doğrulanacak` });
+      posted: publication?.posted, publication, relevance: 6, fit: `Kural tabanlı ön eleme: “${pos.trim()}” işareti var — denetimde doğrulanacak` });
     if (out.length >= 6) break;
   }
   return out;
@@ -169,7 +179,7 @@ export async function newsSearchDetailed(q: string, limit = 15, days = 7): Promi
     const pub = tag(b, 'pubDate');
     const d = pub ? new Date(pub) : null;
     return { title: tag(b, 'title'), url: tag(b, 'link'), source: tag(b, 'source') || null,
-      posted: d && !isNaN(d.getTime()) ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium' }).format(d) : null };
+      posted: d && !isNaN(d.getTime()) ? d.toISOString() : null };
   }).filter((n) => n.title && /^https?:\/\//.test(n.url));
   return { status: 'ok', http_status: res.status, results, detail: `Google News RSS yanıt verdi (${results.length} sonuç)` };
 }
@@ -182,6 +192,7 @@ export async function newsSearch(q: string, limit = 15, days = 7): Promise<NewsI
 export interface PageFacts {
   ok: boolean; status: number; url: string; title: string | null; description: string | null; og: Record<string, string>;
   headings: string[]; text: string; links: Array<{ url: string; text: string }>; jsonld: string[]; error?: string;
+  publication?: PublicationEvidence;
 }
 const decode = (s: string) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
@@ -220,7 +231,8 @@ export async function fetchPage(url: string): Promise<PageFacts> {
       } catch { /* geçersiz link */ }
       if (links.length >= 80) break;
     }
-    return { ok: res.ok, status: res.status, url: res.url, title: title ? decode(title.replace(/\s+/g, ' ').trim()) : null, description: meta('description'), og, headings, text, links, jsonld };
+    return { ok: res.ok, status: res.status, url: res.url, title: title ? decode(title.replace(/\s+/g, ' ').trim()) : null, description: meta('description'), og, headings, text, links, jsonld,
+      publication: res.ok ? publicationFromHtml(html, res.url) : undefined };
   } catch (e) {
     return { ...empty, error: String((e as Error).message || e) };
   }
@@ -470,7 +482,7 @@ const SKILL_COLS = 'id,display_name,instructions,enabled,lifecycle,search_terms,
 async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose'>) {
   const isTest = m?.purpose === 'skill_test';
   let skills: SkillRow[] = [];
-  let bot: { name?: string; instructions?: string; description?: string } | null = null;
+  let bot: { name?: string; instructions?: string; description?: string; slug?: string; bot_type?: string } | null = null;
   if (m?.skill_ids?.length) {
     const { data } = await db.from('automation_skills').select(SKILL_COLS).in('id', m.skill_ids);
     skills = (data || []) as SkillRow[];
@@ -479,11 +491,12 @@ async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'sk
     // deno-lint-ignore no-explicit-any
     skills = (data || []).map((r: any) => (Array.isArray(r.automation_skills) ? r.automation_skills[0] : r.automation_skills)).filter(Boolean);
   }
-  if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description').eq('id', botId).maybeSingle());
+  if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description,slug,bot_type').eq('id', botId).maybeSingle());
   skills = skills.filter((s) => s.enabled && (isTest || s.lifecycle === 'approved'));
   const withText = skills.filter((s) => s.instructions);
   return {
     name: bot?.name ?? 'Bot',
+    slug: bot?.slug, bot_type: bot?.bot_type,
     skills: skills.map((s) => ({ id: s.id, name: s.display_name, version: s.version })),
     terms: [...new Set(skills.flatMap((s) => s.search_terms || []))],
     sources: [...new Set(skills.flatMap((s) => s.sources || []))],
@@ -509,6 +522,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const ctx = await botContext(db, m.bot_id, m);
+  const policy = missionPolicy(ctx, m);
   const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
   let stepFailed = false;
   // Otomatik (zamanlanmış) görev: önceki günlerde raporlanan kayıtları tekrar raporlama
@@ -520,7 +534,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   }
   const addFinding = (f: Omit<Finding, 'at' | 'step'>) => {
     if (!f.url || !f.title) return false;
-    if (recentRequired && !f.posted) return false;
+    if (findingDateIssue(f.publication, f.url, m)) return false;
     if (seenBefore.has(canonical(f.url))) return false;
     if (isStaleFinding(f)) return false; // 60 günden eski / sonuçlanmış ihale
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
@@ -540,13 +554,13 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (m.target_url && !visited.has(canonical(m.target_url))) {
       const t0 = Date.now();
       const p = await fetchPage(m.target_url);
-      visited.add(canonical(m.target_url)); sources.push({ url: p.url || m.target_url, title: p.title ?? undefined });
+      visited.add(canonical(m.target_url)); sources.push({ url: p.url || m.target_url, title: p.title ?? undefined, publication: p.publication });
       await logStep(db, m, step, 'fetch', p.ok ? `Hedef sayfa okundu: ${p.title || p.url} (HTTP ${p.status}, ${p.text.length} karakter metin, ${p.links.length} link)`
         : `Hedef sayfa doğrudan okunmadı: ${p.error ?? `HTTP ${p.status} (site bot erişimini engelliyor olabilir)`}`, m.target_url,
         { title: p.title, description: p.description, og: p.og, headings: p.headings.slice(0, 10), links: p.links.length }, t0);
       pageNote = pageDigest(p);
-      for (const h of keywordSnippets(p.text, terms)) addFinding({ title: `“${h.term}” hedef sayfada geçiyor`, detail: h.snippet, url: p.url || m.target_url, evidence: h.snippet });
-      if (p.og['og:description'] && !m.search_for) addFinding({ title: 'Sayfanın kendi tanımı (meta)', detail: p.og['og:description'], url: p.url || m.target_url, evidence: p.og['og:description'] });
+      for (const h of keywordSnippets(p.text, terms)) addFinding({ title: `“${h.term}” hedef sayfada geçiyor`, detail: h.snippet, url: p.url || m.target_url, evidence: h.snippet, posted: p.publication?.posted, publication: p.publication });
+      if (p.og['og:description'] && !m.search_for) addFinding({ title: 'Sayfanın kendi tanımı (meta)', detail: p.og['og:description'], url: p.url || m.target_url, evidence: p.og['og:description'], posted: p.publication?.posted, publication: p.publication });
     }
 
     // AI kredisi/anahtarı çalışmıyorsa ve hedef link varsa görev durmaz: AI'sız sayfa taramasıyla sürer
@@ -572,7 +586,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         const qs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
         const results: WebResult[] = []; const counts: string[] = [];
         for (const q of qs) {
-          const qq = /stanbul|kocaeli|tekirda|türkiye/i.test(q) ? q : `${q} İstanbul`;
+          const qq = policy !== 'lead' || /stanbul|kocaeli|tekirda|türkiye/i.test(q) ? q : `${q} İstanbul`;
           let got: WebResult[] = [];
           const web = await tavilySearchDetailed(qq, { max: 8, domains: ctx.sources.length && step % 2 === 0 ? ctx.sources : undefined });
           if (web.status === 'ok') { searchProviders.add('Tavily'); broadSearchSucceeded = true; got = web.results; m.web_searches = (m.web_searches ?? 0) + 1; }
@@ -595,7 +609,12 @@ export async function stepMission(db: Db, m: MissionRow) {
           counts.push(`“${q}” → ${n}`);
         }
         results.splice(24); stepResults = results; lastResults = results;
-        for (const n of results) if (!sources.some((x) => canonical(x.url) === canonical(n.url))) sources.push({ url: n.url, title: n.title });
+        for (const n of results) {
+          const publication = makePublicationEvidence(n.posted, 'search_metadata', n.url);
+          const existing = sources.find((x) => canonical(x.url) === canonical(n.url));
+          if (!existing) sources.push({ url: n.url, title: n.title, publication });
+          else if (!existing.publication && publication) existing.publication = publication;
+        }
         const engine = searchProviders.size ? [...searchProviders].join(' + ') : 'none';
         const searchStatus = searchScopeStatus(broadSearchSucceeded, searchProviders.has('Google News RSS'));
         await logStep(db, m, step, 'news_search', `Arama sağlayıcıları: ${engine} · ${counts.join(' · ')} · toplam ${results.length} kaynak${searchFailures.size ? ` · sorun: ${[...searchFailures].slice(0, 3).join(' | ')}` : ''}`, null,
@@ -613,15 +632,16 @@ export async function stepMission(db: Db, m: MissionRow) {
         m.report_spec ? `RAPORDA OLMASI GEREKEN: ${m.report_spec}` : '', m.stop_condition ? `ERKEN BİTİŞ KOŞULU: ${m.stop_condition}` : '',
         ctx.text ? `BOT PROFİLİ VE YETENEKLERİ:\n${ctx.text}` : '',
         `Adım ${step} / en fazla ${m.max_steps}. Kalan süre ≈ ${remainingMin} dk.`,
+        recentRequired ? `GEÇERLİ YAYIN TARİHİ ARALIĞI: ${recencyWindow(m).from}–${recencyWindow(m).to}. Yayın tarihi sunucu metadata'sıyla kontrol edilir.` : '',
         pageNote ? `HEDEF SAYFANIN GERÇEK İÇERİĞİ (sunucu tarafında çekildi):\n${pageNote}` : '',
         seenBefore.size ? `DAHA ÖNCEKİ GÜNLERDE RAPORLANMIŞ KAYITLAR (bunları tekrar verme, yalnızca YENİ olanları bul):\n${[...seenBefore].slice(0, 60).join('\n')}` : '',
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,
-        RELEVANCE_RULES,
+        policy === 'lead' ? RELEVANCE_RULES : RESEARCH_RELEVANCE_RULES,
         RECENCY_RULES,
         recentRequired ? 'TARİH KAPISI (ZORUNLU): Bu görev güncel bir zaman penceresi istiyor. Her bulguda posted alanı arama sonucunun gerçek yayın tarihiyle doldurulmalı; kaynakta tarih yoksa bulguyu yazma. “2 saat önce”, “bugün” veya benzeri göreli tarihleri kendin çıkarma ya da uydurma.' : '',
-        newsNote ? 'BU ADIMIN İŞİ: İnternette arama yapmana GEREK YOK — arama sunucu tarafında yapıldı ve sonuçları aşağıda. Listedeki HER sonucu tek tek oku; başlığı görevin AMACINA uyan somut kayıtları (proje, ihale, ilan, talep, firma duyurusu), o sonucun linkini AYNEN kullanarak ayrı bulgu yap. Başlık + kaynak + tarih geçerli kanıttır (evidence = başlık). "veri yok" deme: listede uygun kayıt varsa mutlaka yaz; hiçbiri uymuyorsa boş liste döndür.' :
+        newsNote ? 'BU ADIMIN İŞİ: Arama sunucu tarafında yapıldı ve sonuçları aşağıda. Görevin AMACINA uyan somut, kaynak destekli kayıtları değerlendir; o sonucun linkini AYNEN kullan. Başlık tek başına müşteri talebi kanıtı değildir. Uygun kayıt yoksa boş liste döndür.' :
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
         'Adım başına EN FAZLA 8 bulgu ver; detail en fazla 2 kısa cümle, evidence en fazla 1 cümle olsun (yanıt kesilmesin). Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
@@ -638,29 +658,37 @@ export async function stepMission(db: Db, m: MissionRow) {
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
       const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text) ?? salvageFindings(r.text)) as
         { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string; relevance?: number | string; fit?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
-      let added = 0, dropped = 0, offTopic = 0;
+      // Native AI araçlarının tarih iddiası değil, en fazla 3 izinli sayfanın yayın metadata'sı kullanılır.
+      const undated = [...new Set((j?.new_findings ?? []).map((f) => f.url).filter((url): url is string => Boolean(url && allowed.has(canonical(url)) && !sources.find((s) => canonical(s.url) === canonical(url))?.publication)))].slice(0, 3);
+      if (recentRequired) await Promise.all(undated.map(async (url) => {
+        const p = await fetchPage(url).catch(() => null);
+        if (!p?.ok || !p.publication || canonical(p.url) !== canonical(url)) return;
+        const source = sources.find((s) => canonical(s.url) === canonical(url));
+        if (source) source.publication = p.publication;
+      }));
+      let added = 0, dropped = 0, offTopic = 0, dateDropped = 0;
       const anchors = anchorWords(m);
       for (const f of j?.new_findings ?? []) {
         if (!f.url || !allowed.has(canonical(f.url))) { dropped++; continue; }
-        const sourceDate = stepResults.find((s) => canonical(s.url) === canonical(String(f.url)))?.posted ?? null;
-        const posted = sourceDate || (typeof f.posted === 'string' && f.posted.trim() ? f.posted.trim().slice(0, 60) : undefined);
-        if (recentRequired && !posted) { dropped++; continue; }
+        const publication = trustedPublication(sources.find((s) => canonical(s.url) === canonical(String(f.url)))?.publication, f.url);
+        const posted = publication?.posted;
+        if (findingDateIssue(publication, f.url, m)) { dateDropped++; continue; }
         // Alaka kapısı: AI puanı ≥ 7 + gerekçe + görevin anahtar kelimelerinden en az biri metinde geçmeli
         const rel = Number(f.relevance);
         const text = norm(`${f.title ?? ''} ${f.detail ?? ''} ${f.evidence ?? ''} ${f.fit ?? ''}`);
         if (!(rel >= MIN_RELEVANCE) || !String(f.fit ?? '').trim() || (anchors.length && !anchors.some((a) => text.includes(a)))) { offTopic++; continue; }
         const opt = (v: unknown, n = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined);
         if (addFinding({ title: String(f.title || '').slice(0, 200), detail: String(f.detail || '').slice(0, 1500), url: f.url, evidence: opt(f.evidence, 500),
-          company: opt(f.company), location: opt(f.location), posted, phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
+          company: opt(f.company), location: opt(f.location), posted, publication, phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
           relevance: Math.min(10, Math.round(rel)), fit: opt(f.fit, 300) })) added++;
       }
       // AI cevap veremediyse (boş/okunamaz) veri akışı durmasın: kural tabanlı ön eleme, denetçi sonra doğrular
       let ruleAdded = 0;
-      if ((!j || !r.text.trim()) && stepResults.length) { for (const f of ruleFindings(stepResults, m)) if (addFinding(f)) ruleAdded++; }
+      if ((!j || !r.text.trim()) && stepResults.length) { for (const f of ruleFindings(stepResults, m, policy)) if (addFinding(f)) ruleAdded++; }
       if (ruleAdded) await logStep(db, m, step, 'rule_filter', `Yapay zekâ bu adımda sonuç okuyamadı → kural tabanlı ön eleme ${ruleAdded} aday buldu (denetimde doğrulanacak)`);
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
-      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
-        null, { searches: r.searches, sources: r.sources.slice(0, 20), stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
+      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${dateDropped ? ` · ${dateDropped} tarih kanıtsız/aralık dışı aday elendi` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
+        null, { searches: r.searches, sources: r.sources.slice(0, 20), added, source_dropped: dropped, date_dropped: dateDropped, off_topic: offTopic, stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
       const aiSearchSucceeded = r.searches > 0 || r.sources.length > 0;
       if (isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: aiSearchSucceeded, findingCount: findings.length })) {
@@ -669,7 +697,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       }
     } catch (e) {
       if (e instanceof AiFatalError && !m.target_url && lastResults.length) {
-        let n = 0; for (const f of ruleFindings(lastResults, m)) if (addFinding(f)) n++;
+        let n = 0; for (const f of ruleFindings(lastResults, m, policy)) if (addFinding(f)) n++;
         await logStep(db, m, step, 'rule_filter', `Yapay zekâ kullanılamadı (${String(e.message).slice(0, 120)}) → kural tabanlı ön eleme ${n} aday buldu (denetimde doğrulanacak)`);
         await persist();
         return { mission_id: m.id, step, findings: findings.length };
@@ -690,9 +718,9 @@ export async function stepMission(db: Db, m: MissionRow) {
         nextUrl = (cands.find((l) => terms.some((t) => norm(l.text + ' ' + l.url).includes(norm(t)))) ?? cands[0])?.url ?? null;
       }
       if (nextUrl) {
-        const p = await fetchPage(nextUrl); visited.add(canonical(nextUrl)); sources.push({ url: p.url || nextUrl, title: p.title ?? undefined });
+        const p = await fetchPage(nextUrl); visited.add(canonical(nextUrl)); sources.push({ url: p.url || nextUrl, title: p.title ?? undefined, publication: p.publication });
         let added = 0;
-        for (const h of keywordSnippets(p.text, terms)) if (addFinding({ title: `“${h.term}” — ${p.title || 'sayfa'}`, detail: h.snippet, url: p.url || nextUrl, evidence: h.snippet })) added++;
+        for (const h of keywordSnippets(p.text, terms)) if (addFinding({ title: `“${h.term}” — ${p.title || 'sayfa'}`, detail: h.snippet, url: p.url || nextUrl, evidence: h.snippet, posted: p.publication?.posted, publication: p.publication })) added++;
         await logStep(db, m, step, 'fetch', `AI'sız sayfa taraması: ${p.title || nextUrl} (HTTP ${p.status}) · ${added} eşleşme`, nextUrl, null, t0);
       } else {
         await logStep(db, m, step, 'analyze', 'Taranacak yeni sayfa kalmadı. Web araması için çalışan bir AI anahtarı/bakiyesi gerekir (Ayarlar → AI anahtarı).', null, null, t0);
@@ -751,7 +779,8 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model);
   // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
   const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources) : null;
-  const findings = allFindings.filter((f) => f.verdict !== 'rejected');
+  const findings = verifiedFindings(allFindings);
+  const pending = allFindings.filter((f) => f.verdict !== 'verified' && f.verdict !== 'rejected');
   const classifiedReason = classifyFinishReason(reason, findings.length, cur.error_kind);
   if (ai && findings.length) {
     try {
@@ -773,7 +802,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
     summary = findings.length
       ? `${findings.length} kaynaklı bulgu toplandı. ${findings.slice(0, 5).map((f) => `- ${f.title}`).join('\n')}`
       : classifiedReason === 'completed_no_findings'
-        ? `Görev tamamlandı ancak doğrulanabilir bir bulgu bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; bu sonuç başarılı müşteri/lead çıktısı olarak değerlendirilmemelidir.`
+        ? `Görev tamamlandı ancak doğrulanmış bir bulgu bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; ${pending.length} aday inceleme bekliyor. Bu sonuç başarılı müşteri/lead çıktısı olarak değerlendirilmemelidir.`
         : `Veri bulunamadı. ${cur.step_count} adımda ${sources.length} kaynak incelendi; görevin aradığı bilgiye dair doğrulanabilir bir bulgu çıkmadı.`;
   }
 
@@ -814,8 +843,8 @@ ${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachN
   await db.from('bot_missions').update({ status, finish_reason: classifiedReason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null,
     ...(audit ? { audit, findings: allFindings } : {}), ...(coachNote ? { coach_note: coachNote } : {}) }).eq('id', m.id);
   await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[classifiedReason] ?? classifiedReason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
-  await saveSocialProspects(db, cur, findings);
-  await savePortfolio(db, cur, findings);
+  if (missionPolicy(ctx, cur) === 'growth') await saveSocialProspects(db, cur, findings);
+  if (missionPolicy(ctx, cur) === 'lead') await savePortfolio(db, cur, findings);
   await sendMissionTelegram(db, cur, classifiedReason, summary, findings, audit);
   return { mission_id: m.id, finalized: true, reason: classifiedReason, findings: findings.length };
 }
@@ -903,21 +932,18 @@ function projectStage(text: string) {
   return 'bilinmiyor';
 }
 
-/** PORTFÖY: denetimden geçen (doğrulandı, ya da alaka puanı ≥7 olan şüpheli) bulgular Firma Portföyü'ne proje + firma olarak işlenir.
+/** PORTFÖY: yalnızca denetimde doğrulanan bulgular Firma Portföyü'ne proje + firma olarak işlenir.
  *  Aynı proje/firma tekrar gelirse birleştirilir (RPC içinde tekilleştirme). Elenen, sosyal profil ve eğitim-testi bulguları alınmaz. Yalnızca kurumsal, herkese açık bilgi. */
 async function savePortfolio(db: Db, cur: MissionRow, findings: Finding[]) {
   if (cur.purpose === 'skill_test') return;
   let projects = 0, companies = 0;
   for (const f of findings) {
-    if (f.verdict === 'rejected' || !/^https?:\/\//i.test(f.url || '') || socialProfile(f.url)) continue;
-    // AI hakemi yokken: kaynağı açılıp başlığı kaynakta geçen bulgu da alınır (düşük öncelik, "doğrulanmadı" notuyla)
-    const sourceOk = /başlık kaynakta geçiyor/.test(f.verdict_reason ?? '');
-    if (f.verdict !== 'verified' && (f.relevance ?? 0) < 7 && !sourceOk) continue;
+    if (f.verdict !== 'verified' || !/^https?:\/\//i.test(f.url || '') || socialProfile(f.url) || findingDateIssue(f.publication, f.url, cur)) continue;
     const text = `${f.title} ${f.detail} ${f.location ?? ''} ${f.fit ?? ''}`;
     const { il, ilce } = placeOf(f.location, f.title, f.detail);
-    const note = [f.verdict === 'verified' ? '✅ Denetimde doğrulandı.' : sourceOk && (f.relevance ?? 0) < 7 ? '⚠️ Doğrulanmadı — kaynak var ama uygunluk AI ile kontrol edilemedi; aramadan önce kaynağa bakın.' : '⚠️ Şüpheli — aramadan önce kaynağı kontrol edin.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
+    const note = ['✅ Denetimde doğrulandı.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
       .filter(Boolean).join('\n').slice(0, 1500);
-    const score = f.verdict === 'verified' ? Math.max(70, (f.relevance ?? 7) * 10) : (f.relevance ?? 0) >= 7 ? Math.min(60, (f.relevance ?? 6) * 8) : 40;
+    const score = Math.max(70, (f.relevance ?? 7) * 10);
     let projectId: string | null = null;
     try {
       const { data, error } = await db.rpc('portfolio_upsert_project', { p: { name: f.title.slice(0, 200), project_type: projectType(text), stage: projectStage(text), il, ilce, address: f.location ?? null,
@@ -945,20 +971,23 @@ const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicio
 
 /** DENETİM: her bulgunun kaynağı açılır, içerik bulguyla karşılaştırılır; ardından ayrı bir AI "hakem" gerçeklik + güncellik + amaca uygunluk kararı verir.
  *  verified = kaynak bulguyu doğruluyor, somut ve güncel · suspicious = gerçek ama belirsiz/eski/dolaylı · rejected = uydurma, kaynakla çelişen veya amaç dışı. */
-async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[]): Promise<MissionAudit> {
+export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[]): Promise<MissionAudit> {
   const srcTitle = new Map(sources.map((s) => [canonical(s.url), s.title || '']));
-  const recentRequired = requiresRecentEvidence(cur);
+  const srcPublication = new Map(sources.map((s) => [canonical(s.url), trustedPublication(s.publication, s.url)]));
   const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
     const inSources = srcTitle.has(canonical(f.url));
+    const publication = srcPublication.get(canonical(f.url));
+    f.publication = publication; f.posted = publication?.posted;
     let host = ''; try { host = new URL(f.url).hostname; } catch { /* */ }
-    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || f.title}`, match: inSources, desc: '' };
+    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || ''}`, match: inSources && sourceSupportsTitle(f.title, srcTitle.get(canonical(f.url)) || ''), desc: '' };
     const p = await fetchPage(f.url).catch(() => null);
+    // Sayfanın yayın metadata'sı, arama indeks tarihinden önceliklidir; AI posted alanı hiç kullanılmaz.
+    if (p?.ok && p.publication && canonical(p.url) === canonical(f.url)) { f.publication = p.publication; f.posted = p.publication.posted; }
     const text = p?.text || '';
     const words = norm(f.title).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5).slice(0, 8);
-    const hits = words.filter((w) => norm(text).includes(w.slice(0, Math.max(5, w.length - 2)))).length;
     const idx = words.length ? norm(text).indexOf(words[0].slice(0, 5)) : -1;
     const excerpt = text ? text.slice(Math.max(0, idx - 200), Math.max(0, idx - 200) + 900) : (p?.error ?? `HTTP ${p?.status ?? '?'}`);
-    return { f, reachable: Boolean(p?.ok), excerpt, match: hits >= Math.min(2, words.length), desc: String(p?.description || p?.og?.['og:description'] || '').trim() };
+    return { f, reachable: Boolean(p?.ok), excerpt, match: sourceSupportsTitle(f.title, text), desc: String(p?.description || p?.og?.['og:description'] || '').trim() };
   }));
   const verdicts = new Map<number, { v: Finding['verdict']; r: string }>();
   if (ai && checks.length) {
@@ -966,8 +995,8 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
       const r = await aiCall(ai, [
         'Sen bir DENETÇİSİN. Bir botun topladığı bulguları kaynaklarıyla karşılaştırıp gerçek ve kullanılabilir olup olmadığına karar ver. Kendi bilginle bulgu uydurma veya düzeltme.',
         `GÖREVİN AMACI: ${cur.goal}`,
-        'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, somut (belirli proje/talep/ihale/firma) ve güncel; "suspicious" = gerçek görünüyor ama kaynak zayıf, eski, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma, genel haber/reklam ya da görevin amacına uymuyor.',
-        checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
+        'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, görevin istediği çıktı türüne doğrudan uyuyor ve tarih şartını karşılıyor; "suspicious" = gerçek görünüyor ama kanıt zayıf, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma ya da görevin amacına uymuyor. Pazar/SEO/içerik araştırması ise görevle ilgili sektör kaynağı, açıkça müşteri talebi olmadığı belirtilerek geçerli olabilir.',
+        checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSUNUCU YAYIN KANITI: ${c.f.publication ? `${c.f.publication.posted} (${c.f.publication.origin})` : 'yok'}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
         'Her bulgu için ayrıca kaynağa dayanan 2-3 cümlelik TÜRKÇE ÖZET yaz: ne, kim, nerede, ne zaman, büyüklük; ve bizim için ne anlama geldiği. Kaynakta olmayan bilgi ekleme.',
         'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle","summary":"2-3 cümle özet"}]}',
       ].join('\n\n'));
@@ -980,23 +1009,30 @@ async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findi
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
   checks.forEach((c, i) => {
-    if (recentRequired && !parseFindingDate(c.f.posted)) {
+    const dateIssue = findingDateIssue(c.f.publication, c.f.url, cur) || isStaleFinding(c.f);
+    if (dateIssue) {
       c.f.verdict = 'rejected';
-      c.f.verdict_reason = 'Güncel görevde kaynak yayın tarihi doğrulanamadı; göreli tarih çıkarımı kabul edilmez';
+      c.f.verdict_reason = dateIssue; c.f.summary = undefined;
       return;
     }
     // AI hakemi yoksa "doğrulandı" verilmez: kural yalnızca kaynağın var olduğunu gösterir, amaca uygunluğu değil
     const v = verdicts.get(i) ?? (c.reachable && c.match ? { v: 'suspicious' as const, r: 'Kaynak var ve başlık kaynakta geçiyor; AI hakemi çalışmadığı için amaca uygunluk doğrulanmadı' }
       : c.reachable ? { v: 'suspicious' as const, r: 'Kaynak açıldı ama bulgu metinde net görülmedi (kural tabanlı)' } : { v: 'suspicious' as const, r: 'Kaynak sayfası okunamadı (kural tabanlı)' });
     // Güvenlik: kaynağı açılamayan ve toplanan kaynaklarda da olmayan bulgu "doğrulandı" sayılmaz
-    c.f.verdict = !c.reachable && v.v === 'verified' ? 'suspicious' : v.v; c.f.verdict_reason = v.r;
+    c.f.verdict = (!c.reachable || !c.match) && v.v === 'verified' ? 'suspicious' : v.v;
+    c.f.verdict_reason = c.f.verdict !== v.v ? 'Kaynak erişimi veya içerik eşleşmesi doğrulanamadı; AI kararı tek başına yeterli değil' : v.r;
     // AI özeti yoksa: sayfanın kendi açıklaması veya kaynaktan ilgili kesit (uydurma yok)
     if (!c.f.summary) {
       const src = (c.desc && c.desc.length > 40 ? c.desc : c.reachable ? c.excerpt.replace(/\s+/g, ' ').trim() : '') || '';
       if (src.length > 40) c.f.summary = `Kaynaktan: ${src.slice(0, 420)}${src.length > 420 ? '…' : ''}`;
     }
   });
-  for (const f of findings.slice(20)) { f.verdict = 'suspicious'; f.verdict_reason = 'Denetim sınırı (ilk 20 bulgu) dışında kaldı'; }
+  for (const f of findings.slice(20)) {
+    f.publication = srcPublication.get(canonical(f.url)); f.posted = f.publication?.posted;
+    const issue = findingDateIssue(f.publication, f.url, cur) || isStaleFinding(f);
+    f.verdict = issue ? 'rejected' : 'suspicious'; f.verdict_reason = issue || 'İçerik denetim sınırı (ilk 20 bulgu) dışında kaldı — doğrulanmış müşteri değildir';
+    if (issue) f.summary = undefined;
+  }
   const count = (v: string) => findings.filter((f) => f.verdict === v).length;
   const audit: MissionAudit = { total: findings.length, verified: count('verified'), suspicious: count('suspicious'), rejected: count('rejected'),
     accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(),
