@@ -355,11 +355,11 @@ async function systemCheck(db: Db) {
       const scopes: string[] = dj?.data?.scopes ?? [];
       if (scopes.length) {
         await db.from('social_accounts').update({ scopes, last_verified_at: new Date().toISOString() }).in('connector_key', ['facebook', 'instagram']).eq('connection_status', 'connected');
-        const NEED: Record<string, string> = { instagram_manage_comments: 'Instagram yorumlarını okuma/cevaplama', pages_read_user_content: 'Facebook yorumlarını okuma', instagram_manage_insights: 'Instagram istatistikleri', read_insights: 'Facebook istatistikleri', instagram_content_publish: 'Instagram’a paylaşım', pages_manage_posts: 'Facebook’a paylaşım' };
+        const NEED: Record<string, string> = { instagram_manage_comments: 'Instagram yorumlarını okuma/cevaplama', pages_read_user_content: 'Facebook yorumlarını okuma', pages_manage_engagement: 'Facebook yorumlarına yanıt', instagram_manage_insights: 'Instagram istatistikleri', read_insights: 'Facebook istatistikleri', instagram_content_publish: 'Instagram’a paylaşım', pages_manage_posts: 'Facebook’a paylaşım' };
         const missingP = Object.keys(NEED).filter((x) => !scopes.includes(x));
         checks.push({ key: 'meta:perms', group: 'Uygulamalar', label: 'Meta izinleri', state: missingP.length ? 'fail' : 'ok',
           detail: missingP.length ? `Eksik: ${missingP.map((x) => NEED[x]).join(', ')}` : `Tüm gerekli izinler verilmiş (${scopes.length} izin)`,
-          fix: missingP.length ? 'Uygulamalar → Facebook → Yeniden bağla → açılan Meta ekranında TÜM izinleri onaylayın' : undefined, route: missingP.length ? 'connections' : undefined });
+          fix: missingP.length ? 'Uygulamalar → Facebook/Instagram → İzinleri ver → açılan Meta ekranında gerekli izinleri onaylayın' : undefined, route: missingP.length ? 'connections' : undefined });
       } else checks.push({ key: 'meta:perms', group: 'Uygulamalar', label: 'Meta izinleri', state: 'warn', detail: `Meta izin listesi okunamadı${dj?.error?.message ? `: ${dj.error.message}` : ''}`, route: 'connections' });
     } catch (e) { checks.push({ key: 'meta:perms', group: 'Uygulamalar', label: 'Meta izinleri', state: 'warn', detail: `Kontrol edilemedi: ${String((e as Error).message).slice(0, 120)}` }); }
   }
