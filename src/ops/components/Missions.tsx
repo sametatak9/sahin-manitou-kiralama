@@ -15,7 +15,7 @@ export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: To
   stopped: { label: 'DURDURULDU', tone: 'wait' }, failed: { label: 'BAŞARISIZ', tone: 'stop' }, blocked: { label: 'ENGELLENDİ', tone: 'stop' },
 };
 export const FINISH_REASON: Record<string, string> = {
-  deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', error: 'Hata', no_ai: 'AI kullanılamadı (yalnızca sayfa taraması)', budget: 'Harcama sınırı doldu',
+  deadline: 'Süre doldu', stop_condition: 'Bitiş koşulu sağlandı', admin_stop: 'Yönetici durdurdu', max_steps: 'Adım sınırı', completed_no_findings: 'Tamamlandı — gerçek sıfır bulgu', error: 'Hata', no_ai: 'AI kullanılamadı (yalnızca sayfa taraması)', budget: 'Harcama sınırı doldu',
 };
 const DURATIONS = [1, 5, 10, 15, 30, 60, 120];
 export const ERROR_KIND: Record<string, string> = {
@@ -38,6 +38,7 @@ export function outcomeOf(m: Mission): { tone: 'ok' | 'warn' | 'error' | 'info';
   if (m.status === 'failed') return { tone: 'error', title: m.error_kind === 'search_unavailable' ? 'Arama kaynağı kullanılamadı' : 'Hata ile bitti',
     text: m.error_kind === 'search_unavailable' ? (m.error ?? ERROR_KIND.search_unavailable) : ERROR_KIND[m.error_kind ?? ''] ?? m.error ?? 'Bilinmeyen hata' };
   if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı — sayfa taraması yapıldı', text: `${m.findings.length} bulgu (AI'sız).` };
+  if (m.finish_reason === 'completed_no_findings') return { tone: 'warn', title: 'Tamamlandı — gerçek sıfır bulgu', text: `${m.sources?.length ?? 0} kaynak incelendi; doğrulanabilir müşteri/lead çıktısı yok.` };
   if (m.status === 'stopped') return { tone: 'info', title: 'Yönetici durdurdu', text: `${m.findings.length} bulgu ile raporlandı.` };
   if (!m.findings.length) return { tone: 'warn', title: 'Sonuç bulunamadı', text: 'Kaynağı doğrulanabilen bulgu çıkmadı.' };
   return { tone: 'ok', title: 'Başarılı', text: `${m.findings.length} kaynaklı bulgu · ${FINISH_REASON[m.finish_reason ?? ''] ?? ''}` };
