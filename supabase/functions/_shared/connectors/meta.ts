@@ -20,7 +20,7 @@ export const META_SCOPES = [...META_PAGE_SCOPES, ...META_IG_SCOPES];
 // Meta Dashboard > Facebook Login for Business > Configurations içindeki
 // kullanıcı tarafından oluşturulan yapılandırma. config_id kullanıldığında
 // izinleri OAuth URL'sinde tekrar scope olarak göndermeyiz.
-export const META_LOGIN_CONFIG_ID = '2984327711905674';
+export const META_LOGIN_CONFIG_ID = '2984327711905764';
 
 async function call(method: 'GET' | 'POST', path: string, params: Record<string, string>, host?: string) {
   const url = new URL(graph(path, host));
