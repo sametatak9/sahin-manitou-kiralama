@@ -18,7 +18,7 @@ export const FINISH_REASON: Record<string, string> = {
 };
 const DURATIONS = [1, 5, 10, 15, 30, 60, 120];
 export const ERROR_KIND: Record<string, string> = {
-  ai_credit: 'AI kredisi / bakiyesi bitti', ai_auth: 'AI anahtarı geçersiz veya yetkisiz', repeated_error: 'Üst üste 3 adım hata verdi', timeout: 'Zaman aşımı', budget: 'Harcama sınırı doldu',
+  ai_credit: 'AI kredisi / bakiyesi bitti', ai_auth: 'AI anahtarı geçersiz veya yetkisiz', search_unavailable: 'Canlı genel web araması kullanılamadı', repeated_error: 'Üst üste 3 adım hata verdi', timeout: 'Zaman aşımı', budget: 'Harcama sınırı doldu',
 };
 const MODELS = [
   { id: '', label: 'Otomatik (ekonomik: Sonnet 5)' },
@@ -33,7 +33,8 @@ export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'> 
 }
 
 export function outcomeOf(m: Mission): { tone: 'ok' | 'warn' | 'error' | 'info'; title: string; text: string } {
-  if (m.status === 'failed') return { tone: 'error', title: 'Hata ile bitti', text: ERROR_KIND[m.error_kind ?? ''] ?? m.error ?? 'Bilinmeyen hata' };
+  if (m.status === 'failed') return { tone: 'error', title: m.error_kind === 'search_unavailable' ? 'Arama kaynağı kullanılamadı' : 'Hata ile bitti',
+    text: m.error_kind === 'search_unavailable' ? (m.error ?? ERROR_KIND.search_unavailable) : ERROR_KIND[m.error_kind ?? ''] ?? m.error ?? 'Bilinmeyen hata' };
   if (m.finish_reason === 'no_ai') return { tone: 'warn', title: 'AI kullanılamadı — sayfa taraması yapıldı', text: `${m.findings.length} bulgu (AI'sız).` };
   if (m.status === 'stopped') return { tone: 'info', title: 'Yönetici durdurdu', text: `${m.findings.length} bulgu ile raporlandı.` };
   if (!m.findings.length) return { tone: 'warn', title: 'Sonuç bulunamadı', text: 'Kaynağı doğrulanabilen bulgu çıkmadı.' };
