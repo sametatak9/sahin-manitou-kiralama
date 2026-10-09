@@ -638,6 +638,11 @@ async function api(db: Db, req: Request) {
       await db.from('showroom_models').update({ ...patch, ai_written_at: new Date().toISOString(), ai_requested_at: null }).eq('id', m.id);
       return { ...t, applied: m.status !== 'published' };
     }
+    // Site yazısı: adminin isteğiyle yeni ilçe rehberini yalnızca taslak olarak üretir; public yayın ayrı onay düğmesidir.
+    case 'showroom_site_post': {
+      const u = await requireUser(db, req, 'admin');
+      return writeDistrictPost(db, typeof body.district === 'string' ? body.district : undefined, u.userId);
+    }
     // Panelden video düzenleme (kurgu / düzeltme) → GitHub Actions render kuyruğu
     // İçerik kontrol botu: tam kontrol listesi + "Bot düzeltsin"
     case 'content_check': { await requireUser(db, req); return checkUpcoming(db, Array.isArray(body.ids) ? (body.ids as string[]).slice(0, 100) : undefined); }
