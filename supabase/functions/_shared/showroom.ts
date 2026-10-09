@@ -201,7 +201,7 @@ function bodyFrom(sections: Array<{ heading?: string; text?: string }>) {
   return sections.filter((s) => s.text).map((s) => `${s.heading ? `## ${String(s.heading).trim()}\n` : ''}${String(s.text).trim()}`).join('\n\n').slice(0, 9000);
 }
 
-/** Bir ilçe rehberi yaz ve yayınla (bot). */
+/** Bir ilçe rehberi yaz ve insan onayı bekleyen taslak olarak kaydet (bot). */
 export async function writeDistrictPost(db: Db, districtName?: string, actorId: string | null = null) {
   const { data: bot } = await db.from('automation_bots').select('id,client_id').eq('slug', 'vitrin-editoru').maybeSingle();
   const { data: used } = await db.from('site_posts').select('district_slug,title').eq('kind', 'ilce');
@@ -223,17 +223,17 @@ export async function writeDistrictPost(db: Db, districtName?: string, actorId: 
     client_id: bot?.client_id ?? null, slug: clash ? `${base}-${Date.now().toString(36).slice(-4)}` : base, kind: 'ilce', title,
     excerpt: String(j.excerpt ?? '').slice(0, 300), body: bodyFrom(j.sections ?? []), cover_url: images[0] ?? null, images,
     district: d.name, district_slug: d.slug, tags: [d.name, 'müstakil ev', 'villa', 'anahtar teslim'], seo_title: String(j.seo_title ?? title).slice(0, 70),
-    seo_description: String(j.seo_description ?? j.excerpt ?? '').slice(0, 170), source: 'bot', status: 'published',
+    seo_description: String(j.seo_description ?? j.excerpt ?? '').slice(0, 170), source: 'bot', status: 'draft',
   };
   const { data, error } = await db.from('site_posts').insert(row).select('slug,title').single();
   if (error) throw error;
   return data as { slug: string; title: string };
 }
 
-/** Yayındaki gerçek bir projeyi sitede tanıtım yazısı olarak paylaş (bot). */
+/** Yayındaki gerçek bir projeyi site yazısı taslağı olarak hazırla (bot). */
 async function writeProjectPost(db: Db) {
   const { data: models } = await db.from('showroom_models').select(COLS).eq('status', 'published').eq('is_real_project', true);
-  const { data: recent } = await db.from('site_posts').select('model_slug').eq('kind', 'proje').gte('published_at', new Date(Date.now() - 14 * 86400_000).toISOString());
+  const { data: recent } = await db.from('site_posts').select('model_slug').eq('kind', 'proje').gte('created_at', new Date(Date.now() - 14 * 86400_000).toISOString());
   const skip = new Set(((recent ?? []) as Array<{ model_slug: string | null }>).map((x) => x.model_slug));
   const m = ((models ?? []) as Model[]).find((x) => !skip.has(x.slug));
   if (!m) return null;
@@ -248,13 +248,13 @@ async function writeProjectPost(db: Db) {
   const { data, error } = await db.from('site_posts').insert({
     client_id: m.client_id, slug: clash ? `${base}-${Date.now().toString(36).slice(-4)}` : base, kind: 'proje', title, excerpt: String(j.excerpt ?? '').slice(0, 300),
     body: bodyFrom(j.sections ?? []), cover_url: images[0] ?? null, images, district: m.location, district_slug: m.location ? slugTr(m.location) : null, model_slug: m.slug,
-    tags: ['teslim ettik', 'villa'], seo_title: String(j.seo_title ?? title).slice(0, 70), seo_description: String(j.seo_description ?? j.excerpt ?? '').slice(0, 170), source: 'bot', status: 'published',
+    tags: ['teslim ettik', 'villa'], seo_title: String(j.seo_title ?? title).slice(0, 70), seo_description: String(j.seo_description ?? j.excerpt ?? '').slice(0, 170), source: 'bot', status: 'draft',
   }).select('slug,title').single();
   if (error) throw error;
   return data as { slug: string; title: string };
 }
 
-/** Worker adımı: günde 1 site paylaşımı (10:00 sonrası). */
+/** Worker adımı: günde 1 site yazısı taslağı hazırla (10:00 sonrası); yayın kararı insandadır. */
 export async function sitePostTick(db: Db) {
   const { data: bot } = await db.from('automation_bots').select('status').eq('slug', 'vitrin-editoru').maybeSingle();
   if (!bot || bot.status !== 'active') return { skipped: 'bot pasif' };
@@ -268,6 +268,6 @@ export async function sitePostTick(db: Db) {
   const post = (dow % 3 === 0 ? await writeProjectPost(db).catch(() => null) : null) ?? await writeDistrictPost(db);
   await loadAppSecrets(db);
   if (post && appSecret('TELEGRAM_BOT_TOKEN') && appSecret('TELEGRAM_CHAT_ID'))
-    await telegramSend(`📝 Sitede yeni paylaşım (Editör Bot)\n${post.title}\n${PUBLIC_SITE}/blog/${post.slug}\nBeğenmezseniz panel → Ev Vitrini → Site yazıları → Arşivle`).catch(() => null);
-  return { posted: post };
+    await telegramSend(`📝 Site yazısı taslağı hazır (Editör Bot)\n${post.title}\nİnsan onayı olmadan public sitede görünmez.\n${SITE}/?ops=showroom`).catch(() => null);
+  return { draft: post, approval_required: Boolean(post) };
 }
