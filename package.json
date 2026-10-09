@@ -18,6 +18,7 @@
     "test:skill-snapshot": "tsx tests/skill-snapshot.test.ts",
     "test:skill-router": "tsx tests/skill-router.test.ts",
     "test:finding-taxonomy": "tsx tests/finding-taxonomy.test.ts",
+    "test:mission-scope": "tsx tests/mission-scope.test.ts",
     "test:seo-audit": "tsx tests/seo-audit.test.ts",
     "test:content-quality": "tsx tests/content-quality.test.ts",
     "test:model-routing": "tsx tests/model-routing.test.ts",

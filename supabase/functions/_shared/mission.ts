@@ -25,6 +25,7 @@ import { academyOutputEvidence, academyTestStatus } from './pure/capability-regi
 import { connectorHealthState, missionCapabilitySnapshot } from './pure/capability-audit.ts';
 import { registeredHandlerKeys } from './tools/registry.ts';
 import { routeForModel } from './pure/model-routing.ts';
+import { buildMissionScope, canonicalizeTenantBrand, evaluateScopeCandidate, filterScopeQueries, scopePrompt, type MissionScopeContract } from './pure/mission-scope.ts';
 
 type Db = SupabaseClient;
 
@@ -50,6 +51,7 @@ export interface MissionAudit {
   type_counts?: Partial<Record<FindingType, number>>;
   verified_customer_leads?: number; verified_target_accounts?: number;
   rejected_items?: Array<{ title: string; url: string; reason: string }>;
+  scope_guard?: { enabled: boolean; canonical_brand: string | null; allowed_topics: string[]; allowed_geos: string[]; excluded_terms: string[] };
 }
 interface Source { url: string; title?: string; publication?: PublicationEvidence }
 
@@ -574,7 +576,7 @@ async function missionCapabilityAudit(db: Db, skills: SkillRow[]) {
 async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose' | 'title' | 'goal' | 'search_for' | 'report_spec' | 'step_count'>) {
   const isTest = m?.purpose === 'skill_test';
   let skills: SkillRow[] = [];
-  let bot: { name?: string; instructions?: string; description?: string; slug?: string; bot_type?: string } | null = null;
+  let bot: { name?: string; instructions?: string; description?: string; slug?: string; bot_type?: string; client_id?: string | null } | null = null;
   if (m?.skill_ids?.length) {
     const { data } = await db.from('automation_skills').select(SKILL_COLS).in('id', m.skill_ids);
     const snapshotOrder = new Map(m.skill_ids.map((id, index) => [id, index]));
@@ -584,7 +586,16 @@ async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'sk
     // deno-lint-ignore no-explicit-any
     skills = (data || []).map((r: any) => (Array.isArray(r.automation_skills) ? r.automation_skills[0] : r.automation_skills)).filter(Boolean);
   }
-  if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description,slug,bot_type').eq('id', botId).maybeSingle());
+  if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description,slug,bot_type,client_id').eq('id', botId).maybeSingle());
+  let brandName: string | null = null;
+  if (bot?.client_id) {
+    const { data: kit } = await db.from('brand_kits').select('company_name').eq('client_id', bot.client_id).order('is_default', { ascending: false }).limit(1).maybeSingle();
+    brandName = typeof kit?.company_name === 'string' ? kit.company_name : null;
+  }
+  if (!brandName) {
+    const { data: kit } = await db.from('brand_kits').select('company_name').order('is_default', { ascending: false }).limit(1).maybeSingle();
+    brandName = typeof kit?.company_name === 'string' ? kit.company_name : null;
+  }
   skills = skills.filter((s) => s.enabled && (isTest || s.lifecycle === 'approved'));
   const capability = m?.step_count === 0
     ? await missionCapabilityAudit(db, skills)
@@ -598,6 +609,7 @@ async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'sk
   return {
     name: bot?.name ?? 'Bot',
     slug: bot?.slug, bot_type: bot?.bot_type,
+    brand_name: brandName,
     skills: metadata(skills),
     selectedSkills: metadata(selected),
     deferredSkills: metadata(skills.filter((s) => !selectedIds.has(s.id))),
@@ -631,7 +643,11 @@ export async function stepMission(db: Db, m: MissionRow) {
   const ctx = await botContext(db, m.bot_id, m);
   await logSkillsLoadedOnce(db, m, ctx.skills, ctx.selectedSkills, { summary: ctx.capability_summary, skills: ctx.capability_skills, warning: ctx.capability_warning });
   const policy = missionPolicy(ctx, m);
-  const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
+  const scope = buildMissionScope({ title: m.title, goal: m.goal, searchFor: m.search_for, reportSpec: m.report_spec,
+    canonicalBrand: ctx.brand_name, allowedTopics: searchTerms(m.search_for) });
+  const rawTerms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
+  const termFilter = filterScopeQueries(rawTerms, scope);
+  const terms = termFilter.allowed;
   const seoMission = Boolean(m.target_url && (ctx.slug === 'seo-bot' || /technical seo|teknik seo|robots\.txt|sitemap\.xml|canonical|json-ld/i.test(`${m.title} ${m.goal} ${m.search_for ?? ''}`)));
   let seoAudit: Awaited<ReturnType<typeof runSeoAudit>> | null = null;
   let stepFailed = false;
@@ -713,7 +729,15 @@ export async function stepMission(db: Db, m: MissionRow) {
       let broadSearchSucceeded = false;
       if (!m.target_url && terms.length) {
         // Her adımda 2 konu. Önce gerçek web araması (Tavily, anahtar varsa), yoksa/boşsa Google Haberler yedeği.
-        const qs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
+        const rawQs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
+        const queryFilter = filterScopeQueries(rawQs, scope);
+        const qs = queryFilter.allowed;
+        if (!qs.length) {
+          await logStep(db, m, step, 'scope_guard', `Kapsam guard bu adımda çalıştırılabilecek güvenli sorgu bırakmadı; ${queryFilter.blocked.length} sorgu engellendi.`, null,
+            { enabled: scope.enabled, blocked_queries: queryFilter.blocked.map((x) => ({ query: x.query, reason: x.decision.reason })), excluded_terms: scope.excludedTerms });
+          await persist();
+          return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut }, 'max_steps');
+        }
         const results: WebResult[] = []; const counts: string[] = [];
         for (const q of qs) {
           const qq = policy !== 'lead' || /stanbul|kocaeli|tekirda|türkiye/i.test(q) ? q : `${q} İstanbul`;
@@ -748,7 +772,9 @@ export async function stepMission(db: Db, m: MissionRow) {
         const engine = searchProviders.size ? [...searchProviders].join(' + ') : 'none';
         const searchStatus = searchScopeStatus(broadSearchSucceeded, searchProviders.has('Google News RSS'));
         await logStep(db, m, step, 'news_search', `Arama sağlayıcıları: ${engine} · ${counts.join(' · ')} · toplam ${results.length} kaynak${searchFailures.size ? ` · sorun: ${[...searchFailures].slice(0, 3).join(' | ')}` : ''}`, null,
-          { engine, search_status: searchStatus, broad_search_available: broadSearchSucceeded, provider_errors: [...searchFailures].slice(0, 5), queries: qs, count: results.length, titles: results.map((n) => n.title).slice(0, 24) });
+          { engine, search_status: searchStatus, broad_search_available: broadSearchSucceeded, provider_errors: [...searchFailures].slice(0, 5), queries: qs, count: results.length, titles: results.map((n) => n.title).slice(0, 24),
+            scope_guard: { enabled: scope.enabled, canonical_brand: scope.canonicalBrand, excluded_terms: scope.excludedTerms, blocked_query_count: queryFilter.blocked.length,
+              blocked_queries: queryFilter.blocked.map((x) => ({ query: x.query, reason: x.decision.reason })) } });
         if (results.length) newsNote = results.map((n, i) => `${i + 1}. ${n.title}${n.source ? ` — ${n.source}` : ''}${n.posted ? ` (${n.posted})` : ''}${n.snippet ? `\n   Özet: ${n.snippet}` : ''}\n   ${n.url}`).join('\n');
         const nativeSearchCapable = ['anthropic', 'gemini', 'groq'].includes(ai.provider);
         if (!nativeSearchCapable && stepResults.length === 0 && isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: false, findingCount: findings.length })) {
@@ -771,6 +797,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         policy === 'lead' ? RELEVANCE_RULES : RESEARCH_RELEVANCE_RULES,
         RECENCY_RULES,
         recentRequired ? 'TARİH KAPISI (ZORUNLU): Bu görev güncel bir zaman penceresi istiyor. Her bulguda posted alanı arama sonucunun gerçek yayın tarihiyle doldurulmalı; kaynakta tarih yoksa bulguyu yazma. “2 saat önce”, “bugün” veya benzeri göreli tarihleri kendin çıkarma ya da uydurma.' : '',
+        scopePrompt(scope),
         newsNote ? 'BU ADIMIN İŞİ: Arama sunucu tarafında yapıldı ve sonuçları aşağıda. Görevin AMACINA uyan somut, kaynak destekli kayıtları değerlendir; o sonucun linkini AYNEN kullan. Başlık tek başına müşteri talebi kanıtı değildir. Uygun kayıt yoksa boş liste döndür.' :
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
         'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
@@ -796,29 +823,43 @@ export async function stepMission(db: Db, m: MissionRow) {
         const source = sources.find((s) => canonical(s.url) === canonical(url));
         if (source) source.publication = p.publication;
       }));
-      let added = 0, dropped = 0, offTopic = 0, dateDropped = 0;
+      let added = 0, dropped = 0, offTopic = 0, dateDropped = 0, scopeRejected = 0;
       const anchors = anchorWords(m);
       for (const f of j?.new_findings ?? []) {
         if (!f.url || !allowed.has(canonical(f.url))) { dropped++; continue; }
-        const publication = trustedPublication(sources.find((s) => canonical(s.url) === canonical(String(f.url)))?.publication, f.url);
+        const url = String(f.url);
+        const publication = trustedPublication(sources.find((s) => canonical(s.url) === canonical(url))?.publication, url);
         const posted = publication?.posted;
-        if (findingDateIssue(publication, f.url, m)) { dateDropped++; continue; }
-        // Alaka kapısı: AI puanı ≥ 7 + gerekçe + görevin anahtar kelimelerinden en az biri metinde geçmeli
+        if (findingDateIssue(publication, url, m)) { dateDropped++; continue; }
         const rel = Number(f.relevance);
         const text = norm(`${f.title ?? ''} ${f.detail ?? ''} ${f.evidence ?? ''} ${f.fit ?? ''}`);
-        if (!(rel >= MIN_RELEVANCE) || !String(f.fit ?? '').trim() || (anchors.length && !anchors.some((a) => text.includes(a)))) { offTopic++; continue; }
         const opt = (v: unknown, n = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined);
-        if (addFinding({ title: String(f.title || '').slice(0, 200), detail: String(f.detail || '').slice(0, 1500), url: f.url, evidence: opt(f.evidence, 500),
-          company: opt(f.company), location: opt(f.location), posted, publication, phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300),
-          relevance: Math.min(10, Math.round(rel)), fit: opt(f.fit, 300) })) added++;
+        const candidate = { title: canonicalizeTenantBrand(String(f.title || '').slice(0, 200), ctx.brand_name) || String(f.title || '').slice(0, 200),
+          detail: canonicalizeTenantBrand(String(f.detail || '').slice(0, 1500), ctx.brand_name) || String(f.detail || '').slice(0, 1500), url,
+          evidence: opt(f.evidence, 500), company: canonicalizeTenantBrand(opt(f.company), ctx.brand_name), location: canonicalizeTenantBrand(opt(f.location), ctx.brand_name), posted, publication,
+          phone: opt(f.phone, 40), email: opt(f.email, 120), website: opt(f.website, 300), relevance: Math.min(10, Math.round(rel)), fit: canonicalizeTenantBrand(opt(f.fit, 300), ctx.brand_name) };
+        const scopeDecision = evaluateScopeCandidate(candidate, scope);
+        if (!scopeDecision.allowed) {
+          if (addFinding({ ...candidate, finding_type: 'excluded', verdict: 'rejected', verdict_reason: scopeDecision.reason || 'Kapsam guard adayı reddetti',
+            fit: `Kapsam guard: ${scopeDecision.reason || 'explicit görev kısıtı'}` })) scopeRejected++;
+          continue;
+        }
+        // Alaka kapısı: AI puanı ≥ 7 + gerekçe + görevin anahtar kelimelerinden en az biri metinde geçmeli
+        if (!(rel >= MIN_RELEVANCE) || !String(f.fit ?? '').trim() || (anchors.length && !anchors.some((a) => text.includes(a)))) { offTopic++; continue; }
+        if (addFinding(candidate)) added++;
       }
       // AI cevap veremediyse (boş/okunamaz) veri akışı durmasın: kural tabanlı ön eleme, denetçi sonra doğrular
       let ruleAdded = 0;
       if ((!j || !r.text.trim()) && stepResults.length) { for (const f of ruleFindings(stepResults, m, policy)) if (addFinding(f)) ruleAdded++; }
       if (ruleAdded) await logStep(db, m, step, 'rule_filter', `Yapay zekâ bu adımda sonuç okuyamadı → kural tabanlı ön eleme ${ruleAdded} aday buldu (denetimde doğrulanacak)`);
       stopMet = Boolean(m.stop_condition && j?.stop_condition_met); stopReason = j?.stop_reason || '';
-      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${dateDropped ? ` · ${dateDropped} tarih kanıtsız/aralık dışı aday elendi` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${j?.next_focus ? ` · sonraki odak: ${j.next_focus}` : ''}`,
-        null, { searches: r.searches, sources: r.sources.slice(0, 20), added, source_dropped: dropped, date_dropped: dateDropped, off_topic: offTopic, stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: r.text.slice(-1500) }, t0);
+      const safeNextFocus = j?.next_focus && evaluateScopeCandidate({ detail: j.next_focus }, scope).allowed
+        ? canonicalizeTenantBrand(j.next_focus, ctx.brand_name)
+        : j?.next_focus ? 'Kapsam guard: sonraki adım yalnızca izinli konu ve bölgelerle sınırlı.' : null;
+      if (stopReason && !evaluateScopeCandidate({ detail: stopReason }, scope).allowed) stopReason = 'Kapsam guard nedeniyle modelin kapsam dışı bitiş açıklaması kullanılmadı.';
+      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${dateDropped ? ` · ${dateDropped} tarih kanıtsız/aralık dışı aday elendi` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${scopeRejected ? ` · ${scopeRejected} kapsam dışı aday reddedildi` : ''}${safeNextFocus ? ` · sonraki odak: ${safeNextFocus}` : ''}`,
+        null, { searches: r.searches, sources: r.sources.slice(0, 20), added, source_dropped: dropped, date_dropped: dateDropped, off_topic: offTopic, scope_rejected: scopeRejected,
+          scope_guard: { enabled: scope.enabled, excluded_terms: scope.excludedTerms, canonical_brand: scope.canonicalBrand }, stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: canonicalizeTenantBrand(r.text.slice(-1500), ctx.brand_name) || r.text.slice(-1500) }, t0);
       await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
       const aiSearchSucceeded = r.searches > 0 || r.sources.length > 0;
       if (isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: aiSearchSucceeded, findingCount: findings.length })) {
@@ -909,8 +950,11 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
   const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model, cur.provider);
   const policy = missionPolicy(ctx, cur);
+  const scope = buildMissionScope({ title: cur.title, goal: cur.goal, searchFor: cur.search_for, reportSpec: cur.report_spec,
+    canonicalBrand: ctx.brand_name, allowedTopics: searchTerms(cur.search_for) });
   // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
-  const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources, policy) : null;
+  const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources, policy, scope) : null;
+  if (audit) audit.scope_guard = { enabled: scope.enabled, canonical_brand: scope.canonicalBrand, allowed_topics: scope.allowedTopics, allowed_geos: scope.allowedGeos, excluded_terms: scope.excludedTerms };
   const findings = verifiedFindings(allFindings);
   const pending = allFindings.filter((f) => f.verdict !== 'verified' && f.verdict !== 'rejected');
   const classifiedReason = classifyFinishReason(reason, findings.length, cur.error_kind);
@@ -924,7 +968,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
         `Bulgular:\n${findings.map((f, i) => `${i + 1}. ${f.title} — ${f.detail}${f.fit ? ` [neden uygun: ${f.fit}]` : ''} (${f.url})`).join('\n').slice(0, 8000)}`,
         'Biçim: 1) 3-6 cümlelik yönetici özeti 2) madde madde sonuçlar 3) önerilen sonraki adım. Markdown başlık kullanma; düz paragraflar ve "- " maddeleri kullan.',
       ].join('\n\n'), async (msg) => { await logStep(db, cur, cur.step_count + 1, 'ai_failover', msg); });
-      summary = r.text.trim(); tokensIn += r.tokensIn; tokensOut += r.tokensOut;
+      summary = canonicalizeTenantBrand(r.text.trim(), ctx.brand_name) || r.text.trim(); tokensIn += r.tokensIn; tokensOut += r.tokensOut;
       const c = await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: r.searches });
       await db.from('bot_missions').update({ cost_usd: Math.round(((Number(cur.cost_usd) || 0) + c) * 10000) / 10000 }).eq('id', cur.id);
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
@@ -941,7 +985,8 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   }
 
   // KOÇ: raporu ve günlüğü inceleyip yeteneği iyileştirme önerisi çıkarır (Akademi'de onayınıza düşer)
-  const coachNote = ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>) : null;
+  const coachNoteRaw = ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>, scope) : null;
+  const coachNote = coachNoteRaw ? canonicalizeTenantBrand(coachNoteRaw, ctx.brand_name) : null;
   if (cur.purpose === 'skill_test' && cur.skill_ids?.length) {
     const { data: sk } = await db.from('automation_skills').select('lifecycle,capability_kind,handler_key,connector_key,academy_output_kind').eq('id', cur.skill_ids[0]).maybeSingle();
     if (sk) {
@@ -1116,11 +1161,23 @@ const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicio
 
 /** DENETİM: her bulgunun kaynağı açılır, içerik bulguyla karşılaştırılır; ardından ayrı bir AI "hakem" gerçeklik + güncellik + amaca uygunluk kararı verir.
  *  verified = kaynak bulguyu doğruluyor, somut ve güncel · suspicious = gerçek ama belirsiz/eski/dolaylı · rejected = uydurma, kaynakla çelişen veya amaç dışı. */
-export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[], policy: MissionPolicy = 'lead'): Promise<MissionAudit> {
-  for (const f of findings) f.finding_type ??= classifyFindingType(f);
+export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[], policy: MissionPolicy = 'lead', scope?: MissionScopeContract): Promise<MissionAudit> {
+  const scopeRejected = new WeakSet(findings.filter((f) => f.verdict === 'rejected' && /^Kapsam guard/i.test(f.verdict_reason || '')));
+  for (const f of findings) {
+    f.finding_type ??= classifyFindingType(f);
+    if (scopeRejected.has(f)) f.finding_type = 'excluded';
+    if (scope?.canonicalBrand) {
+      f.title = canonicalizeTenantBrand(f.title, scope.canonicalBrand) || f.title;
+      f.detail = canonicalizeTenantBrand(f.detail, scope.canonicalBrand) || f.detail;
+      f.company = canonicalizeTenantBrand(f.company, scope.canonicalBrand);
+      f.fit = canonicalizeTenantBrand(f.fit, scope.canonicalBrand);
+      f.summary = canonicalizeTenantBrand(f.summary, scope.canonicalBrand);
+    }
+  }
   const srcTitle = new Map(sources.map((s) => [canonical(s.url), s.title || '']));
   const srcPublication = new Map(sources.map((s) => [canonical(s.url), trustedPublication(s.publication, s.url)]));
   const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
+    if (scopeRejected.has(f)) return { f, reachable: false, excerpt: f.verdict_reason || 'Kapsam guard tarafından önceden reddedildi', match: false, desc: '', searchBacked: false, searchBackedReason: undefined };
     const inSources = srcTitle.has(canonical(f.url));
     const publication = srcPublication.get(canonical(f.url));
     f.publication = publication; f.posted = publication?.posted;
@@ -1156,12 +1213,17 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
       const j = extractJson(r.text) as { items?: Array<{ i: number; verdict: string; reason?: string; summary?: string }> } | null;
       for (const it of j?.items ?? []) {
         if (['verified', 'suspicious', 'rejected'].includes(it.verdict)) verdicts.set(Number(it.i), { v: it.verdict as Finding['verdict'], r: String(it.reason || '').slice(0, 240) });
-        const c = checks[Number(it.i)]; if (c && it.summary && String(it.summary).trim().length > 20) c.f.summary = String(it.summary).trim().slice(0, 700);
+        const c = checks[Number(it.i)]; if (c && it.summary && String(it.summary).trim().length > 20) c.f.summary = canonicalizeTenantBrand(String(it.summary).trim().slice(0, 700), scope?.canonicalBrand) || String(it.summary).trim().slice(0, 700);
       }
       await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: 0 });
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
   checks.forEach((c, i) => {
+    if (scopeRejected.has(c.f)) {
+      c.f.finding_type = 'excluded'; c.f.verdict = 'rejected'; c.f.summary = undefined;
+      c.f.verdict_reason = c.f.verdict_reason || 'Kapsam guard adayı explicit görev kısıtı nedeniyle reddetti';
+      return;
+    }
     if (c.f.verification === 'technical_http') {
       c.f.verdict = 'verified';
       c.f.verdict_reason = 'Deterministik gerçek HTTP SEO audit çıktısı ve aynı görevde kaydedilmiş kaynak URL ile doğrulandı';
@@ -1188,6 +1250,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     }
   });
   for (const f of findings.slice(20)) {
+    if (scopeRejected.has(f)) { f.finding_type = 'excluded'; f.verdict = 'rejected'; f.summary = undefined; continue; }
     f.publication = srcPublication.get(canonical(f.url)); f.posted = f.publication?.posted;
     const issue = findingDateIssue(f.publication, f.url, cur) || (policy === 'lead' ? isStaleFinding(f) : null);
     f.verdict = issue ? 'rejected' : 'suspicious'; f.verdict_reason = issue || 'İçerik denetim sınırı (ilk 20 bulgu) dışında kaldı — doğrulanmış müşteri değildir';
@@ -1202,12 +1265,13 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
   const audit: MissionAudit = { total: findings.length, verified: count('verified'), suspicious: count('suspicious'), rejected: count('rejected'),
     accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(), type_counts, verified_customer_leads, verified_target_accounts,
     rejected_items: findings.filter((f) => f.verdict === 'rejected').map((f) => ({ title: f.title, url: f.url, reason: f.verdict_reason ?? '' })).slice(0, 20) };
+  if (scope) audit.scope_guard = { enabled: scope.enabled, canonical_brand: scope.canonicalBrand, allowed_topics: scope.allowedTopics, allowed_geos: scope.allowedGeos, excluded_terms: scope.excludedTerms };
   await logStep(db, cur, cur.step_count + 1, 'audit', `Denetim: ${audit.total} bulgu kontrol edildi · ✅${audit.verified} doğrulandı · ⚠️${audit.suspicious} şüpheli · ❌${audit.rejected} elendi · doğruluk %${audit.accuracy}`, null, audit);
   return audit;
 }
 
 /** KOÇ: görevin günlüğü + denetim sonucuna bakıp yeteneğin eksiğini teşhis eder, somut iyileştirme önerir (Akademi'de onaya düşer). */
-async function coachMission(db: Db, cur: MissionRow, ai: AiChoice, ctx: { skills: Array<{ id: string; name: string }>; terms: string[]; text: string }, audit: MissionAudit | null, steps: Array<{ action: string; message: string }>) {
+async function coachMission(db: Db, cur: MissionRow, ai: AiChoice, ctx: { skills: Array<{ id: string; name: string }>; terms: string[]; text: string }, audit: MissionAudit | null, steps: Array<{ action: string; message: string }>, scope?: MissionScopeContract) {
   try {
     const log = steps.filter((s) => ['news_search', 'ai_research', 'audit', 'error'].includes(s.action)).map((s) => `[${s.action}] ${s.message}`).join('\n').slice(0, 5000);
     const r = await aiCall(ai, [
@@ -1215,7 +1279,8 @@ async function coachMission(db: Db, cur: MissionRow, ai: AiChoice, ctx: { skills
       `GÖREV: ${cur.title}\nAMAÇ: ${cur.goal}\nKULLANILAN YETENEKLER: ${ctx.skills.map((s) => s.name).join(', ') || '(yok)'}\nMEVCUT ARAMA TERİMLERİ: ${ctx.terms.join(', ') || cur.search_for || '-'}`,
       audit ? `DENETİM: ${audit.total} bulgu · doğrulandı ${audit.verified} · şüpheli ${audit.suspicious} · elendi ${audit.rejected} · doğruluk %${audit.accuracy}\nELENENLER: ${(audit.rejected_items || []).map((x) => `${x.title} (${x.reason})`).join(' | ').slice(0, 1500)}` : 'DENETİM: hiç bulgu yok.',
       `GÜNLÜK:\n${log}`,
-      'Kurallar: yalnızca yasal, herkese açık kaynaklar (KVKK); giriş gerektiren veya kazımayı yasaklayan platformları önerme. Arama terimleri Türkçe, kısa ve gerçek insanların/firmaların yazacağı ifadeler olsun (ör. "villa yaptırmak istiyorum", "kat karşılığı müteahhit aranıyor", "manitou operatörü aranıyor").',
+      scope ? scopePrompt(scope) : '',
+      'Kurallar: yalnızca yasal, herkese açık kaynaklar (KVKK); giriş gerektiren veya kazımayı yasaklayan platformları önerme. Arama terimleri Türkçe, kısa ve gerçek insanların/firmaların yazacağı ifadeler olsun (ör. "villa yaptırmak istiyorum", "kat karşılığı müteahhit aranıyor", "çelik yapı firması arıyor").',
       'YALNIZCA JSON döndür: {"diagnosis":"2-4 cümle teşhis","instructions_add":"yeteneğin talimatına eklenecek 1-3 cümle kural (gerekmiyorsa boş)","search_terms_add":["..."],"search_terms_remove":["..."],"sources_add":["alanadi.com"]}',
     ].join('\n\n'));
     await recordUsage(db, { source: 'mission', ref_id: cur.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: 0 });

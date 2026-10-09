@@ -4,6 +4,7 @@ import { auditFindings, ruleFindings, type Finding, type MissionRow } from '../s
 import { missionPolicy } from '../supabase/functions/_shared/pure/policy.ts';
 import { makePublicationEvidence } from '../supabase/functions/_shared/pure/publication.ts';
 import { findingCounts, verifiedFindings, classifyFinishReason } from '../supabase/functions/_shared/pure/outcome.ts';
+import { buildMissionScope } from '../supabase/functions/_shared/pure/mission-scope.ts';
 function equal(actual: unknown, expected: unknown) { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Beklenen ${JSON.stringify(expected)}, gelen ${JSON.stringify(actual)}`); }
 const mission = { id: 'test-only', title: 'Güncel müşteri talebi', goal: 'Son 30 gün içinde müşteri talebi bul', step_count: 1 } as MissionRow;
 const db = { from: () => ({ insert: async () => ({ error: null }) }) } as unknown as Parameters<typeof auditFindings>[0];
@@ -76,4 +77,14 @@ Deno.test('Growth profilleri müşteri lead’i, rakip/iş ortağı ve kamu kuru
   const audit = await auditFindings(db, { ...mission, title: 'Growth sektör hesap keşfi', goal: 'Embay Yapı için işletme hesapları bul' }, null, items, sources, 'growth');
   equal(items.map((f) => f.finding_type), ['public_institution', 'competitor_or_reference', 'business_or_partner']);
   equal([audit.verified_customer_leads, audit.verified_target_accounts, audit.type_counts?.public_institution], [0, 2, 1]);
+});
+
+Deno.test('Scope guard reddi audit içinde excluded olarak korunur ve verified sayılmaz', async () => {
+  const f: Finding = { title: 'Manitou kiralama profili', detail: 'Şahin Manitou hizmeti', url: 'https://example.com/manitou',
+    finding_type: 'excluded', verdict: 'rejected', verdict_reason: 'Kapsam guard adayı reddetti: manitou', at: new Date().toISOString(), step: 1 };
+  const scope = buildMissionScope({ goal: 'Şahin Manitou dışla', canonicalBrand: 'Embay Yapı' });
+  const audit = await auditFindings(db, { ...mission, goal: 'Embay Yapı profilleri', title: 'Growth' }, null, [f], [{ url: f.url, title: f.title }], 'growth', scope);
+  equal([audit.verified, audit.suspicious, audit.rejected, audit.type_counts?.excluded], [0, 0, 1, 1]);
+  equal(f.finding_type, 'excluded');
+  equal(verifiedFindings([f]).length, 0);
 });
