@@ -6,6 +6,7 @@ import { db } from '../lib/hooks';
 import { relTime } from '../lib/format';
 import type { Mission, MissionFinding } from '../lib/types';
 import { Button, cx, Modal } from '../ui';
+import { classifyFindingType, FINDING_TYPE_LABEL } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
 
 /** Türkiye numarasını wa.me biçimine çevirir (905xxxxxxxxx). Geçersizse null. */
 export function waNumber(phone?: string | null) {
@@ -49,6 +50,8 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
   const subtitle = name === f.title ? null : f.title;
   const initial = name.replace(/^[^\p{L}\p{N}]+/u, '').charAt(0).toLocaleUpperCase('tr-TR') || '•';
   const score = typeof f.relevance === 'number' ? Math.max(0, Math.min(10, f.relevance)) : null;
+  const findingType = f.finding_type ?? classifyFindingType(f);
+  const isCustomerLead = findingType === 'customer_lead';
   const archive = async () => {
     const { data, error } = await db().rpc('portfolio_upsert_company', { p: { firm_name: name.slice(0, 160), source_url: f.url, public_phone: f.phone ?? null, public_email: f.email ?? null, website: f.website ?? null, ilce: f.location ?? null,
       ai_notes: `${f.title} — ${f.detail}`.slice(0, 1500), source: 'bot_mission', need: m.search_for ?? null }, p_bot_id: m.bot_id, p_run_id: null, p_finding_id: null });
@@ -71,6 +74,7 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
         </div>
         <div className="relative flex flex-wrap items-center gap-1.5 mt-2.5">
           {f.verdict && <span className={cx('rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1', VERDICT[f.verdict]?.cls)}>{VERDICT[f.verdict]?.label}</span>}
+          <span className={cx('rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1', isCustomerLead ? 'bg-emerald-400/20 text-emerald-100 ring-emerald-300/40' : 'bg-white/15 text-white/85 ring-white/25')}>{FINDING_TYPE_LABEL[findingType]}</span>
           {score !== null && (
             <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold">
               Uygunluk
@@ -101,16 +105,17 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
       {/* İletişim şeridi */}
       <div className="border-t border-ink-800 bg-ink-900/40 px-3 py-2.5 flex flex-wrap gap-1.5">
         <a href={f.url} target="_blank" rel="noreferrer" className="ops-chip"><ExternalLink className="w-3.5 h-3.5" />{pf.key === 'instagram' ? 'Profili aç' : pf.key === 'facebook' ? 'Sayfayı aç' : 'Kaynağa git'}</a>
-        {f.phone && <a href={`tel:${f.phone.replace(/[^\d+]/g, '')}`} className="ops-chip"><Phone className="w-3.5 h-3.5" />{f.phone}</a>}
-        {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(WA_TEXT(f))}`} target="_blank" rel="noreferrer" className="ops-chip !bg-emerald-600 !text-white !ring-emerald-600"><MessageCircle className="w-3.5 h-3.5" />WhatsApp</a>}
-        {f.email && <a href={`mailto:${f.email}`} className="ops-chip"><Mail className="w-3.5 h-3.5" />E-posta</a>}
+        {isCustomerLead && f.phone && <a href={`tel:${f.phone.replace(/[^\d+]/g, '')}`} className="ops-chip"><Phone className="w-3.5 h-3.5" />{f.phone}</a>}
+        {isCustomerLead && wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(WA_TEXT(f))}`} target="_blank" rel="noreferrer" className="ops-chip !bg-emerald-600 !text-white !ring-emerald-600"><MessageCircle className="w-3.5 h-3.5" />WhatsApp</a>}
+        {isCustomerLead && f.email && <a href={`mailto:${f.email}`} className="ops-chip"><Mail className="w-3.5 h-3.5" />E-posta</a>}
         {f.website && <a href={f.website} target="_blank" rel="noreferrer" className="ops-chip"><Globe className="w-3.5 h-3.5" />Web</a>}
         {archived ? <span className="text-[11px] font-semibold text-emerald-700 self-center">{archived}</span>
-          : <button type="button" onClick={archive} className="ops-chip"><Archive className="w-3.5 h-3.5" />Portföye ekle</button>}
+          : isCustomerLead ? <button type="button" onClick={archive} className="ops-chip"><Archive className="w-3.5 h-3.5" />Portföye ekle</button>
+            : <span className="text-[11px] text-ink-500 self-center">Lead değil · portföye aktarılmaz</span>}
       </div>
       {zoom && (
         <Modal open wide onClose={() => setZoom(false)} title={<span className="inline-flex items-center gap-2"><span className="w-7 h-7 rounded-lg grid place-items-center text-sm font-bold text-white bg-gradient-to-br from-[#262A6B] to-[#1E3FA0]">{initial}</span>{name}</span>}
-          footer={<><a href={f.url} target="_blank" rel="noreferrer"><Button variant="ghost" icon={<ExternalLink className="w-4 h-4" />}>Kaynağı aç</Button></a>{!archived && <Button variant="primary" onClick={archive} icon={<Archive className="w-4 h-4" />}>Portföye ekle</Button>}</>}>
+          footer={<><a href={f.url} target="_blank" rel="noreferrer"><Button variant="ghost" icon={<ExternalLink className="w-4 h-4" />}>Kaynağı aç</Button></a>{!archived && isCustomerLead && <Button variant="primary" onClick={archive} icon={<Archive className="w-4 h-4" />}>Portföye ekle</Button>}</>}>
           <div className="space-y-4">
             <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-[#262A6B] via-[#1E3FA0] to-[#262A6B] text-white p-5">
               <div className="text-[10px] font-mono tracking-widest text-[#CFE4FA]">EMBAY YAPI & ŞAHİN MANİTOU · BULGU KARTI #{i + 1}</div>
@@ -121,6 +126,7 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
                 {f.posted && <span className="rounded-full bg-white/15 px-2.5 py-1 inline-flex items-center gap-1"><CalendarDays className="w-3 h-3" />{f.posted}</span>}
                 {score !== null && <span className="rounded-full bg-white/15 px-2.5 py-1">Uygunluk {score}/10</span>}
                 {f.verdict && <span className={cx('rounded-full px-2.5 py-1 ring-1', VERDICT[f.verdict]?.cls)}>{VERDICT[f.verdict]?.label}</span>}
+                <span className={cx('rounded-full px-2.5 py-1 ring-1', isCustomerLead ? 'bg-emerald-400/20 text-emerald-100 ring-emerald-300/40' : 'bg-white/15 text-white/85 ring-white/25')}>{FINDING_TYPE_LABEL[findingType]}</span>
                 {pf.handle && <span className="rounded-full bg-white/15 px-2.5 py-1">{pf.handle}</span>}
               </div>
             </div>
@@ -131,12 +137,13 @@ export function FindingCard({ f, i, m }: { f: MissionFinding; i: number; m: Pick
             {f.verdict_reason && <div className="flex gap-2 text-[12px] text-ink-400"><ShieldCheck className="w-4 h-4 shrink-0" />Denetim: {f.verdict_reason}</div>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {f.company && <div className="rounded-xl ring-1 ring-ink-700 p-2.5"><div className="text-[10px] font-mono text-ink-500">FİRMA / KURUM</div><div className="text-sm text-ink-100">{f.company}</div></div>}
-              {f.phone && <a href={`tel:${f.phone.replace(/[^\d+]/g, '')}`} className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">KURUMSAL TELEFON</div><div className="text-sm text-ink-100 inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{f.phone}</div></a>}
-              {f.email && <a href={`mailto:${f.email}`} className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">E-POSTA</div><div className="text-sm text-ink-100 break-all">{f.email}</div></a>}
+              {isCustomerLead && f.phone && <a href={`tel:${f.phone.replace(/[^\d+]/g, '')}`} className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">KURUMSAL TELEFON</div><div className="text-sm text-ink-100 inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{f.phone}</div></a>}
+              {isCustomerLead && f.email && <a href={`mailto:${f.email}`} className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">E-POSTA</div><div className="text-sm text-ink-100 break-all">{f.email}</div></a>}
               {f.website && <a href={f.website} target="_blank" rel="noreferrer" className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50"><div className="text-[10px] font-mono text-ink-500">WEB</div><div className="text-sm text-ink-100 break-all">{f.website}</div></a>}
               <a href={f.url} target="_blank" rel="noreferrer" className="rounded-xl ring-1 ring-ink-700 p-2.5 hover:ring-brand-green/50 sm:col-span-2"><div className="text-[10px] font-mono text-ink-500">KAYNAK</div><div className="text-[12px] text-brand-green break-all">{f.url}</div></a>
             </div>
-            {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(WA_TEXT(f))}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white py-2.5 text-sm font-semibold"><MessageCircle className="w-4 h-4" />WhatsApp’tan yaz (hazır mesaj)</a>}
+            {isCustomerLead && wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(WA_TEXT(f))}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white py-2.5 text-sm font-semibold"><MessageCircle className="w-4 h-4" />WhatsApp’tan yaz (hazır mesaj)</a>}
+            {!isCustomerLead && <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 p-3 text-[12px] text-amber-900">Bu kayıt <b>{FINDING_TYPE_LABEL[findingType]}</b>. Doğrudan müşteri talebi kanıtı olmadığı için müşteri portföyüne ve hazır iletişim akışına aktarılmaz.</div>}
             {archived && <div className="text-[12px] font-semibold text-emerald-700">{archived}</div>}
           </div>
         </Modal>

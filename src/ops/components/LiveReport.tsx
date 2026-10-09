@@ -8,6 +8,7 @@ import { fmtDateTime } from '../lib/format';
 import type { Mission, MissionSkillMeta, MissionSkillUsage, MissionStep } from '../lib/types';
 import { Button, cx, Modal, Notice, Pill, StateView } from '../ui';
 import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
+import { classifyFindingType } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
 
 export { waNumber } from './FindingCard';
 
@@ -19,6 +20,14 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
   const m = q.data;
   const live = m && (m.status === 'running' || m.status === 'finalizing');
   const counts = findingCounts(m?.findings ?? []);
+  const taxonomy = useMemo(() => {
+    const all = m?.findings ?? [];
+    return {
+      customerLeads: all.filter((f) => f.verdict === 'verified' && (f.finding_type ?? classifyFindingType(f)) === 'customer_lead').length,
+      targetAccounts: all.filter((f) => f.verdict === 'verified' && ['business_or_partner', 'competitor_or_reference'].includes(f.finding_type ?? classifyFindingType(f))).length,
+      publicInstitutions: all.filter((f) => ['public_institution', 'public_opportunity'].includes(f.finding_type ?? classifyFindingType(f))).length,
+    };
+  }, [m?.findings]);
   const skillUsage = useMemo<MissionSkillUsage>(() => {
     const step = stepsQ.data.find((x) => x.action === 'skills_loaded');
     const data = step?.data;
@@ -76,6 +85,9 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
               <b>{skillUsage.count || m.skill_ids?.length || 0} yetenek snapshot’landı</b>
               {!!skillUsage.detailed_count && <span className="opacity-80"> · {skillUsage.detailed_count} ayrıntılı yüklendi</span>}
               {shownSkills.length > 0 && <span className="opacity-80"> · {shownSkills.slice(0, 3).map((s) => `${s.name} v${s.version}`).join(' · ')}{shownSkills.length > 3 ? ` · +${shownSkills.length - 3}` : ''}</span>}
+            </div>
+            <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-[11px] opacity-90">
+              Ayrı sınıflandırma · müşteri lead’i <b>{taxonomy.customerLeads}</b> · hedef işletme <b>{taxonomy.targetAccounts}</b> · kamu kurumu/fırsatı <b>{taxonomy.publicInstitutions}</b>
             </div>
           </div>
           {m.error && <Notice tone={m.status === 'failed' ? 'error' : 'warn'}>{m.error}</Notice>}
