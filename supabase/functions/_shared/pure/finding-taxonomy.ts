@@ -9,6 +9,7 @@ export const FINDING_TYPES = [
   'competitor_or_reference',
   'public_institution',
   'public_opportunity',
+  'technical_seo',
   'market_reference',
   'excluded',
 ] as const;
@@ -74,6 +75,7 @@ export const FINDING_TYPE_LABEL: Record<FindingType, string> = {
   competitor_or_reference: 'Rakip / referans',
   public_institution: 'Kamu kurumu',
   public_opportunity: 'Kamu fırsatı / ihale',
+  technical_seo: 'Teknik SEO',
   market_reference: 'Pazar / sektör referansı',
   excluded: 'Kapsam dışı',
 };
