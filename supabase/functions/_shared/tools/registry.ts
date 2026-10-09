@@ -31,13 +31,13 @@ export async function generateContent(ctx: EngineCtx, input: Record<string, unkn
   const brand = await brandForContext(ctx);
   const prompt = [
     `Platform: ${str(input.platform, 'instagram')}`,
-    `Konu: ${str(input.topic, 'Manitou kiralama ve şantiye hizmetleri')}`,
+    `Konu: ${str(input.topic, 'Markanın seçili hizmetleri ve gerçek saha süreçleri')}`,
     input.objective ? `Amaç: ${str(input.objective)}` : '',
     input.audience ? `Hedef kitle: ${str(input.audience)}` : '',
     input.tone ? `Ton: ${str(input.tone)}` : '',
     input.cta ? `İstenen CTA: ${str(input.cta)}` : '',
     await brandLine(ctx),
-    'Platformun karakter ve format kurallarına uy. Hashtag’leri # olmadan değil, # ile yaz. Uydurma rakam/müşteri/proje kullanma.',
+    'Görev konusu tek yetkili kapsamdır: konu veya marka kitinde olmayan başka bir hizmeti, sektörü, marka adını ya da müşteri örneğini ekleme. Platformun karakter ve format kurallarına uy. Hashtag’leri # olmadan değil, # ile yaz. Uydurma rakam/müşteri/proje kullanma.',
   ].filter(Boolean).join('\n');
   const { json, generationId } = await aiComplete(ctx, 'create_content', prompt, CONTENT_SCHEMA);
   const draft = normalizeContentDraft(json);
