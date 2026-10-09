@@ -57,16 +57,16 @@ export function publicationDateIssue(posted: string | null | undefined, m: Recen
   if (!d) return window.required ? 'Kaynak yayın tarihi doğrulanamadı; göreli veya AI tarafından üretilmiş tarih kabul edilmez' : null;
   const day = publicationDay(d);
   if (day > window.to) return `Yayın tarihi ${day} gelecekte; doğrulanabilir yayın değil`;
-  if (day < window.from) return `Yayın tarihi ${day}, görev tarih aralığı dışında (${window.from}–${window.to})`;
+  if (window.required && day < window.from) return `Yayın tarihi ${day}, görev tarih aralığı dışında (${window.from}–${window.to})`;
   return null;
 }
 
 export function isStaleFinding(f: { title: string; detail: string; posted?: string; fit?: string; summary?: string; evidence?: string }, now = new Date()): string | null {
   const blob = `${f.title} ${f.detail} ${f.posted ?? ''} ${f.fit ?? ''} ${f.summary ?? ''} ${f.evidence ?? ''}`.toLocaleLowerCase('tr-TR');
   if (/ihale\s*sonu[cç]|sonu[cç]\s*ilan|y[uü]klenici\s*belirlendi|s[oö]zle[sş]me\s*imzaland|i[sş]\s*tamamland|kesinle[sş]en\s*y[uü]klenici|ihale\s*iptal|ihaleyi\s*kazan|sözleşme\s*imza|iş\s*bit(ti|miş)|teslim\s*edildi|kabul\s*yapıldı/.test(blob)) return 'Sonuçlanmış / kapanmış ihale veya tamamlanmış iş — güncel fırsat değil';
-  const issue = publicationDateIssue(f.posted, {}, now);
-  if (issue) return issue;
   const d = parseFindingDate(f.posted);
+  const issue = d ? publicationDateIssue(f.posted, { goal: 'güncel müşteri fırsatı' }, now) : null;
+  if (issue) return issue;
   const currentYear = Number(publicationDay(now).slice(0, 4));
   for (let yy = 2018; yy < currentYear; yy++) {
     if (blob.includes(String(yy)) && !blob.includes(String(currentYear)) && (new RegExp(`${yy}\\s*(yılı|yil|ihale|ilan|tarih|dönem|sezon)|${yy}[./-]|\\b${yy}\\b`).test(blob) || !d)) return `Metinde ${yy} — geçmiş dönem (güncel yıl ${currentYear} yok)`;
@@ -77,6 +77,7 @@ export function isStaleFinding(f: { title: string; detail: string; posted?: stri
 
 export const RECENCY_RULES = [
   `GÜNCELLİK: Görevin istediği gerçek yayın tarih aralığına uy. Genel üst sınır ${MAX_FINDING_AGE_DAYS} gündür; görev son 7/30 gün istiyorsa daha dar olan pencere geçerlidir. Sonuçlanmış ihale ve tamamlanmış işler güncel müşteri fırsatı değildir.`,
+  'KALICI ARAŞTIRMA: Güncel tarih şartı istemeyen sektör/ürün/hizmet/katalog araştırmasında eski yayın tarihi tek başına ret nedeni değildir; bu kaynak yeni haber veya müşteri talebi gibi sunulmaz. Güncel fırsat kuralları yalnız müşteri/ihale aramasında uygulanır.',
   'TARİH KAYNAĞI: Sunucunun arama metadata veya sayfa yayın metadata bilgisini kullan. dateModified, taranma/ziyaret tarihi, AI tahmini, bugünkü yıl veya “2 saat önce” ifadesi yayın tarihi yerine geçmez.',
   'İHALE: Açık / başvurusu süren / henüz sonuçlanmamış olmalı. İhale günü yayın günüyle aynı değildir; başvuru bitişi ayrı bilgidir.',
   'ARAMA: Kısa ve somut sorgular kullan; tarih filtresi gerçek metadata üzerinden uygulanır, güncel yıl başlığa eklenerek eski kaynak yenilenmiş sayılmaz.',
