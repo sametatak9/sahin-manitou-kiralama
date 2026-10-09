@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { ASSISTANT_NAME, PRODUCT_NAME } from './brand';
 import {
-  Blocks, Bot, Briefcase, Store, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, ChevronDown, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
+  Blocks, Bot, CircleUserRound, Crown, Briefcase, Store, Users, Clapperboard, Building2, CalendarClock, CalendarRange, CheckCheck, ChevronDown, FileText, Film, Gauge, Inbox, LogOut, Menu, PlugZap, Radar, Settings, ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useQuery } from './lib/hooks';
@@ -10,12 +11,12 @@ import { PageGuide } from './components/PageGuide';
 import { AgencyControlStrip } from './components/AgencyControlStrip';
 import { ClientSwitcher, useClient } from './client';
 
-interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
+interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string; adminOnly?: boolean }
 /** Reklam ajansı menüsü: üstte seçili müşteri (işletme); tüm ekranlar o müşteri için çalışır. */
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Ana', items: [
     { id: 'home', label: 'Ana Sayfa', icon: Gauge, hint: 'Bugün · yapılacaklar · sonuçlar' },
-    { id: 'copilot', label: 'Agency Copilot', icon: Sparkles, hint: 'Salt-okunur karar desteği' },
+    { id: 'copilot', label: ASSISTANT_NAME, icon: Sparkles, hint: 'Salt-okunur karar desteği' },
     { id: 'queue', label: 'İçerik Merkezi', icon: Clapperboard, hint: 'Takvim · video · kontrol · üret · medya' },
     { id: 'leads', label: 'Müşteri Adayları', icon: Inbox, hint: 'Fiyat soranlar · başvurular' },
     { id: 'growth', label: 'Büyüme', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
@@ -35,6 +36,8 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Ayarlar', items: [
     { id: 'system', label: 'Sistem', icon: ShieldCheck, hint: 'Bağlantı kontrolü' },
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
+    { id: 'account', label: 'Hesabım', icon: CircleUserRound, hint: 'Profil · rol · çalışma alanı' },
+    { id: 'founder', label: 'Kurucu Paneli', icon: Crown, hint: 'Tüm hesaplar · üyeler · müşteriler', adminOnly: true },
   ] },
 ];
 const MOBILE: Route[] = ['home', 'copilot', 'queue', 'leads', 'bots'];
@@ -103,7 +106,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
           <img src="/reels/kit/embay_logo_beyaz.png" alt="Embay" className="w-7 h-7 object-contain" />
         </div>
         <div>
-          <div className="font-display text-sm font-bold tracking-wide text-ink-100">EMBAY PANEL</div>
+          <div className="font-display text-sm font-bold tracking-wide text-ink-100">{PRODUCT_NAME}</div>
           <div className="text-[10px] tracking-[0.18em] text-ink-400">İÇERİK · MÜŞTERİ · BOT</div>
         </div>
       </div>
@@ -112,7 +115,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         {GROUPS.slice(0, 1).map((g) => (
           <div key={g.title}>
             <div className="px-3 pb-1.5 text-[10px] font-mono uppercase tracking-[0.2em] text-ink-500">{g.title}</div>
-            <div className="space-y-0.5">{g.items.map((i) => <NavLink key={i.id} item={i} />)}</div>
+            <div className="space-y-0.5">{g.items.filter((i) => !i.adminOnly || session.role === 'admin').map((i) => <NavLink key={i.id} item={i} />)}</div>
           </div>
         ))}
         <button type="button" onClick={() => setMore((v) => !v)} className={cx('w-full flex items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] font-semibold transition', activeInMore ? 'bg-ink-750 text-ink-100 ring-1 ring-ink-600' : 'text-ink-400 hover:bg-ink-850 hover:text-ink-100')}>
@@ -121,7 +124,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         {(more || activeInMore) && GROUPS.slice(1).map((g) => (
           <div key={g.title}>
             <div className="px-3 pb-1.5 text-[10px] font-mono uppercase tracking-[0.2em] text-ink-500">{g.title}</div>
-            <div className="space-y-0.5">{g.items.map((i) => <NavLink key={i.id} item={i} />)}</div>
+            <div className="space-y-0.5">{g.items.filter((i) => !i.adminOnly || session.role === 'admin').map((i) => <NavLink key={i.id} item={i} />)}</div>
           </div>
         ))}
       </nav>
@@ -159,7 +162,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
               <div key={g.title}>
               <div className="text-[10px] font-mono uppercase tracking-widest text-ink-500 mb-1.5">{g.title}</div>
               <div className="grid grid-cols-2 gap-2.5">
-              {g.items.map((item) => {
+              {g.items.filter((i) => !i.adminOnly || session.role === 'admin').map((item) => {
                 const Icon = item.icon;
                 const active = state.route === item.id;
                 const badge = item.id === 'queue' ? badges.data.approvals : 0;

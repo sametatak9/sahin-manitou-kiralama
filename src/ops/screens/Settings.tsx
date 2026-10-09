@@ -14,7 +14,7 @@ interface Member { user_id: string; role: string; display_name: string | null; c
 interface AuditRow { id: number; at: string; actor: string | null; actor_kind: string; action: string; entity_type: string; entity_id: string | null; summary: string | null; diff: Record<string, unknown> }
 
 export function SettingsScreen() {
-  const [tab, setTab] = useState<'brand' | 'ai' | 'team' | 'audit'>(() => (new URLSearchParams(window.location.search).get('tab') === 'ai' ? 'ai' : 'brand'));
+  const [tab, setTab] = useState<'brand' | 'ai' | 'team' | 'audit'>(() => { const t = new URLSearchParams(window.location.search).get('tab'); return t === 'ai' || t === 'team' || t === 'audit' ? t : 'brand'; });
   return (
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
