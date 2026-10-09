@@ -15,6 +15,11 @@ interface Model {
   gallery: string[]; plan_url: string | null; video_url: string | null; featured: boolean; sort: number; status: 'draft' | 'published' | 'archived'; updated_at: string;
   ai_note: string | null; ai_written_at: string | null; announced_at: string | null; social_caption: string | null;
 }
+interface SitePost {
+  id: string; slug: string; kind: string; title: string; excerpt: string | null; body: string | null; cover_url: string | null;
+  status: 'draft' | 'published' | 'archived'; district: string | null; seo_title: string | null; seo_description: string | null;
+  created_at: string; published_at: string | null;
+}
 interface Media { id: string; url: string; title: string | null }
 
 const SITE = 'https://embayyapi.vercel.app';
@@ -40,6 +45,7 @@ const toForm = (m: Model): Form => ({ title: m.title, code: m.code ?? '', subtit
 export function ShowroomScreen() {
   const { client } = useClient();
   const q = useQuery(async () => unwrap(await db().from('showroom_models').select('*').order('status').order('sort').order('created_at', { ascending: false })) as Model[], [] as Model[], [], ['showroom_models']);
+  const posts = useQuery(async () => unwrap(await db().from('site_posts').select('id,slug,kind,title,excerpt,body,cover_url,status,district,seo_title,seo_description,created_at,published_at').order('created_at', { ascending: false }).limit(50)) as SitePost[], [] as SitePost[], [], ['site_posts']);
   const [tab, setTab] = useState<'active' | 'archived'>('active');
   const [edit, setEdit] = useState<Model | 'new' | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
@@ -90,6 +96,14 @@ export function ShowroomScreen() {
     setMsg(error ? { tone: 'error', text: error.message } : { tone: 'ok', text: status === 'published' ? `"${m.title}" sitede yayında.` : status === 'archived' ? `"${m.title}" arşivlendi.` : `"${m.title}" taslağa alındı.` });
     q.reload();
   };
+  const setPostStatus = async (post: SitePost, status: SitePost['status']) => {
+    if (status === 'published' && (!post.title.trim() || !post.body?.trim())) {
+      setMsg({ tone: 'error', text: 'Yazı başlık ve gövde olmadan yayınlanamaz.' }); return;
+    }
+    const { error } = await db().from('site_posts').update({ status }).eq('id', post.id);
+    setMsg(error ? { tone: 'error', text: error.message } : { tone: 'ok', text: status === 'published' ? `"${post.title}" onaylandı ve public sitede yayımlandı.` : `"${post.title}" arşivlendi.` });
+    posts.reload();
+  };
 
   return (
     <div className="space-y-4">
@@ -139,6 +153,44 @@ export function ShowroomScreen() {
           ))}
         </div>
       )}
+
+      <section className="ops-panel space-y-3 p-4">
+        <div>
+          <h2 className="font-display text-base font-semibold text-ink-100">Site yazıları · taslak ve onay</h2>
+          <p className="mt-1 text-[11px] text-ink-400">Editör Bot yazıyı hazırlar; public sitede görünmesi için burada insanın <b>Onayla ve yayınla</b> demesi gerekir. Yeni bot taslakları sitemap ve blog sayfasına girmez.</p>
+        </div>
+        {posts.loading ? <StateView kind="loading" compact /> : posts.error ? <StateView kind="error" message={posts.error} /> : posts.data.length === 0 ? <StateView kind="empty" title="Henüz site yazısı yok" /> : (
+          <div className="space-y-2">
+            {posts.data.map((post) => (
+              <article key={post.id} className="rounded-2xl bg-ink-900/5 p-3 ring-1 ring-ink-200/60">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Pill tone={post.status === 'published' ? 'go' : post.status === 'archived' ? 'idle' : 'wait'}>{post.status === 'published' ? 'YAYINDA' : post.status === 'archived' ? 'ARŞİV' : 'TASLAK'}</Pill>
+                      <span className="text-[10px] uppercase tracking-wide text-ink-400">{post.kind}{post.district ? ` · ${post.district}` : ''}</span>
+                    </div>
+                    <h3 className="mt-1 text-sm font-semibold text-ink-100">{post.title}</h3>
+                    {post.excerpt && <p className="mt-0.5 text-[11px] text-ink-400">{post.excerpt}</p>}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {post.status === 'draft' && <Button variant="primary" onClick={() => setPostStatus(post, 'published')}>Onayla ve yayınla</Button>}
+                    {post.status !== 'archived' && <Button variant="danger" icon={<Archive className="h-3.5 w-3.5" />} onClick={() => setPostStatus(post, 'archived')}>Arşivle</Button>}
+                    {post.status === 'published' && <a className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-ink-200 ring-1 ring-ink-600" href={`${SITE}/blog/${post.slug}`} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Yazıyı aç</a>}
+                  </div>
+                </div>
+                <details className="mt-2 text-[11px] text-ink-300">
+                  <summary className="cursor-pointer font-semibold">İçeriği incele</summary>
+                  <div className="mt-2 space-y-2 rounded-xl bg-white/60 p-3">
+                    {post.seo_title && <div><b>SEO başlığı:</b> {post.seo_title}</div>}
+                    {post.seo_description && <div><b>SEO açıklaması:</b> {post.seo_description}</div>}
+                    <div className="whitespace-pre-line leading-relaxed">{post.body || 'İçerik gövdesi boş.'}</div>
+                  </div>
+                </details>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <Modal open={edit !== null} onClose={() => setEdit(null)} wide title={edit === 'new' ? 'Yeni model / proje' : 'Modeli düzenle'}
         footer={<>
