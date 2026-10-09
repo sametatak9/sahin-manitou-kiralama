@@ -42,14 +42,29 @@ export interface CopilotResponse {
   evidence: Array<{ type: string; detail: string }>;
 }
 
-const ACTION_TERMS = [
-  'yayınla', 'paylaş', 'gönder', 'takip et', 'takipçi kas', 'beğen', 'yorum yap', 'dm at', 'mesaj gönder',
-  'sil', 'değiştir', 'kaydet', 'oluştur', 'başlat', 'çalıştır', 'onayla', 'bağla', 'bağlan', 'ödeme yap',
-  'bakiye yükle', 'token al', 'yayına al', 'crm\'e aktar', 'portföye aktar',
+// JS'teki \b yalnız ASCII harfleri tanır (ş, ı, ö, ç sınır sayılmaz); bu yüzden Unicode harf sınırı kullanılır.
+const START = '(?<![\\p{L}\\p{N}])';
+const END = '(?![\\p{L}\\p{N}])';
+// Yalnız emir/rica kipleri eylem sayılır: yayınla, yayınlayın, yayınlar mısın, yayınlayabilir misin, yayınlayalım, yayınlamak istiyorum.
+// İsim/edilgen biçimler (gönderi, bağlantı, onaylanan, araştırma, kesildi) eşleşmez.
+const REQUEST = '(?:|y?[ıiuü]n(?:[ıiuü]z)?|y?[ae]l[ıi]m|y?[ae]bilir(?:sin(?:iz)?|\\s*misin(?:iz)?)?|[ıiuüae]?r\\s*m[ıiuü]s[ıiuü]n(?:[ıiuü]z)?|m[ae]k\\s+ist\\p{L}*|s[ae]n[ae])';
+
+type Term = { label: string; re: RegExp };
+const verb = (label: string, stem = label): Term => ({ label, re: new RegExp(`${START}${stem}${REQUEST}${END}`, 'u') });
+const word = (label: string, pattern = label): Term => ({ label, re: new RegExp(`${START}${pattern}${END}`, 'u') });
+
+const STRONG_ACTIONS: Term[] = [
+  verb('yayınla'), verb('yayına al'), verb('paylaş'), verb('gönder'), verb('sil'), verb('başlat'), verb('çalıştır'),
+  verb('onayla'), verb('bağla'), verb('bağlan'), verb('takip et', 'takip e[td]'), verb('takipçi kas'), verb('beğen'),
+  verb('yorum yap'), verb('dm at'), verb('ödeme yap'), verb('yükle'), verb('token al'), verb('aktar'),
 ];
-const SOURCE_TERMS = [
-  'araştır', 'güncel', 'şu an', 'internetten', 'webde', "web'de", 'google sırası', 'sıralama', 'seo sonucu',
-  'tavily', 'kaynaklı bul', 'müşteri adayı bul', 'lead bul', 'profil bul', 'hesap bul', 'rakip bul',
+// İçerik fikri isterken de geçebilen fiiller: açıklama/öneri sorusuyla birlikteyse metin yanıtına izin verilir.
+const SOFT_ACTIONS: Term[] = [verb('oluştur'), verb('kaydet', 'kayde[td]'), verb('değiştir')];
+const EDUCATIONAL = new RegExp(`${START}(?:nasıl|neden|ne gerek|ne tür|hangi|açıkla|anlat|öner|fikir|plan|kontrol listesi|karşılaştır)`, 'u');
+const SOURCE_TERMS: Term[] = [
+  verb('araştır'), verb('araştırma yap', 'araştırma(?:sı)? yap'), verb('bul'), word('güncel'), word('şu an', 'şu an(?:da)?'),
+  word('internetten', 'internet(?:ten|te)'), word('webde', "web'?(?:de|te|ten)"), word('google sırası', "google(?:'?da)? sıra\\p{L}*"),
+  word('sıralama', 'sıralama\\p{L}*'), word('seo sonucu', 'seo sonuc\\p{L}*'), word('tavily'),
 ];
 
 function normalize(value: string) {
@@ -61,9 +76,7 @@ function normalize(value: string) {
     .trim();
 }
 
-function includesTerm(text: string, term: string) {
-  return text.includes(term);
-}
+const findTerm = (text: string, terms: Term[]) => terms.find((t) => t.re.test(text))?.label;
 
 /**
  * Copilot yalnız bağlam okur ve açıklama üretir. Bu karar hiçbir zaman modele
@@ -73,13 +86,13 @@ export function classifyCopilotIntent(input: string): CopilotDecision {
   const text = normalize(input);
   if (!text) return { mode: 'blocked_action', reason: 'Mesaj boş olamaz.' };
 
-  const educational = /\b(nasıl|neden|ne gerekir|açıkla|anlat|öner|fikir|planla|kontrol listesi|karşılaştır)\b/u.test(text);
-  const action = ACTION_TERMS.find((term) => includesTerm(text, term));
-  if (action && (!educational || /\b(yayınla|paylaş|gönder|sil|başlat|çalıştır|onayla|bağla|takip et|dm at)\b/u.test(text))) {
+  const soft = findTerm(text, SOFT_ACTIONS);
+  const action = findTerm(text, STRONG_ACTIONS) ?? (soft && !EDUCATIONAL.test(text) ? soft : undefined);
+  if (action) {
     return { mode: 'blocked_action', reason: `“${action}” dış eylem veya durum değişikliği ister; Copilot bunu çalıştırmaz.` };
   }
 
-  const source = SOURCE_TERMS.find((term) => includesTerm(text, term));
+  const source = findTerm(text, SOURCE_TERMS);
   if (source) return { mode: 'needs_source', reason: `“${source}” canlı/kaynaklı kanıt gerektirir; bunun için kontrollü bot görevi gerekir.` };
 
   return { mode: 'read_only', reason: 'Tenant bağlamı, kayıtlı görev özetleri ve yönetişimli skill kataloğu ile sınırlı yanıt.' };
