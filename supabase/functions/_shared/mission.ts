@@ -18,6 +18,7 @@ import { researchReportSummary } from './pure/research-report.ts';
 import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
 import { classifyFindingType, FINDING_TYPE_LABEL, type FindingType } from './pure/finding-taxonomy.ts';
+import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
 
 type Db = SupabaseClient;
 
@@ -35,6 +36,7 @@ export interface Finding {
   relevance?: number; fit?: string;
   verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
   finding_type?: FindingType;
+  verification?: 'technical_http';
   publication?: PublicationEvidence;
 }
 export interface MissionAudit {
@@ -554,6 +556,8 @@ export async function stepMission(db: Db, m: MissionRow) {
   await logSkillsLoadedOnce(db, m, ctx.skills, ctx.selectedSkills);
   const policy = missionPolicy(ctx, m);
   const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
+  const seoMission = Boolean(m.target_url && (ctx.slug === 'seo-bot' || /technical seo|teknik seo|robots\.txt|sitemap\.xml|canonical|json-ld/i.test(`${m.title} ${m.goal} ${m.search_for ?? ''}`)));
+  let seoAudit: Awaited<ReturnType<typeof runSeoAudit>> | null = null;
   let stepFailed = false;
   // Otomatik (zamanlanmış) görev: önceki günlerde raporlanan kayıtları tekrar raporlama
   const seenBefore = new Set<string>();
@@ -565,8 +569,8 @@ export async function stepMission(db: Db, m: MissionRow) {
   const addFinding = (f: Omit<Finding, 'at' | 'step'>) => {
     if (!f.url || !f.title) return false;
     if (findingDateIssue(f.publication, f.url, m)) return false;
-    if (seenBefore.has(canonical(f.url))) return false;
-    if (policy === 'lead' && isStaleFinding(f)) return false; // güncel fırsat kuralları kalıcı sektör araştırmasına uygulanmaz
+    if (seenBefore.has(canonical(f.url)) && f.verification !== 'technical_http') return false;
+    if (policy === 'lead' && f.verification !== 'technical_http' && isStaleFinding(f)) return false; // güncel fırsat kuralları kalıcı sektör araştırmasına uygulanmaz
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
     findings.push({ ...f, finding_type: f.finding_type ?? classifyFindingType(f), at: new Date().toISOString(), step }); return true;
   };
@@ -583,16 +587,36 @@ export async function stepMission(db: Db, m: MissionRow) {
     let pageNote = '';
     if (m.target_url && !visited.has(canonical(m.target_url))) {
       const t0 = Date.now();
-      const p = await fetchPage(m.target_url);
-      visited.add(canonical(m.target_url)); sources.push({ url: p.url || m.target_url, title: p.title ?? undefined, publication: p.publication });
-      await logStep(db, m, step, 'fetch', p.ok ? `Hedef sayfa okundu: ${p.title || p.url} (HTTP ${p.status}, ${p.text.length} karakter metin, ${p.links.length} link)`
-        : `Hedef sayfa doğrudan okunmadı: ${p.error ?? `HTTP ${p.status} (site bot erişimini engelliyor olabilir)`}`, m.target_url,
-        { title: p.title, description: p.description, og: p.og, headings: p.headings.slice(0, 10), links: p.links.length }, t0);
-      pageNote = pageDigest(p);
-      for (const h of keywordSnippets(p.text, terms)) addFinding({ title: `“${h.term}” hedef sayfada geçiyor`, detail: h.snippet, url: p.url || m.target_url, evidence: h.snippet, posted: p.publication?.posted, publication: p.publication });
-      if (p.og['og:description'] && !m.search_for) addFinding({ title: 'Sayfanın kendi tanımı (meta)', detail: p.og['og:description'], url: p.url || m.target_url, evidence: p.og['og:description'], posted: p.publication?.posted, publication: p.publication });
+      if (seoMission && step === 1) {
+        seoAudit = await runSeoAudit(m.target_url);
+        const addSource = (url: string, title?: string) => {
+          if (!sources.some((s) => canonical(s.url) === canonical(url))) sources.push({ url, title });
+        };
+        visited.add(canonical(seoAudit.final_url));
+        addSource(seoAudit.final_url, seoAudit.title ?? undefined);
+        addSource(seoAudit.robots.url, 'robots.txt');
+        addSource(seoAudit.sitemap.url, 'sitemap.xml');
+        const detail = seoAuditDetail(seoAudit);
+        await logStep(db, m, step, 'seo_audit', `Gerçek HTTP SEO denetimi: skor %${seoAudit.score} · ${seoAudit.checks.filter((x) => x.level === 'ok').length} uygun · ${seoAudit.checks.filter((x) => x.level !== 'ok').length} uyarı/hata`, m.target_url,
+          { url: seoAudit.final_url, status: seoAudit.status, response_ms: seoAudit.response_ms, html_bytes: seoAudit.html_bytes, checks: seoAudit.checks, robots: { url: seoAudit.robots.url, status: seoAudit.robots.status }, sitemap: { url: seoAudit.sitemap.url, status: seoAudit.sitemap.status, urls: seoAudit.sitemap.urls } }, t0);
+        addFinding({ title: 'Teknik SEO HTTP baseline', detail: `Gerçek HTTP denetimi ${seoAudit.final_url} üzerinde tamamlandı. Skor: %${seoAudit.score}.\n${detail}`, url: seoAudit.final_url,
+          evidence: detail.slice(0, 1800), fit: 'Teknik SEO ölçümü; müşteri adayı veya yayın başarısı değildir.', relevance: 10, finding_type: 'market_reference', verification: 'technical_http' });
+        pageNote = detail;
+        stopMet = true;
+        stopReason = 'Teknik SEO baseline gerçek HTTP ile tamamlandı';
+      } else {
+        const p = await fetchPage(m.target_url);
+        visited.add(canonical(m.target_url)); sources.push({ url: p.url || m.target_url, title: p.title ?? undefined, publication: p.publication });
+        await logStep(db, m, step, 'fetch', p.ok ? `Hedef sayfa okundu: ${p.title || p.url} (HTTP ${p.status}, ${p.text.length} karakter metin, ${p.links.length} link)`
+          : `Hedef sayfa doğrudan okunmadı: ${p.error ?? `HTTP ${p.status} (site bot erişimini engelliyor olabilir)`}`, m.target_url,
+          { title: p.title, description: p.description, og: p.og, headings: p.headings.slice(0, 10), links: p.links.length }, t0);
+        pageNote = pageDigest(p);
+        for (const h of keywordSnippets(p.text, terms)) addFinding({ title: `“${h.term}” hedef sayfada geçiyor`, detail: h.snippet, url: p.url || m.target_url, evidence: h.snippet, posted: p.publication?.posted, publication: p.publication });
+        if (p.og['og:description'] && !m.search_for) addFinding({ title: 'Sayfanın kendi tanımı (meta)', detail: p.og['og:description'], url: p.url || m.target_url, evidence: p.og['og:description'], posted: p.publication?.posted, publication: p.publication });
+      }
     }
 
+    if (!seoAudit) {
     // AI kredisi/anahtarı çalışmıyorsa ve hedef link varsa görev durmaz: AI'sız sayfa taramasıyla sürer
     const aiDown = Boolean(m.target_url && (m.error_kind === 'ai_credit' || m.error_kind === 'ai_auth'));
     // Harcama freni: günlük / aylık / görev başı sınır dolduysa yeni AI çağrısı yapılmaz
@@ -756,6 +780,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         await logStep(db, m, step, 'analyze', 'Taranacak yeni sayfa kalmadı. Web araması için çalışan bir AI anahtarı/bakiyesi gerekir (Ayarlar → AI anahtarı).', null, null, t0);
         if (!m.target_url || step > 1) { await persist(); return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut }, 'no_ai'); }
       }
+    }
     }
   } catch (e) {
     const msg = String((e as Error).message || e);
@@ -1016,6 +1041,9 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     const inSources = srcTitle.has(canonical(f.url));
     const publication = srcPublication.get(canonical(f.url));
     f.publication = publication; f.posted = publication?.posted;
+    if (f.verification === 'technical_http') {
+      return { f, reachable: inSources, excerpt: f.evidence || f.detail, match: inSources, desc: '', searchBacked: false, searchBackedReason: undefined };
+    }
     let host = ''; try { host = new URL(f.url).hostname; } catch { /* */ }
     const searchBacked = policy === 'growth' ? searchBackedSocialProfile({ url: f.url, findingTitle: f.title, sourceTitle: srcTitle.get(canonical(f.url)), detail: f.detail, evidence: f.evidence, fit: f.fit, sourceUrlPresent: inSources }) : null;
     if (searchBacked?.ok) return { f, reachable: true, excerpt: `Herkese açık arama sonucu profil başlığı/özeti: ${srcTitle.get(canonical(f.url)) || f.title}\n${f.evidence || f.detail || ''}`, match: true, desc: '', searchBacked: true, searchBackedReason: searchBacked.reason };
@@ -1051,6 +1079,12 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
   checks.forEach((c, i) => {
+    if (c.f.verification === 'technical_http') {
+      c.f.verdict = 'verified';
+      c.f.verdict_reason = 'Deterministik gerçek HTTP SEO audit çıktısı ve aynı görevde kaydedilmiş kaynak URL ile doğrulandı';
+      c.f.summary = `Teknik HTTP denetimi gerçek sayfa yanıtından üretildi; skor ve her kontrol adım günlüğünde saklandı.`;
+      return;
+    }
     const dateIssue = findingDateIssue(c.f.publication, c.f.url, cur) || (policy === 'lead' ? isStaleFinding(c.f) : null);
     if (dateIssue) {
       c.f.verdict = 'rejected';

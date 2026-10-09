@@ -6,6 +6,7 @@ import { normalizeDomain } from '../pure/rules.ts';
 import { contentDraftErrors, normalizeContentDraft } from '../pure/content.ts';
 import { publishContent } from '../publisher.ts';
 import { secret as appSecret } from '../secrets.ts';
+import { runSeoAudit, seoAuditDetail } from '../pure/seo-audit.ts';
 
 export type ToolHandler = (ctx: EngineCtx, input: Record<string, unknown>) => Promise<unknown>;
 
@@ -244,35 +245,13 @@ const handlers: Record<string, ToolHandler> = {
 
   async seo_audit(ctx, input) {
     const url = str(input.url, Deno.env.get('PUBLIC_SITE_URL') || 'https://embayyapi.vercel.app/');
-    const started = Date.now();
-    const res = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 'EmbaySEOBot/1.0 (+panel)' } });
-    const html = await res.text();
-    const ms = Date.now() - started;
-    const pick = (re: RegExp) => re.exec(html)?.[1]?.trim() ?? null;
-    const origin = new URL(res.url).origin;
-    const [robots, sitemap] = await Promise.all([
-      fetch(`${origin}/robots.txt`).then(async (r) => ({ status: r.status, body: (await r.text()).slice(0, 500) })).catch((e) => ({ status: 0, body: String(e) })),
-      fetch(`${origin}/sitemap.xml`).then(async (r) => ({ status: r.status, urls: ((await r.text()).match(/<loc>/g) || []).length })).catch(() => ({ status: 0, urls: 0 })),
-    ]);
-    const title = pick(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const description = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i);
-    const h1 = (html.match(/<h1[\s>]/gi) || []).length;
-    const findings: Array<{ level: 'error' | 'warn' | 'ok'; message: string }> = [];
-    const add = (cond: boolean, level: 'error' | 'warn', bad: string, good: string) => findings.push(cond ? { level: 'ok', message: good } : { level, message: bad });
-    add(res.status === 200, 'error', `HTTP ${res.status}`, 'HTTP 200');
-    add(Boolean(title) && title!.length >= 20 && title!.length <= 65, 'warn', `Title uzunluğu uygun değil (${title?.length ?? 0})`, `Title uygun (${title?.length})`);
-    add(Boolean(description) && description!.length >= 70 && description!.length <= 165, 'warn', `Meta description uygun değil (${description?.length ?? 0})`, 'Meta description uygun');
-    add(/<link[^>]+rel=["']canonical["']/i.test(html), 'warn', 'Canonical etiketi yok', 'Canonical var');
-    add(/<html[^>]+lang=["']tr/i.test(html), 'warn', 'html lang="tr" yok', 'lang="tr" var');
-    add(/application\/ld\+json/i.test(html), 'warn', 'JSON-LD yapısal veri yok', 'JSON-LD var');
-    add(/<meta[^>]+property=["']og:title/i.test(html), 'warn', 'Open Graph etiketleri yok', 'Open Graph var');
-    add(!/<meta[^>]+name=["']robots["'][^>]+noindex/i.test(html), 'error', 'Sayfa noindex!', 'Indexlenebilir');
-    add(h1 > 0, 'warn', 'Sunucu HTML’inde H1 yok (SPA: içerik JS ile render ediliyor olabilir)', `H1 sayısı: ${h1}`);
-    add(robots.status === 200, 'warn', `robots.txt ${robots.status}`, 'robots.txt var');
-    add(sitemap.status === 200 && sitemap.urls > 0, 'warn', `sitemap.xml ${sitemap.status}`, `sitemap.xml ${sitemap.urls} URL`);
-    add(ms < 1500, 'warn', `Yanıt süresi yavaş (${ms} ms)`, `Yanıt süresi ${ms} ms`);
-    return { url: res.url, status: res.status, response_ms: ms, title, description, h1_count: h1, html_bytes: html.length, robots_status: robots.status, sitemap, findings,
-      score: Math.round((findings.filter((f) => f.level === 'ok').length / findings.length) * 100) };
+    const audit = await runSeoAudit(url);
+    return {
+      ...audit,
+      findings: audit.checks,
+      detail: seoAuditDetail(audit),
+      robots_status: audit.robots.status,
+    };
   },
 
   async create_report(ctx, input) {
