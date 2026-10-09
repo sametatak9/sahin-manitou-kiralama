@@ -5,7 +5,7 @@ import { Download, Printer, Radio, Search } from 'lucide-react';
 import { FindingCard } from './FindingCard';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
-import type { Mission, MissionStep } from '../lib/types';
+import type { Mission, MissionSkillMeta, MissionSkillUsage, MissionStep } from '../lib/types';
 import { Button, cx, Modal, Notice, Pill, StateView } from '../ui';
 import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
 
@@ -19,15 +19,19 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
   const m = q.data;
   const live = m && (m.status === 'running' || m.status === 'finalizing');
   const counts = findingCounts(m?.findings ?? []);
-  const loadedSkills = useMemo(() => {
+  const skillUsage = useMemo<MissionSkillUsage>(() => {
     const step = stepsQ.data.find((x) => x.action === 'skills_loaded');
     const data = step?.data;
-    if (!data || typeof data !== 'object') return [] as Array<{ name: string; version: number }>;
-    const raw = (data as { skills?: unknown }).skills;
-    if (!Array.isArray(raw)) return [] as Array<{ name: string; version: number }>;
-    return raw.filter((x): x is { name: string; version?: number } => Boolean(x && typeof x === 'object' && typeof (x as { name?: unknown }).name === 'string'))
-      .map((x) => ({ name: x.name.slice(0, 80), version: Number(x.version) || 1 }));
+    if (!data || typeof data !== 'object') return { count: 0, detailed_count: 0, skills: [], detailed_skills: [] };
+    const asSkills = (value: unknown): MissionSkillMeta[] => !Array.isArray(value) ? [] : value
+      .filter((x): x is { id?: unknown; name: string; version?: unknown } => Boolean(x && typeof x === 'object' && typeof (x as { name?: unknown }).name === 'string'))
+      .map((x) => ({ id: typeof x.id === 'string' ? x.id : '', name: x.name.slice(0, 80), version: Number(x.version) || 1 }));
+    const typed = data as MissionSkillUsage;
+    const skills = asSkills(typed.skills);
+    const detailed = asSkills(typed.detailed_skills);
+    return { count: Number(typed.count) || skills.length, detailed_count: Number(typed.detailed_count) || detailed.length, skills, detailed_skills: detailed };
   }, [stepsQ.data]);
+  const shownSkills = skillUsage.detailed_skills?.length ? skillUsage.detailed_skills : (skillUsage.skills ?? []);
   const list = useMemo(() => {
     const t = term.trim().toLocaleLowerCase('tr-TR');
     return (m?.findings ?? []).map((f, i) => ({ f, i })).reverse().filter(({ f }) => {
@@ -69,8 +73,9 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
               <span className="opacity-80">Adım {m.step_count}/{m.max_steps}</span>
             </div>
             <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px]">
-              <b>{m.skill_ids?.length ?? loadedSkills.length} yetenek kullanıldı</b>
-              {loadedSkills.length > 0 && <span className="opacity-80"> · {loadedSkills.slice(0, 3).map((s) => `${s.name} v${s.version}`).join(' · ')}{loadedSkills.length > 3 ? ` · +${loadedSkills.length - 3}` : ''}</span>}
+              <b>{skillUsage.count || m.skill_ids?.length || 0} yetenek snapshot’landı</b>
+              {!!skillUsage.detailed_count && <span className="opacity-80"> · {skillUsage.detailed_count} ayrıntılı yüklendi</span>}
+              {shownSkills.length > 0 && <span className="opacity-80"> · {shownSkills.slice(0, 3).map((s) => `${s.name} v${s.version}`).join(' · ')}{shownSkills.length > 3 ? ` · +${shownSkills.length - 3}` : ''}</span>}
             </div>
           </div>
           {m.error && <Notice tone={m.status === 'failed' ? 'error' : 'warn'}>{m.error}</Notice>}

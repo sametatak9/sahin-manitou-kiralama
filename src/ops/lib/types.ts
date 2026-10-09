@@ -69,6 +69,8 @@ export interface MissionFinding {
   relevance?: number; fit?: string; verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
 }
 export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
+export interface MissionSkillMeta { id: string; name: string; version: number }
+export interface MissionSkillUsage { count: number; detailed_count?: number; skills?: MissionSkillMeta[]; detailed_skills?: MissionSkillMeta[] }
 export interface Mission {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: 'running' | 'finalizing' | 'completed' | 'stopped' | 'failed' | 'blocked';

@@ -16,6 +16,7 @@ import { findingDateIssue, makePublicationEvidence, publicationFromHtml, sourceS
 import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './pure/policy.ts';
 import { researchReportSummary } from './pure/research-report.ts';
 import { searchBackedSocialProfile } from './pure/social-profile.ts';
+import { routeSkills } from './pure/skill-router.ts';
 
 type Db = SupabaseClient;
 
@@ -466,11 +467,12 @@ async function logStep(db: Db, m: MissionRow, step: number, action: string, mess
   await db.from('bot_mission_steps').insert({ mission_id: m.id, step_no: step, action, target: target ?? null, message: message.slice(0, 2000), data: data ?? null,
     duration_ms: started ? Date.now() - started : null });
 }
-async function logSkillsLoadedOnce(db: Db, m: MissionRow, skills: Array<{ id: string; name: string; version: number }>) {
+async function logSkillsLoadedOnce(db: Db, m: MissionRow, skills: Array<{ id: string; name: string; version: number }>, selected: Array<{ id: string; name: string; version: number }> = []) {
   if (m.step_count !== 0) return;
   const safe = skills.map((s) => ({ id: s.id, name: s.name.slice(0, 120), version: Number(s.version) || 1 }));
+  const selectedSafe = selected.map((s) => ({ id: s.id, name: s.name.slice(0, 120), version: Number(s.version) || 1 }));
   const { error } = await db.from('bot_mission_steps').insert({ mission_id: m.id, step_no: 0, action: 'skills_loaded', target: null,
-    message: `${safe.length} uygun yetenek bağlamı yüklendi`, data: { count: safe.length, skills: safe }, duration_ms: null });
+    message: `${safe.length} uygun yetenek snapshot'ı · ${selectedSafe.length} ayrıntılı yüklendi`, data: { count: safe.length, detailed_count: selectedSafe.length, skills: safe, detailed_skills: selectedSafe }, duration_ms: null });
   // The partial unique index makes this safe if two leased workers race. A duplicate
   // audit event is expected and harmless; every other database error must surface.
   if (error && error.code !== '23505') throw error;
@@ -486,32 +488,41 @@ function pageDigest(p: PageFacts) {
     p.text ? `Metin (ilk bölüm): ${p.text.slice(0, 3500)}` : '',
   ].filter(Boolean).join('\n');
 }
-interface SkillRow { id: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number }
-const SKILL_COLS = 'id,display_name,instructions,enabled,lifecycle,search_terms,sources,good_examples,bad_examples,version';
+interface SkillRow { id: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; category: string | null; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number }
+const SKILL_COLS = 'id,display_name,instructions,enabled,lifecycle,category,search_terms,sources,good_examples,bad_examples,version';
 /** Bot profili + kullanılacak yetenekler. Kural: görevlerde YALNIZCA Akademi'de onaylanmış (approved) yetenekler kullanılır;
- *  yetenek testi (purpose=skill_test) görevinde test edilen yetenek onaysız olabilir. */
-async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose'>) {
+ * yetenek testi (purpose=skill_test) görevinde test edilen yetenek onaysız olabilir. */
+async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose' | 'title' | 'goal' | 'search_for' | 'report_spec'>) {
   const isTest = m?.purpose === 'skill_test';
   let skills: SkillRow[] = [];
   let bot: { name?: string; instructions?: string; description?: string; slug?: string; bot_type?: string } | null = null;
   if (m?.skill_ids?.length) {
     const { data } = await db.from('automation_skills').select(SKILL_COLS).in('id', m.skill_ids);
-    skills = (data || []) as SkillRow[];
+    const snapshotOrder = new Map(m.skill_ids.map((id, index) => [id, index]));
+    skills = ((data || []) as SkillRow[]).sort((a, b) => (snapshotOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (snapshotOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
   } else if (botId) {
-    const { data } = await db.from('automation_bot_skills').select(`automation_skills(${SKILL_COLS})`).eq('bot_id', botId);
+    const { data } = await db.from('automation_bot_skills').select(`skill_id,position,automation_skills(${SKILL_COLS})`).eq('bot_id', botId).order('position', { ascending: true });
     // deno-lint-ignore no-explicit-any
     skills = (data || []).map((r: any) => (Array.isArray(r.automation_skills) ? r.automation_skills[0] : r.automation_skills)).filter(Boolean);
   }
   if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description,slug,bot_type').eq('id', botId).maybeSingle());
   skills = skills.filter((s) => s.enabled && (isTest || s.lifecycle === 'approved'));
-  const withText = skills.filter((s) => s.instructions);
+  const route = routeSkills(skills.map((s) => ({ id: s.id, name: s.display_name, version: s.version, category: s.category, instructions: s.instructions, search_terms: s.search_terms, sources: s.sources })),
+    [m?.title, m?.goal, m?.search_for, m?.report_spec].filter(Boolean).join('\n'), 8);
+  const selectedIds = new Set(route.selectedIds);
+  const selected = skills.filter((s) => selectedIds.has(s.id));
+  const withText = selected.filter((s) => s.instructions);
+  const metadata = (items: SkillRow[]) => items.map((s) => ({ id: s.id, name: s.display_name, version: s.version }));
   return {
     name: bot?.name ?? 'Bot',
     slug: bot?.slug, bot_type: bot?.bot_type,
-    skills: skills.map((s) => ({ id: s.id, name: s.display_name, version: s.version })),
-    terms: [...new Set(skills.flatMap((s) => s.search_terms || []))],
-    sources: [...new Set(skills.flatMap((s) => s.sources || []))],
+    skills: metadata(skills),
+    selectedSkills: metadata(selected),
+    deferredSkills: metadata(skills.filter((s) => !selectedIds.has(s.id))),
+    terms: [...new Set(selected.flatMap((s) => s.search_terms || []))],
+    sources: [...new Set(selected.flatMap((s) => s.sources || []))],
     text: [bot?.description, bot?.instructions ? `Bot talimatı: ${bot.instructions}` : '',
+      `YETENEK KATALOĞU: ${selected.length}/${skills.length} yetenek bu görevin amacına göre ayrıntılı yüklendi. Snapshot'taki diğer yetenekler bağlıdır ancak bu görevde ayrıntılı talimat olarak kullanılmadı.`,
       ...withText.map((s) => [`Yetenek «${s.display_name}» (sürüm ${s.version}): ${s.instructions}`,
         s.good_examples ? `  ✔ İyi bulgu örnekleri: ${s.good_examples}` : '', s.bad_examples ? `  ✘ Elenecek örnekler: ${s.bad_examples}` : ''].filter(Boolean).join('\n'))].filter(Boolean).join('\n'),
   };
@@ -533,7 +544,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const ctx = await botContext(db, m.bot_id, m);
-  await logSkillsLoadedOnce(db, m, ctx.skills);
+  await logSkillsLoadedOnce(db, m, ctx.skills, ctx.selectedSkills);
   const policy = missionPolicy(ctx, m);
   const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
   let stepFailed = false;
