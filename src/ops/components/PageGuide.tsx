@@ -6,6 +6,7 @@ import type { Route } from '../session';
 
 const GUIDE: Partial<Record<Route, { what: string; tips: string[] }>> = {
   home: { what: 'Günün özeti: botlar ne yaptı, neyin onayı bekliyor, hangi uygulama bağlı.', tips: ['Kırmızı/sarı satıra dokunun → ilgili ekrana gider.', 'Onay bekleyen işler sizi bekler; botlar onaysız dışarıya bir şey göndermez.'] },
+  copilot: { what: 'Salt-okunur Agency Copilot: seçili müşterinin kayıtlı bağlamını ve son görev özetlerini karar desteğine çevirir.', tips: ['Dış eylem, yayın, takip, yorum, DM, kayıt değişikliği ve görev başlatma yapmaz.', 'Canlı araştırma veya müşteri adayı için Botlar ekranında kaynaklı, kontrollü görev açın.', 'Yanıtta “veri yok” denmesi uydurma yerine doğru davranıştır.'] },
   bots: { what: 'Botlarınız burada. Bir bota görev verin, süre belirleyin; bot araştırır ve rapor hazırlar.', tips: ['“Görev ver” → hazır görevlerden birini seçmeniz yeterli.', 'Görev sürerken “Canlı rapor” ile bulunanları anında görürsünüz.', 'Ekonomik model (Sonnet) aynı işi daha az krediyle yapar.'] },
   reports: { what: 'Bot sonuçları: inşaat iş fırsatları, takip listesi, etkileşim ve tüm görevler.', tips: ['İlk sekme: botun bulduğu villa/tadilat/dönüşüm işleri.', 'Takip listesi: Sosyal Büyüme Botu’nun bulduğu sektör hesapları (elle takip).', 'Manitou aramaları kapalı — sadece inşaat.'] },
   approvals: { what: 'Botların hazırladığı paylaşım, mesaj ve teklifler burada onayınızı bekler.', tips: ['Onaylamadığınız hiçbir şey dışarıya gönderilmez.', 'Hatırlatma mesajlarında “WhatsApp’ta aç” ile tek dokunuşla gönderirsiniz.'] },

@@ -15,6 +15,7 @@ interface NavItem { id: Route; label: string; icon: typeof Bot; hint: string }
 const GROUPS: Array<{ title: string; items: NavItem[] }> = [
   { title: 'Ana', items: [
     { id: 'home', label: 'Ana Sayfa', icon: Gauge, hint: 'Bugün · yapılacaklar · sonuçlar' },
+    { id: 'copilot', label: 'Agency Copilot', icon: Sparkles, hint: 'Salt-okunur karar desteği' },
     { id: 'queue', label: 'İçerik Merkezi', icon: Clapperboard, hint: 'Takvim · video · kontrol · üret · medya' },
     { id: 'leads', label: 'Müşteri Adayları', icon: Inbox, hint: 'Fiyat soranlar · başvurular' },
     { id: 'growth', label: 'Büyüme', icon: TrendingUp, hint: 'Takipçi · etkileşim kartları' },
@@ -36,9 +37,10 @@ const GROUPS: Array<{ title: string; items: NavItem[] }> = [
     { id: 'settings', label: 'Ayarlar', icon: Settings, hint: 'Marka · AI · ekip' },
   ] },
 ];
-const MOBILE: Route[] = ['home', 'queue', 'leads', 'bots'];
+const MOBILE: Route[] = ['home', 'copilot', 'queue', 'leads', 'bots'];
 const MOBILE_LABEL: Partial<Record<Route, string>> = {
   home: 'Ana',
+  copilot: 'Copilot',
   leads: 'Adaylar',
   growth: 'Büyüme',
   reels: 'İçerikler',
