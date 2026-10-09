@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { auditCapabilitySkill, connectorHealthState, summarizeCapabilityAudit } from '../supabase/functions/_shared/pure/capability-audit.ts';
+import { auditCapabilitySkill, connectorHealthState, missionCapabilitySnapshot, summarizeCapabilityAudit } from '../supabase/functions/_shared/pure/capability-audit.ts';
 
 const run = () => {
   assert.equal(connectorHealthState({ registered: false, implemented: false }), 'not_registered');
@@ -27,9 +27,22 @@ const run = () => {
   assert.equal(report.prompt_only, 1);
   assert.equal(report.tool_backed, 2);
   assert.equal(report.handlers_registered, 1);
+  assert.equal(report.handler_verified, 0);
   assert.equal(report.handlers_missing, 1);
   assert.equal(report.prompt_verified, 1);
   assert.equal(report.unverified, 2);
+
+  const snapshot = missionCapabilitySnapshot([
+    { id: 'p', skill_key: 'prompt_skill', display_name: 'Prompt', version: 3, capability_kind: 'prompt_only', capability_test_status: 'prompt_verified' },
+    { id: 't', skill_key: 'seo', display_name: 'SEO', version: 2, capability_kind: 'tool_backed', handler_key: 'seo_audit', capability_test_status: 'unverified', tools: [{ tool_key: 'seo_audit', handler: 'seo_audit', platform: 'web', active: true }] },
+    { id: 'c', skill_key: 'meta', display_name: 'Meta', version: 1, capability_kind: 'connector_backed', connector_key: 'instagram', connector: { key: 'instagram', implemented: true, status: 'oauth_required', health_state: 'config_required', last_ok_at: null, last_failed_at: null, failed_24h: 0 } },
+  ], new Set(['seo_audit']));
+  assert.equal(snapshot.skills[0]?.version, 3);
+  assert.equal(snapshot.skills[1]?.handler_registered, true);
+  assert.equal(snapshot.skills[2]?.connector_health, 'config_required');
+  assert.equal(snapshot.summary.total_skills, 3);
+  assert.equal(snapshot.summary.handlers_registered, 1);
+  assert.equal(snapshot.summary.connectors_not_ready, 1);
 };
 
 run();

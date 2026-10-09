@@ -21,7 +21,8 @@
     "test:seo-audit": "tsx tests/seo-audit.test.ts",
     "test:content-quality": "tsx tests/content-quality.test.ts",
     "test:capability-registry": "tsx tests/capability-registry.test.ts",
-    "test:capability-audit": "tsx tests/capability-audit.test.ts"
+    "test:capability-audit": "tsx tests/capability-audit.test.ts",
+    "test:mission-capability-audit": "tsx tests/capability-audit.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
