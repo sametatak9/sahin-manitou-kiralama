@@ -5,10 +5,12 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { finalizeMission, runDueMissions, stepMission, type MissionRow } from '../_shared/mission.ts';
 import { aiKeyAvailability, getAiKey, initKeyStore, liveKeyTest, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
 import { budgetBlock, spendStatus } from '../_shared/ai/budget.ts';
+import { normalizeSkillIds, snapshotSkillIds } from '../_shared/pure/skill-snapshot.ts';
 
 type Db = SupabaseClient;
 // Görev başlatılırken seçilebilen modeller (varsayılan: botun AI ajanı, yoksa claude-sonnet-5 — daha ekonomik)
 const ALLOWED_MODELS = ['claude-opus-5', 'claude-sonnet-5'];
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const cors = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-worker-secret',
@@ -50,11 +52,27 @@ async function api(c: Db, req: Request) {
       const target = String(body.target_url || '').trim();
       if (target && !/^https?:\/\//i.test(target)) throw new HttpError(400, 'Hedef link http(s):// ile başlamalı');
       const minutes = Math.min(240, Math.max(1, Math.round(Number(body.duration_minutes) || 10)));
-      if (body.bot_id) {
-        const { data: bot } = await c.from('automation_bots').select('status').eq('id', body.bot_id).maybeSingle();
+      const botId = typeof body.bot_id === 'string' ? body.bot_id.trim() : '';
+      let botSkillIds: string[] = [];
+      if (botId) {
+        const { data: bot, error: botError } = await c.from('automation_bots').select('status').eq('id', botId).maybeSingle();
+        if (botError) throw botError;
         if (!bot) throw new HttpError(404, 'Bot bulunamadı');
         if (bot.status === 'archived' || bot.status === 'paused') throw new HttpError(409, `Bot ${bot.status === 'paused' ? 'duraklatılmış' : 'arşivlenmiş'}`);
+        const { data: relations, error: relationError } = await c.from('automation_bot_skills').select('skill_id,position').eq('bot_id', botId).order('position', { ascending: true }).limit(100);
+        if (relationError) throw relationError;
+        botSkillIds = normalizeSkillIds((relations || []).map((r) => r.skill_id), 100);
       }
+      const requestedSkillIds = normalizeSkillIds(body.skill_ids, 100).filter(isUuid);
+      const eligibleCandidates = botId ? botSkillIds : requestedSkillIds;
+      let eligibleIds: string[] = [];
+      if (eligibleCandidates.length) {
+        const { data: eligible, error: skillError } = await c.from('automation_skills').select('id').in('id', eligibleCandidates)
+          .eq('enabled', true).eq('lifecycle', 'approved').limit(100);
+        if (skillError) throw skillError;
+        eligibleIds = normalizeSkillIds((eligible || []).map((s) => s.id), 100);
+      }
+      const skillSnapshot = snapshotSkillIds({ requested: requestedSkillIds, botSkillIds, eligibleIds, botBound: Boolean(botId), max: 100 });
       const model = ALLOWED_MODELS.includes(String(body.model)) ? String(body.model) : null;
       const blocked = await budgetBlock(c);
       if (blocked) throw new HttpError(409, `${blocked}. Sınırı Ayarlar → Harcama sınırı bölümünden değiştirebilirsiniz.`, 'BUDGET_EXCEEDED');
@@ -66,11 +84,11 @@ async function api(c: Db, req: Request) {
       }
       const now = Date.now();
       const { data: m, error } = await c.from('bot_missions').insert({ model, schedule_id,
-        bot_id: body.bot_id || null, title: title.slice(0, 200), goal: goal.slice(0, 4000), target_url: target || null,
+        bot_id: botId || null, title: title.slice(0, 200), goal: goal.slice(0, 4000), target_url: target || null,
         search_for: String(body.search_for || '').trim().slice(0, 1000) || null, report_spec: String(body.report_spec || '').trim().slice(0, 1000) || null,
         stop_condition: String(body.stop_condition || '').trim().slice(0, 1000) || null, duration_minutes: minutes,
         max_steps: minutes <= 15 ? Math.min(minutes, 5) : Math.min(12, Math.ceil(minutes / 5)), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
-        skill_ids: Array.isArray(body.skill_ids) ? body.skill_ids.filter((x: unknown) => typeof x === 'string').slice(0, 10) : [],
+        skill_ids: skillSnapshot,
         locked_until: new Date(now + 150_000).toISOString(),
       }).select('*').single();
       if (error) throw error;

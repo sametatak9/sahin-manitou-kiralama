@@ -5,7 +5,7 @@ import { Download, Printer, Radio, Search } from 'lucide-react';
 import { FindingCard } from './FindingCard';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime } from '../lib/format';
-import type { Mission } from '../lib/types';
+import type { Mission, MissionStep } from '../lib/types';
 import { Button, cx, Modal, Notice, Pill, StateView } from '../ui';
 import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
 
@@ -13,11 +13,21 @@ export { waNumber } from './FindingCard';
 
 export function LiveReport({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useQuery(async () => unwrap(await db().from('bot_missions').select('*').eq('id', id).single()) as Mission, null as Mission | null, [id], ['bot_missions']);
+  const stepsQ = useQuery(async () => unwrap(await db().from('bot_mission_steps').select('id,mission_id,step_no,action,target,message,data,duration_ms,created_at').eq('mission_id', id).order('step_no', { ascending: true }).order('created_at', { ascending: true })) as MissionStep[], [], [id], ['bot_mission_steps']);
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState<'active' | 'verified' | 'pending' | 'rejected'>('active');
   const m = q.data;
   const live = m && (m.status === 'running' || m.status === 'finalizing');
   const counts = findingCounts(m?.findings ?? []);
+  const loadedSkills = useMemo(() => {
+    const step = stepsQ.data.find((x) => x.action === 'skills_loaded');
+    const data = step?.data;
+    if (!data || typeof data !== 'object') return [] as Array<{ name: string; version: number }>;
+    const raw = (data as { skills?: unknown }).skills;
+    if (!Array.isArray(raw)) return [] as Array<{ name: string; version: number }>;
+    return raw.filter((x): x is { name: string; version?: number } => Boolean(x && typeof x === 'object' && typeof (x as { name?: unknown }).name === 'string'))
+      .map((x) => ({ name: x.name.slice(0, 80), version: Number(x.version) || 1 }));
+  }, [stepsQ.data]);
   const list = useMemo(() => {
     const t = term.trim().toLocaleLowerCase('tr-TR');
     return (m?.findings ?? []).map((f, i) => ({ f, i })).reverse().filter(({ f }) => {
@@ -57,6 +67,10 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
               {live ? <span className="inline-flex items-center gap-1.5 rounded-full bg-white text-emerald-700 px-2.5 py-0.5 font-bold"><Radio className="w-3.5 h-3.5 animate-pulse" />CANLI · bitiş {fmtDateTime(m.deadline_at)}</span>
                 : <Pill tone={m.status === 'failed' ? 'stop' : counts.verified ? 'go' : 'wait'}>{m.status === 'failed' ? 'HATA İLE BİTTİ' : counts.verified ? 'DOĞRULANMIŞ SONUÇ VAR' : 'DOĞRULANMIŞ SONUÇ YOK'}</Pill>}
               <span className="opacity-80">Adım {m.step_count}/{m.max_steps}</span>
+            </div>
+            <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px]">
+              <b>{m.skill_ids?.length ?? loadedSkills.length} yetenek kullanıldı</b>
+              {loadedSkills.length > 0 && <span className="opacity-80"> · {loadedSkills.slice(0, 3).map((s) => `${s.name} v${s.version}`).join(' · ')}{loadedSkills.length > 3 ? ` · +${loadedSkills.length - 3}` : ''}</span>}
             </div>
           </div>
           {m.error && <Notice tone={m.status === 'failed' ? 'error' : 'warn'}>{m.error}</Notice>}

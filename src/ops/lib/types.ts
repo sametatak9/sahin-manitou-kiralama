@@ -79,4 +79,4 @@ export interface Mission {
   review_status?: 'pending' | 'approved' | 'rejected'; reviewed_at?: string | null; review_note?: string | null;
   purpose?: 'task' | 'skill_test'; skill_ids?: string[]; audit?: MissionAudit | null; coach_note?: string | null;
 }
-export interface MissionStep { id: string; mission_id: string; step_no: number; action: string; target: string | null; message: string; duration_ms: number | null; created_at: string }
+export interface MissionStep { id: string; mission_id: string; step_no: number; action: string; target: string | null; message: string; data?: unknown; duration_ms: number | null; created_at: string }

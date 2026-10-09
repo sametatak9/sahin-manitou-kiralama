@@ -466,6 +466,13 @@ async function logStep(db: Db, m: MissionRow, step: number, action: string, mess
   await db.from('bot_mission_steps').insert({ mission_id: m.id, step_no: step, action, target: target ?? null, message: message.slice(0, 2000), data: data ?? null,
     duration_ms: started ? Date.now() - started : null });
 }
+async function logSkillsLoadedOnce(db: Db, m: MissionRow, skills: Array<{ id: string; name: string; version: number }>) {
+  if (m.step_count !== 0) return;
+  const { data: existing } = await db.from('bot_mission_steps').select('id').eq('mission_id', m.id).eq('action', 'skills_loaded').limit(1);
+  if (existing?.length) return;
+  const safe = skills.map((s) => ({ id: s.id, name: s.name.slice(0, 120), version: Number(s.version) || 1 }));
+  await logStep(db, m, 0, 'skills_loaded', `${safe.length} uygun yetenek bağlamı yüklendi`, null, { count: safe.length, skills: safe });
+}
 const canonical = (u: string) => { try { const x = new URL(u); x.hash = ''; return x.toString().replace(/\/$/, ''); } catch { return u; } };
 function pageDigest(p: PageFacts) {
   return [
@@ -524,6 +531,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const ctx = await botContext(db, m.bot_id, m);
+  await logSkillsLoadedOnce(db, m, ctx.skills);
   const policy = missionPolicy(ctx, m);
   const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
   let stepFailed = false;

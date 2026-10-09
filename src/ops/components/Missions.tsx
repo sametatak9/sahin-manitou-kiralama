@@ -117,7 +117,7 @@ function progress(m: Mission) {
 
 export function MissionList({ bots, botId, compact = false, review }: { bots: Bot[]; botId?: string; compact?: boolean; review?: 'approved' | 'pending' }) {
   const q = useQuery(async () => {
-    let r = db().from('bot_missions').select('id,bot_id,title,goal,target_url,search_for,report_spec,stop_condition,duration_minutes,status,finish_reason,started_at,deadline_at,finished_at,step_count,max_steps,provider,model,findings,sources,summary,tokens_in,tokens_out,error,created_at,error_kind,review_status,reviewed_at,review_note').order('created_at', { ascending: false }).limit(compact ? 10 : 100);
+    let r = db().from('bot_missions').select('id,bot_id,title,goal,target_url,search_for,report_spec,stop_condition,duration_minutes,status,finish_reason,started_at,deadline_at,finished_at,step_count,max_steps,provider,model,findings,sources,summary,tokens_in,tokens_out,error,created_at,error_kind,review_status,reviewed_at,review_note,skill_ids').order('created_at', { ascending: false }).limit(compact ? 10 : 100);
     if (botId) r = r.eq('bot_id', botId);
     if (review === 'approved') r = r.eq('review_status', 'approved');
     if (review === 'pending') r = r.or('review_status.eq.pending,review_status.is.null').in('status', ['completed', 'stopped', 'failed']);
@@ -153,7 +153,7 @@ export function MissionList({ bots, botId, compact = false, review }: { bots: Bo
                 <div className="text-[11px] text-ink-400 mt-1 line-clamp-1">{m.goal}</div>
                 {live && <div className="mt-2 h-1.5 rounded-full bg-ink-800 overflow-hidden"><div className="h-full bg-signal-run" style={{ width: `${progress(m)}%` }} /></div>}
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-ink-500 font-mono">
-                  <span>{m.duration_minutes} dk</span><span>ADIM {m.step_count}</span><span>DOĞRULANDI {counts.verified}</span><span>ADAY {counts.pending}</span>{counts.rejected > 0 && <span>ELENDİ {counts.rejected}</span>}
+                  <span>{m.duration_minutes} dk</span><span>ADIM {m.step_count}</span><span>YETENEK {m.skill_ids?.length ?? 0}</span><span>DOĞRULANDI {counts.verified}</span><span>ADAY {counts.pending}</span>{counts.rejected > 0 && <span>ELENDİ {counts.rejected}</span>}
                   <span>{live ? `bitiş ${fmtDateTime(m.deadline_at)}` : `bitti ${relTime(m.finished_at)}`}</span>
                 </div>
               </button>

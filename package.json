@@ -14,7 +14,8 @@
     "test:recency": "tsx tests/recency-contract.test.ts",
     "test:publication": "tsx tests/publication-contract.test.ts",
     "test:research-report": "tsx tests/research-report.test.ts",
-    "test:social-profile": "tsx tests/social-profile-contract.test.ts"
+    "test:social-profile": "tsx tests/social-profile-contract.test.ts",
+    "test:skill-snapshot": "tsx tests/skill-snapshot.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
