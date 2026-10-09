@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   capabilityAuditText,
+  academyOutputEvidence,
   academyTestStatus,
   resolveCapabilityKind,
   resolveCapabilityRisk,
@@ -30,6 +31,12 @@ const run = () => {
   assert.equal(academyTestStatus({ capability_kind: 'prompt_only', test_score: 59 }), 'failed');
   assert.equal(academyTestStatus({ capability_kind: 'tool_backed', handler_key: 'create_report', test_score: 100 }), 'unverified');
   assert.equal(academyTestStatus({ capability_kind: 'connector_backed', connector_key: 'instagram', test_score: 100 }), 'unverified');
+  const actionOutput = academyOutputEvidence('action_list', [{ action: 'ai_research', data: { text_tail: '1) İlk aksiyon maddesi\n2) İkinci aksiyon maddesi\n3) Üçüncü aksiyon maddesi\n4) Dördüncü aksiyon maddesi\n\n{"new_findings":[]}' } }]);
+  assert.equal(actionOutput.count, 4);
+  assert.equal(actionOutput.score, 100);
+  assert.equal(actionOutput.passed, true);
+  assert.equal(academyOutputEvidence('action_list', [{ action: 'ai_research', data: { text_tail: '{"new_findings":[]}' } }]).score, 0);
+  assert.equal(academyOutputEvidence('findings', [{ action: 'ai_research', data: { text_tail: '1) Bu satır findings puanı değildir' } }]).score, null);
   assert.equal(resolveCapabilityTestStatus({ capability_test_status: 'handler_verified' }), 'handler_verified');
   assert.equal(resolveCapabilityTestStatus({ capability_test_status: 'unknown' }), 'unverified');
 };
