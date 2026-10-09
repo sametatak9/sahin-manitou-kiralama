@@ -1,6 +1,6 @@
 // Panelde kullanılan satır tipleri (Supabase tablolarının alt kümeleri).
 import type { FindingType } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
-import type { CapabilityKind, CapabilityRisk, CatalogSource } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
+import type { CapabilityKind, CapabilityRisk, CapabilityTestStatus, CatalogSource } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
 export interface Bot {
   id: string; slug: string; name: string; bot_type: string; platform: string | null; icon: string; description: string; instructions: string;
   ai_agent_id: string | null; connector_key: string | null; permissions: { denied_tools?: string[]; max_runs_per_day?: number } | null;
@@ -12,6 +12,8 @@ export interface Skill {
   category: string; icon: string | null; instructions: string; execution_mode: 'agent' | 'pipeline'; pipeline: string[]; archived_at: string | null;
   capability_kind?: CapabilityKind | null; risk_level?: CapabilityRisk | null; catalog_source?: CatalogSource | null;
   handler_key?: string | null; connector_key?: string | null; capability_surfaces?: string[]; evidence_contract?: string | null;
+  test_score?: number | null; test_findings?: number | null; last_tested_at?: string | null; last_test_mission_id?: string | null;
+  capability_test_status?: CapabilityTestStatus | null; capability_test_mission_id?: string | null; capability_tested_at?: string | null;
   automation_skill_tools?: Array<{ tool_id: string }>;
 }
 export interface Tool {
