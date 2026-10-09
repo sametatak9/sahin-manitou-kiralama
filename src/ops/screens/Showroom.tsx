@@ -80,6 +80,7 @@ export function ShowroomScreen() {
     } catch (e) { setMsg({ tone: 'error', text: (e as Error).message }); } finally { setBusy(false); }
   };
   const [writing, setWriting] = useState(false);
+  const [writingPost, setWritingPost] = useState(false);
   const botWrite = async () => {
     if (edit === 'new' || !edit) { setMsg({ tone: 'error', text: 'Önce "Taslak kaydet" deyin; sonra bot ön yazıyı yazsın.' }); return; }
     setWriting(true); setMsg(null);
@@ -89,6 +90,14 @@ export function ShowroomScreen() {
       setMsg({ tone: 'ok', text: r.applied ? 'Editör Bot slogan ve ön yazıyı yazdı — okuyup düzenleyebilirsiniz.' : 'Ev yayında olduğu için bot metni değiştirmedi; önerisini aşağıdaki nota bıraktı.' });
       await q.reload();
     } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setWriting(false); }
+  };
+  const generateSitePost = async () => {
+    setWritingPost(true); setMsg(null);
+    try {
+      const r = await callOps<{ title: string }>('showroom_site_post', {});
+      setMsg({ tone: 'ok', text: `"${r.title}" taslak olarak hazırlandı. Public sitede görünmesi için aşağıdan inceleyip onaylayın.` });
+      await posts.reload();
+    } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setWritingPost(false); }
   };
   const setStatus = async (m: Model, status: Model['status']) => {
     if (status === 'published' && !m.cover_url && !m.gallery.length) { setMsg({ tone: 'error', text: `"${m.title}" için önce fotoğraf seçin.` }); return; }
@@ -157,7 +166,10 @@ export function ShowroomScreen() {
       <section className="ops-panel space-y-3 p-4">
         <div>
           <h2 className="font-display text-base font-semibold text-ink-100">Site yazıları · taslak ve onay</h2>
-          <p className="mt-1 text-[11px] text-ink-400">Editör Bot yazıyı hazırlar; public sitede görünmesi için burada insanın <b>Onayla ve yayınla</b> demesi gerekir. Yeni bot taslakları sitemap ve blog sayfasına girmez.</p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="mt-1 max-w-2xl text-[11px] text-ink-400">Editör Bot yazıyı hazırlar; public sitede görünmesi için burada insanın <b>Onayla ve yayınla</b> demesi gerekir. Yeni bot taslakları sitemap ve blog sayfasına girmez.</p>
+            <Button variant="subtle" loading={writingPost} onClick={generateSitePost}>Yeni taslak üret</Button>
+          </div>
         </div>
         {posts.loading ? <StateView kind="loading" compact /> : posts.error ? <StateView kind="error" message={posts.error} /> : posts.data.length === 0 ? <StateView kind="empty" title="Henüz site yazısı yok" /> : (
           <div className="space-y-2">
