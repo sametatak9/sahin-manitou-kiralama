@@ -23,6 +23,7 @@ import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { PUBLIC_SITE, showroomEditorTick, sitePostTick, writeDistrictPost, writeShowroomTexts } from '../_shared/showroom.ts';
 import { inspectSitePost } from '../_shared/pure/content-quality.ts';
 import { auditCapabilitySkill, connectorHealthState, summarizeCapabilityAudit } from '../_shared/pure/capability-audit.ts';
+import { buildCopilotPrompt, classifyCopilotIntent, COPILOT_RESPONSE_SCHEMA, normalizeCopilotResponse, type CopilotContext } from '../_shared/pure/copilot.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent, registeredHandlerKeys } from '../_shared/tools/registry.ts';
 import { createEditJob, editDone, editQueue, editToPool } from '../_shared/videoedit.ts';
@@ -583,6 +584,50 @@ async function capabilityAudit(db: Db) {
   return { generated_at: new Date().toISOString(), summary: summarizeCapabilityAudit(items), skills: items, registered_handlers: [...knownHandlers], warning: viewWarning };
 }
 
+function copilotGuardResponse(mode: 'blocked_action' | 'needs_source', reason: string) {
+  const answer = mode === 'blocked_action'
+    ? `Bu Copilot yalnızca salt-okunur karar desteği verir. ${reason} Onay, bağlantı, yayın, takip/yorum/DM, kayıt değişikliği veya görev başlatma yapmıyorum.`
+    : `Bu istek canlı ve kaynaklı kanıt gerektiriyor. ${reason} Copilot burada web araması yapmaz; Botlar ekranından kontrollü, kaynaklı bir görev çalıştırılmalıdır.`;
+  return { mode, kind: 'clarification' as const, answer, facts: [], next_steps: [], evidence: [] };
+}
+
+async function copilotChat(db: Db, req: Request, body: Record<string, unknown>) {
+  const u = await requireUser(db, req);
+  const message = String(body.message ?? '').trim().slice(0, 4000);
+  const decision = classifyCopilotIntent(message);
+  if (decision.mode !== 'read_only') return copilotGuardResponse(decision.mode, decision.reason);
+
+  const requestedClient = String(body.client_id ?? '').trim();
+  const clientQuery = db.from('agency_clients').select('id,name,slug,sector,region,services,audience,content_pillars,status').is('archived_at', null);
+  const { data: client, error: clientError } = requestedClient
+    ? await clientQuery.eq('id', requestedClient).maybeSingle()
+    : await clientQuery.eq('slug', 'embay-yapi').maybeSingle();
+  if (clientError) throw clientError;
+  if (!client) throw new HttpError(404, 'Seçili ajans müşterisi bulunamadı', 'CLIENT_NOT_FOUND');
+
+  const [missionsQ, skillsQ, modelsQ] = await Promise.all([
+    db.from('bot_missions').select('title,status,finish_reason,summary,created_at,provider,model').eq('client_id', client.id).order('created_at', { ascending: false }).limit(5),
+    db.from('automation_skills').select('display_name,description,capability_kind,risk_level,capability_test_status').eq('enabled', true).eq('lifecycle', 'approved').order('display_name').limit(18),
+    db.from('ai_model_catalog').select('model_key,display_name,provider').eq('active', true).order('sort_order').limit(12),
+  ]);
+  const failedContext = [missionsQ.error, skillsQ.error, modelsQ.error].find(Boolean);
+  if (failedContext) throw failedContext;
+
+  const context: CopilotContext = {
+    client: {
+      name: String(client.name), sector: client.sector, region: client.region, services: client.services, audience: client.audience, content_pillars: client.content_pillars,
+    },
+    recent_missions: (missionsQ.data ?? []) as CopilotContext['recent_missions'],
+    governed_skills: (skillsQ.data ?? []) as CopilotContext['governed_skills'],
+    active_models: (modelsQ.data ?? []) as CopilotContext['active_models'],
+  };
+  const ctx = apiCtx(db, u.userId, u.role);
+  ctx.agent = await loadAgent(db, null, 'analyst');
+  const result = await aiComplete(ctx, 'copilot_read_only', buildCopilotPrompt(message, context), COPILOT_RESPONSE_SCHEMA,
+    'Bu endpoint Agency Copilot\'tur. Salt-okunur kal; hiçbir tool, connector, web araması, yayın veya kayıt değişikliği çalıştırma.');
+  return { mode: 'read_only' as const, client: { id: client.id, name: client.name }, ...normalizeCopilotResponse(result.json ?? { answer: result.text }) };
+}
+
 // ── Panel API ───────────────────────────────────────────────────────────────
 async function api(db: Db, req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -590,6 +635,7 @@ async function api(db: Db, req: Request) {
   switch (action) {
     case 'status': { await requireUser(db, req); return status(db); }
     case 'capability_audit': { await requireUser(db, req); return capabilityAudit(db); }
+    case 'copilot_chat': return copilotChat(db, req, body);
     case 'inbox_reply': { await requireUser(db, req); return inboxReply(db, String(body.id || ''), String(body.message || '')); }
     case 'inbox_sync': { await requireUser(db, req); return inboxTick(db, true); }
     case 'radar_sync': { await requireUser(db, req); return radarTick(db, true); }

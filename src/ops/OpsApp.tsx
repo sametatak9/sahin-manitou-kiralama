@@ -33,10 +33,12 @@ const GrowthScreen = lazy(() => import('./screens/Growth').then((m) => ({ defaul
 const ClientsScreen = lazy(() => import('./screens/Clients').then((m) => ({ default: m.ClientsScreen })));
 const ShowroomScreen = lazy(() => import('./screens/Showroom').then((m) => ({ default: m.ShowroomScreen })));
 const ContentHubScreen = lazy(() => import('./screens/ContentHub').then((m) => ({ default: m.ContentHubScreen })));
+const CopilotScreen = lazy(() => import('./screens/Copilot').then((m) => ({ default: m.CopilotScreen })));
 
 function Screens() {
   const { state } = useRouter();
   switch (state.route) {
+    case 'copilot': return <CopilotScreen />;
     case 'approvals': return <ContentHubScreen initial="plan" queueTab="approval" />;
     case 'bots': return <BotsScreen />;
     case 'planner': return <ContentHubScreen initial="create" />;
