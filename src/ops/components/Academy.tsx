@@ -10,7 +10,7 @@ import type { Bot } from '../lib/types';
 import { useSession } from '../session';
 import { Button, Field, Modal, Notice, Pill, StateView } from '../ui';
 import { MissionDetail } from './Missions';
-import { CAPABILITY_KIND_LABEL, CAPABILITY_RISK_LABEL, capabilityAuditText, resolveCapabilityKind, resolveCapabilityRisk } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
+import { CAPABILITY_KIND_LABEL, CAPABILITY_RISK_LABEL, CAPABILITY_TEST_STATUS_LABEL, capabilityAuditText, capabilityVerificationText, resolveCapabilityKind, resolveCapabilityRisk, resolveCapabilityTestStatus } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
 
 interface AcademySkill {
   id: string; skill_key: string; display_name: string; description: string; category: string; instructions: string; enabled: boolean;
@@ -19,6 +19,7 @@ interface AcademySkill {
   last_tested_at: string | null; last_test_mission_id: string | null; approved_at: string | null;
   capability_kind?: 'prompt_only' | 'tool_backed' | 'connector_backed' | null; risk_level?: 'read_only' | 'draft' | 'approval_required' | 'external_action' | null;
   catalog_source?: 'native' | 'imported' | 'curated' | null; handler_key?: string | null; connector_key?: string | null;
+  capability_test_status?: 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed' | null; capability_test_mission_id?: string | null; capability_tested_at?: string | null;
 }
 interface Improvement { id: string; skill_id: string; mission_id: string | null; diagnosis: string; instructions_add: string | null; search_terms_add: string[]; search_terms_remove: string[]; sources_add: string[]; status: string; created_at: string; reviewer?: string }
 
@@ -79,6 +80,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
             const capability = { ...s, tools: s.handler_key ? [{ handler: s.handler_key, platform: s.connector_key }] : [] };
             const capabilityKind = resolveCapabilityKind(capability);
             const capabilityRisk = resolveCapabilityRisk(capability);
+            const capabilityTestStatus = resolveCapabilityTestStatus(s);
             return (
               <div key={s.id} className="ops-panel p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -86,8 +88,9 @@ export function Academy({ bots }: { bots: Bot[] }) {
                     <div className="text-[10px] font-mono text-ink-500">{s.skill_key} · {s.category}</div></div>
                   <Pill tone={LIFE[s.lifecycle].tone}>{LIFE[s.lifecycle].label}</Pill>
                 </div>
-                <div className="flex flex-wrap gap-1"><Pill tone={capabilityKind === 'connector_backed' ? 'go' : capabilityKind === 'tool_backed' ? 'info' : 'idle'} dot={false}>{CAPABILITY_KIND_LABEL[capabilityKind]}</Pill><Pill tone={capabilityRisk === 'external_action' ? 'stop' : capabilityRisk === 'approval_required' ? 'wait' : capabilityRisk === 'draft' ? 'info' : 'idle'} dot={false}>{CAPABILITY_RISK_LABEL[capabilityRisk]}</Pill></div>
+                <div className="flex flex-wrap gap-1"><Pill tone={capabilityKind === 'connector_backed' ? 'go' : capabilityKind === 'tool_backed' ? 'info' : 'idle'} dot={false}>{CAPABILITY_KIND_LABEL[capabilityKind]}</Pill><Pill tone={capabilityRisk === 'external_action' ? 'stop' : capabilityRisk === 'approval_required' ? 'wait' : capabilityRisk === 'draft' ? 'info' : 'idle'} dot={false}>{CAPABILITY_RISK_LABEL[capabilityRisk]}</Pill><Pill tone={capabilityTestStatus === 'handler_verified' || capabilityTestStatus === 'prompt_verified' ? 'go' : capabilityTestStatus === 'failed' ? 'stop' : 'wait'} dot={false}>{CAPABILITY_TEST_STATUS_LABEL[capabilityTestStatus]}</Pill></div>
                 <p className="text-[10px] text-ink-500">{capabilityAuditText(capability)}</p>
+                <p className="text-[10px] text-ink-500">Academy kanıtı: {capabilityVerificationText(s)}{s.capability_tested_at ? ` · ${fmtDateTime(s.capability_tested_at)}` : ''}{capabilityKind !== 'prompt_only' && capabilityTestStatus !== 'handler_verified' ? ' · gerçek handler testi ayrıca gerekir' : ''}</p>
                 {s.test_goal && <p className="text-xs text-ink-300 line-clamp-3"><b>Test amacı:</b> {s.test_goal}</p>}
                 {s.search_terms?.length > 0 && <div className="flex flex-wrap gap-1">{s.search_terms.slice(0, 12).map((t) => <span key={t} className="text-[10px] rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t}</span>)}</div>}
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">

@@ -19,6 +19,7 @@ import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
 import { classifyFindingType, FINDING_TYPE_LABEL, type FindingType } from './pure/finding-taxonomy.ts';
 import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
+import { academyTestStatus } from './pure/capability-registry.ts';
 
 type Db = SupabaseClient;
 
@@ -867,9 +868,15 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   // KOÇ: raporu ve günlüğü inceleyip yeteneği iyileştirme önerisi çıkarır (Akademi'de onayınıza düşer)
   const coachNote = ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>) : null;
   if (cur.purpose === 'skill_test' && cur.skill_ids?.length) {
-    const { data: sk } = await db.from('automation_skills').select('lifecycle').eq('id', cur.skill_ids[0]).maybeSingle();
-    await db.from('automation_skills').update({ test_score: audit ? audit.accuracy : 0, test_findings: audit?.verified ?? 0, last_tested_at: new Date().toISOString(),
-      last_test_mission_id: cur.id, ...(sk?.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', cur.skill_ids[0]);
+    const { data: sk } = await db.from('automation_skills').select('lifecycle,capability_kind,handler_key,connector_key').eq('id', cur.skill_ids[0]).maybeSingle();
+    if (sk) {
+      const testedAt = new Date().toISOString();
+      const testScore = audit?.accuracy ?? 0;
+      const capabilityTestStatus = academyTestStatus({ capability_kind: sk.capability_kind, handler_key: sk.handler_key, connector_key: sk.connector_key, test_score: testScore });
+      await db.from('automation_skills').update({ test_score: testScore, test_findings: audit?.verified ?? 0, last_tested_at: testedAt,
+        last_test_mission_id: cur.id, capability_test_status: capabilityTestStatus, capability_test_mission_id: cur.id, capability_tested_at: testedAt,
+        ...(sk.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', cur.skill_ids[0]);
+    }
   }
 
   const status = classifiedReason === 'admin_stop' ? 'stopped' : classifiedReason === 'error' ? 'failed' : 'completed';

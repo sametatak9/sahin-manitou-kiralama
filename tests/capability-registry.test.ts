@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
   capabilityAuditText,
+  academyTestStatus,
   resolveCapabilityKind,
   resolveCapabilityRisk,
+  resolveCapabilityTestStatus,
   resolveCatalogSource,
 } from '../supabase/functions/_shared/pure/capability-registry.ts';
 
@@ -23,6 +25,13 @@ const run = () => {
   assert.equal(resolveCatalogSource({ catalog_source: 'imported' }), 'imported');
   assert.equal(resolveCatalogSource({ catalog_source: 'unknown' }), 'native');
   assert.match(capabilityAuditText({ tools: [{ tool_key: 'seo_audit' }], catalog_source: 'curated' }), /KÜRATÖRLÜ.*TOOL handler.*SALT OKUNUR|KÜRATÖRLÜ.*kayıtlı tool handler.*SALT OKUNUR/);
+
+  assert.equal(academyTestStatus({ capability_kind: 'prompt_only', test_score: 60 }), 'prompt_verified');
+  assert.equal(academyTestStatus({ capability_kind: 'prompt_only', test_score: 59 }), 'failed');
+  assert.equal(academyTestStatus({ capability_kind: 'tool_backed', handler_key: 'create_report', test_score: 100 }), 'unverified');
+  assert.equal(academyTestStatus({ capability_kind: 'connector_backed', connector_key: 'instagram', test_score: 100 }), 'unverified');
+  assert.equal(resolveCapabilityTestStatus({ capability_test_status: 'handler_verified' }), 'handler_verified');
+  assert.equal(resolveCapabilityTestStatus({ capability_test_status: 'unknown' }), 'unverified');
 };
 
 run();

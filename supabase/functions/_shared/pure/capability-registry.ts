@@ -1,6 +1,7 @@
 export type CapabilityKind = 'prompt_only' | 'tool_backed' | 'connector_backed';
 export type CapabilityRisk = 'read_only' | 'draft' | 'approval_required' | 'external_action';
 export type CatalogSource = 'native' | 'imported' | 'curated';
+export type CapabilityTestStatus = 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed';
 
 export interface CapabilityToolRef {
   tool_key?: string | null;
@@ -16,6 +17,8 @@ export interface CapabilityInput {
   connector_key?: string | null;
   approval_required?: boolean | null;
   execution_mode?: string | null;
+  capability_test_status?: string | null;
+  test_score?: number | string | null;
   tools?: CapabilityToolRef[] | null;
 }
 
@@ -68,6 +71,31 @@ export const CATALOG_SOURCE_LABEL: Record<CatalogSource, string> = {
   imported: 'İÇE AKTARILDI',
   curated: 'KÜRATÖRLÜ',
 };
+
+export const CAPABILITY_TEST_STATUS_LABEL: Record<CapabilityTestStatus, string> = {
+  unverified: 'HANDLER DOĞRULANMADI',
+  prompt_verified: 'PROMPT TESTİ GEÇTİ',
+  handler_verified: 'HANDLER DOĞRULANDI',
+  failed: 'TEST BAŞARISIZ',
+};
+
+export function resolveCapabilityTestStatus(input: CapabilityInput): CapabilityTestStatus {
+  return valid(input.capability_test_status, new Set<CapabilityTestStatus>(['unverified', 'prompt_verified', 'handler_verified', 'failed'])) ?? 'unverified';
+}
+
+/**
+ * Academy skill_test yalnızca görev/prompt kalitesini ölçer; tool veya connector
+ * çağırmadığı için tool-backed skill'i handler_verified yapmaz.
+ */
+export function academyTestStatus(input: CapabilityInput): CapabilityTestStatus {
+  const score = Number(input.test_score);
+  if (!Number.isFinite(score) || score < 60) return 'failed';
+  return resolveCapabilityKind(input) === 'prompt_only' ? 'prompt_verified' : 'unverified';
+}
+
+export function capabilityVerificationText(input: CapabilityInput): string {
+  return CAPABILITY_TEST_STATUS_LABEL[resolveCapabilityTestStatus(input)];
+}
 
 export function capabilityAuditText(input: CapabilityInput): string {
   const kind = resolveCapabilityKind(input);
