@@ -600,7 +600,7 @@ export async function stepMission(db: Db, m: MissionRow) {
         await logStep(db, m, step, 'seo_audit', `Gerçek HTTP SEO denetimi: skor %${seoAudit.score} · ${seoAudit.checks.filter((x) => x.level === 'ok').length} uygun · ${seoAudit.checks.filter((x) => x.level !== 'ok').length} uyarı/hata`, m.target_url,
           { url: seoAudit.final_url, status: seoAudit.status, response_ms: seoAudit.response_ms, html_bytes: seoAudit.html_bytes, checks: seoAudit.checks, robots: { url: seoAudit.robots.url, status: seoAudit.robots.status }, sitemap: { url: seoAudit.sitemap.url, status: seoAudit.sitemap.status, urls: seoAudit.sitemap.urls } }, t0);
         addFinding({ title: 'Teknik SEO HTTP baseline', detail: `Gerçek HTTP denetimi ${seoAudit.final_url} üzerinde tamamlandı. Skor: %${seoAudit.score}.\n${detail}`, url: seoAudit.final_url,
-          evidence: detail.slice(0, 1800), fit: 'Teknik SEO ölçümü; müşteri adayı veya yayın başarısı değildir.', relevance: 10, finding_type: 'market_reference', verification: 'technical_http' });
+          evidence: detail.slice(0, 1800), fit: 'Teknik SEO ölçümü; müşteri adayı veya yayın başarısı değildir.', relevance: 10, finding_type: 'technical_seo', verification: 'technical_http' });
         pageNote = detail;
         stopMet = true;
         stopReason = 'Teknik SEO baseline gerçek HTTP ile tamamlandı';
@@ -1115,7 +1115,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     const type = f.finding_type ?? classifyFindingType(f); acc[type] = (acc[type] ?? 0) + 1; return acc;
   }, {});
   const verified_customer_leads = findings.filter((f) => f.verdict === 'verified' && f.finding_type === 'customer_lead').length;
-  const verified_target_accounts = findings.filter((f) => f.verdict === 'verified' && f.finding_type !== 'customer_lead').length;
+  const verified_target_accounts = findings.filter((f) => f.verdict === 'verified' && ['business_or_partner', 'competitor_or_reference'].includes(f.finding_type ?? '')).length;
   const audit: MissionAudit = { total: findings.length, verified: count('verified'), suspicious: count('suspicious'), rejected: count('rejected'),
     accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(), type_counts, verified_customer_leads, verified_target_accounts,
     rejected_items: findings.filter((f) => f.verdict === 'rejected').map((f) => ({ title: f.title, url: f.url, reason: f.verdict_reason ?? '' })).slice(0, 20) };

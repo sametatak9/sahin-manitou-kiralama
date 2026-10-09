@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { classifyFindingType } from '../supabase/functions/_shared/pure/finding-taxonomy.ts';
+import { classifyFindingType, FINDING_TYPE_LABEL } from '../supabase/functions/_shared/pure/finding-taxonomy.ts';
 
 let checks = 0;
 const equal = (actual: unknown, expected: unknown) => { assert.equal(actual, expected); checks++; };
@@ -33,6 +33,7 @@ equal(classifyFindingType({
 }), 'competitor_or_reference');
 
 equal(classifyFindingType({ title: 'İstanbul yapı sektörü haberleri', detail: 'Sektör medyası ve pazar yazısı' }), 'market_reference');
+equal(FINDING_TYPE_LABEL.technical_seo, 'Teknik SEO');
 equal(classifyFindingType({}), 'excluded');
 
 console.log(`finding taxonomy contract: ${checks} assertions passed`);
