@@ -1,4 +1,5 @@
 // Panelde kullanılan satır tipleri (Supabase tablolarının alt kümeleri).
+import type { FindingType } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
 export interface Bot {
   id: string; slug: string; name: string; bot_type: string; platform: string | null; icon: string; description: string; instructions: string;
   ai_agent_id: string | null; connector_key: string | null; permissions: { denied_tools?: string[]; max_runs_per_day?: number } | null;
@@ -66,9 +67,13 @@ export interface OpsStatus { ai: { anthropic: boolean; openai: boolean; gemini: 
 export interface MissionFinding {
   title: string; detail: string; url: string; evidence?: string; at: string; step: number;
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
-  relevance?: number; fit?: string; verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
+  relevance?: number; fit?: string; verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string; finding_type?: FindingType;
 }
-export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
+export interface MissionAudit {
+  total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string;
+  type_counts?: Partial<Record<FindingType, number>>; verified_customer_leads?: number; verified_target_accounts?: number;
+  rejected_items?: Array<{ title: string; url: string; reason: string }>;
+}
 export interface MissionSkillMeta { id: string; name: string; version: number }
 export interface MissionSkillUsage { count: number; detailed_count?: number; skills?: MissionSkillMeta[]; detailed_skills?: MissionSkillMeta[] }
 export interface Mission {

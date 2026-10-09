@@ -15,7 +15,7 @@ interface Prospect {
   engagement_rate: number | null; metrics: { posts_per_week?: number | null; top_posts?: Array<{ url: string; type: string; engagement: number }> } | null;
   last_benchmarked_at: string | null; relevance_score: number | null; created_at: string;
 }
-const KIND: Record<string, string> = { competitor: 'Rakip', supplier: 'Tedarikçi', industry_media: 'Sektör medyası', local_business: 'Yerel işletme', partner: 'İş ortağı' };
+const KIND: Record<string, string> = { competitor: 'Rakip', supplier: 'Tedarikçi', industry_media: 'Sektör medyası', local_business: 'Yerel işletme', partner: 'İş ortağı', public_institution: 'Kamu kurumu', public_opportunity: 'Kamu fırsatı / ihale' };
 const STATUS: Record<Prospect['follow_status'], { label: string; tone: 'idle' | 'go' | 'info' | 'stop' }> = {
   to_follow: { label: 'Takip edilecek', tone: 'idle' }, followed: { label: 'Takip edildi', tone: 'go' }, engaged: { label: 'Etkileşim kuruldu', tone: 'info' }, skip: { label: 'Atla', tone: 'stop' },
 };

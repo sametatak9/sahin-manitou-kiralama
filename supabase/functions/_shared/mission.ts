@@ -17,6 +17,7 @@ import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './p
 import { researchReportSummary } from './pure/research-report.ts';
 import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
+import { classifyFindingType, FINDING_TYPE_LABEL, type FindingType } from './pure/finding-taxonomy.ts';
 
 type Db = SupabaseClient;
 
@@ -33,9 +34,15 @@ export interface Finding {
   company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string;
   relevance?: number; fit?: string;
   verdict?: 'verified' | 'suspicious' | 'rejected'; verdict_reason?: string; summary?: string;
+  finding_type?: FindingType;
   publication?: PublicationEvidence;
 }
-export interface MissionAudit { total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string; rejected_items?: Array<{ title: string; url: string; reason: string }> }
+export interface MissionAudit {
+  total: number; verified: number; suspicious: number; rejected: number; accuracy: number; checked_at: string;
+  type_counts?: Partial<Record<FindingType, number>>;
+  verified_customer_leads?: number; verified_target_accounts?: number;
+  rejected_items?: Array<{ title: string; url: string; reason: string }>;
+}
 interface Source { url: string; title?: string; publication?: PublicationEvidence }
 
 const UA = 'Mozilla/5.0 (compatible; EmbayResearchBot/1.0; +https://embay-panel.vercel.app)';
@@ -561,7 +568,7 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (seenBefore.has(canonical(f.url))) return false;
     if (policy === 'lead' && isStaleFinding(f)) return false; // güncel fırsat kuralları kalıcı sektör araştırmasına uygulanmaz
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
-    findings.push({ ...f, at: new Date().toISOString(), step }); return true;
+    findings.push({ ...f, finding_type: f.finding_type ?? classifyFindingType(f), at: new Date().toISOString(), step }); return true;
   };
   async function failSearchUnavailable(details: string) {
     const error = `Canlı genel web araması yapılamadı; görev yeni AI adımları ve gereksiz harcama oluşmaması için durduruldu. ${details}`.slice(0, 500);
@@ -780,7 +787,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
 const telHref = (p: string) => `tel:${p.replace(/[^\d+]/g, '')}`;
 /** Yapılandırılmış alanları (firma, konum, tarih, kurumsal iletişim) rapor satırına çevirir. */
 function factsHtml(f: Finding) {
-  const parts = [f.fit && `<span>🎯 ${esc(f.fit)}</span>`, f.company && `<span>🏢 ${esc(f.company)}</span>`, f.location && `<span>📍 ${esc(f.location)}</span>`, f.posted && `<span>🗓 ${esc(f.posted)}</span>`,
+  const parts = [f.finding_type && `<span>🏷 ${esc(FINDING_TYPE_LABEL[f.finding_type])}</span>`, f.fit && `<span>🎯 ${esc(f.fit)}</span>`, f.company && `<span>🏢 ${esc(f.company)}</span>`, f.location && `<span>📍 ${esc(f.location)}</span>`, f.posted && `<span>🗓 ${esc(f.posted)}</span>`,
     f.phone && `<a href="${telHref(f.phone)}">📞 ${esc(f.phone)}</a>`, f.email && `<a href="mailto:${esc(f.email)}">✉️ ${esc(f.email)}</a>`, f.website && `<a href="${safeHref(f.website)}" target="_blank" rel="noopener">🌐 web</a>`].filter(Boolean);
   return parts.length ? `<div class="facts">${parts.join('')}</div>` : '';
 }
@@ -898,22 +905,26 @@ async function sendMissionTelegram(db: Db, cur: MissionRow, reason: string, summ
 /** Bulgulardaki işletme profil linklerini (Instagram/Facebook) takip listesine (social_prospects) ekler. Kişi verisi yok; yalnızca herkese açık işletme profili. */
 async function saveSocialProspects(db: Db, cur: MissionRow, findings: Finding[]) {
   if (!cur.created_by) return;
-  const rows = findings.map((f) => ({ f, p: socialProfile(f.url) || (f.website ? socialProfile(f.website) : null) })).filter((x) => x.p);
+  const rows = findings.map((f) => ({ f, type: f.finding_type ?? classifyFindingType(f), p: socialProfile(f.url) || (f.website ? socialProfile(f.website) : null) })).filter((x) => x.p);
   // Yalnızca işletme/kurum hesabı: başlık veya kullanıcı adında işletme işareti olmalı; kişi profili (ad.soyad, telefonlu), okul/resmi kurum elenir (KVKK)
   const BIZ = /insaat|yapi|yapı|mimar|muhendis|mühendis|makine|makina|kiralama|manitou|forklift|vinc|vinç|hafriyat|beton|demir|celik|çelik|iskele|prefabrik|group|grup|ltd|a\.s|a\.ş|san\.|tic\.|kentsel|donusum|dönüşüm|emlak|gayrimenkul|tadilat|cati|çatı|dekorasyon|haber|burada|medya|dergi|construction|build/i;
   const NOT_BIZ = /lisesi|okulu|universitesi|üniversitesi|kaymakaml|valilig|muhtarl|cami/i;
   let n = 0;
-  for (const { f, p } of rows) {
+  let skipped = 0;
+  for (const { f, type, p } of rows) {
+    // Sosyal profil keşfi müşteri lead’i üretmez. Resmî kurumlar ve kamu
+    // fırsatları da takip listesine otomatik yazılmaz; ayrı sınıf olarak kalır.
+    if (type === 'customer_lead' || type === 'public_institution' || type === 'public_opportunity' || type === 'excluded') { skipped++; continue; }
     const label = `${f.title} ${p!.handle}`;
     if (!BIZ.test(label) || NOT_BIZ.test(label) || /\d{7,}/.test(p!.handle)) continue;
     const t = norm(`${f.title} ${f.detail} ${f.fit ?? ''}`);
-    const kind = /tedarik|malzeme|beton|demir|iskele|bayi|uretic/.test(t) ? 'supplier' : /haber|medya|dergi|gazete/.test(t) ? 'industry_media' : /catalca|silivri|yerel|belediye/.test(t) ? 'local_business' : 'competitor';
+    const kind = type === 'competitor_or_reference' ? 'competitor' : /tedarik|malzeme|beton|demir|iskele|bayi|uretic/.test(t) ? 'supplier' : /haber|medya|dergi|gazete/.test(t) ? 'industry_media' : type === 'business_or_partner' ? 'partner' : 'local_business';
     const { error } = await db.from('social_prospects').upsert({ platform: p!.platform, handle: p!.handle, profile_name: f.company || f.title.slice(0, 120), profile_url: `https://www.${p!.platform}.com/${p!.handle}`,
       source_url: f.url, source_type: 'bot_mission', engagement_type: 'business_profile', relevance_score: Math.min(100, (f.relevance ?? 6) * 10), consent_status: 'not_required_public_note',
       notes: (f.fit || f.detail || '').slice(0, 500), account_kind: kind, bot_mission_id: cur.id, owner_id: cur.created_by }, { onConflict: 'platform,handle', ignoreDuplicates: true });
     if (!error) n++; else console.error('prospect', error.message);
   }
-  if (n) await logStep(db, cur, cur.step_count + 1, 'prospects', `${n} işletme hesabı takip listesine eklendi (Raporlar → Takip listesi)`);
+  if (n || skipped) await logStep(db, cur, cur.step_count + 1, 'prospects', `${n} işletme hesabı takip listesine eklendi${skipped ? ` · ${skipped} müşteri/kamu adayı takip listesine alınmadı` : ''} (Raporlar → Takip listesi)`);
 }
 
 // İstanbul ilçeleri (portföyde bölge filtresi için)
@@ -964,7 +975,7 @@ async function savePortfolio(db: Db, cur: MissionRow, findings: Finding[]) {
   if (cur.purpose === 'skill_test') return;
   let projects = 0, companies = 0;
   for (const f of findings) {
-    if (f.verdict !== 'verified' || !/^https?:\/\//i.test(f.url || '') || socialProfile(f.url) || findingDateIssue(f.publication, f.url, cur)) continue;
+    if (f.verdict !== 'verified' || (f.finding_type ?? classifyFindingType(f)) !== 'customer_lead' || !/^https?:\/\//i.test(f.url || '') || socialProfile(f.url) || findingDateIssue(f.publication, f.url, cur)) continue;
     const text = `${f.title} ${f.detail} ${f.location ?? ''} ${f.fit ?? ''}`;
     const { il, ilce } = placeOf(f.location, f.title, f.detail);
     const note = ['✅ Denetimde doğrulandı.', f.summary || f.detail, f.fit ? `Uygunluk: ${f.fit}` : '', f.posted ? `Tarih: ${f.posted}` : '', `Görev: ${cur.title}`]
@@ -998,6 +1009,7 @@ const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicio
 /** DENETİM: her bulgunun kaynağı açılır, içerik bulguyla karşılaştırılır; ardından ayrı bir AI "hakem" gerçeklik + güncellik + amaca uygunluk kararı verir.
  *  verified = kaynak bulguyu doğruluyor, somut ve güncel · suspicious = gerçek ama belirsiz/eski/dolaylı · rejected = uydurma, kaynakla çelişen veya amaç dışı. */
 export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[], policy: MissionPolicy = 'lead'): Promise<MissionAudit> {
+  for (const f of findings) f.finding_type ??= classifyFindingType(f);
   const srcTitle = new Map(sources.map((s) => [canonical(s.url), s.title || '']));
   const srcPublication = new Map(sources.map((s) => [canonical(s.url), trustedPublication(s.publication, s.url)]));
   const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
@@ -1024,8 +1036,9 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
         'Sen bir DENETÇİSİN. Bir botun topladığı bulguları kaynaklarıyla karşılaştırıp gerçek ve kullanılabilir olup olmadığına karar ver. Kendi bilginle bulgu uydurma veya düzeltme.',
         `GÖREVİN AMACI: ${cur.goal}`,
         'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, görevin istediği çıktı türüne doğrudan uyuyor ve tarih şartını karşılıyor; "suspicious" = gerçek görünüyor ama kanıt zayıf, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma ya da görevin amacına uymuyor. Pazar/SEO/içerik araştırması ise görevle ilgili sektör kaynağı, açıkça müşteri talebi olmadığı belirtilerek geçerli olabilir.',
+        'BULGU TÜRÜ KURALI: İşletme profili, rakip/tedarikçi tanıtımı veya belediye/devlet kurumu kaydı müşteri lead’i değildir. Müşteri lead’i yalnız açık hizmet/iş talebi kanıtı olan kayıttır; kamu ihalesi ayrı kamu fırsatıdır. Tür metadata’sını değiştirme veya olmayan talep icat etme.',
         ...(policy === 'growth' ? ['GROWTH PROFİL KURALI: Instagram/Facebook profil sayfaları kullanım koşulları nedeniyle doğrudan açılmaz. Exact profil URL’si arama kaynaklarında mevcutsa ve başlık/özet işletme sinyaliyle eşleşiyorsa bu, hesap keşfi görevi için gerçek ve kullanılabilir kanıttır; doğrudan sayfa açılmadı diye otomatik olarak suspicious verme.'] : []),
-        checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSUNUCU YAYIN KANITI: ${c.f.publication ? `${c.f.publication.posted} (${c.f.publication.origin})` : 'yok'}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
+        checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nTÜR: ${c.f.finding_type ?? 'belirsiz'}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSUNUCU YAYIN KANITI: ${c.f.publication ? `${c.f.publication.posted} (${c.f.publication.origin})` : 'yok'}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
         'Her bulgu için ayrıca kaynağa dayanan 2-3 cümlelik TÜRKÇE ÖZET yaz: ne, kim, nerede, ne zaman, büyüklük; ve bizim için ne anlama geldiği. Kaynakta olmayan bilgi ekleme.',
         'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle","summary":"2-3 cümle özet"}]}',
       ].join('\n\n'));
@@ -1064,8 +1077,13 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     if (issue) f.summary = undefined;
   }
   const count = (v: string) => findings.filter((f) => f.verdict === v).length;
+  const type_counts = findings.reduce<Partial<Record<FindingType, number>>>((acc, f) => {
+    const type = f.finding_type ?? classifyFindingType(f); acc[type] = (acc[type] ?? 0) + 1; return acc;
+  }, {});
+  const verified_customer_leads = findings.filter((f) => f.verdict === 'verified' && f.finding_type === 'customer_lead').length;
+  const verified_target_accounts = findings.filter((f) => f.verdict === 'verified' && f.finding_type !== 'customer_lead').length;
   const audit: MissionAudit = { total: findings.length, verified: count('verified'), suspicious: count('suspicious'), rejected: count('rejected'),
-    accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(),
+    accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(), type_counts, verified_customer_leads, verified_target_accounts,
     rejected_items: findings.filter((f) => f.verdict === 'rejected').map((f) => ({ title: f.title, url: f.url, reason: f.verdict_reason ?? '' })).slice(0, 20) };
   await logStep(db, cur, cur.step_count + 1, 'audit', `Denetim: ${audit.total} bulgu kontrol edildi · ✅${audit.verified} doğrulandı · ⚠️${audit.suspicious} şüpheli · ❌${audit.rejected} elendi · doğruluk %${audit.accuracy}`, null, audit);
   return audit;
