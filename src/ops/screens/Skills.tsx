@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Plus, Save } from 'lucide-react';
-import { errorText } from '../lib/api';
+import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
-import type { Skill, Tool } from '../lib/types';
+import type { Skill, SkillCapabilityAudit, Tool } from '../lib/types';
 import { useSession } from '../session';
 import { Academy } from '../components/Academy';
 import type { Bot } from '../lib/types';
@@ -19,6 +19,7 @@ export function SkillsScreen() {
     const [s, t, b] = await Promise.all([db().from('automation_skills').select('*, automation_skill_tools(tool_id)').order('display_name'), db().from('automation_tools').select('*').order('category'), db().from('automation_bots').select('*').is('archived_at', null)]);
     return { skills: unwrap(s) as Skill[], tools: unwrap(t) as Tool[], bots: unwrap(b) as Bot[] };
   }, { skills: [] as Skill[], tools: [] as Tool[], bots: [] as Bot[] }, []);
+  const audit = useQuery(() => callOps<SkillCapabilityAudit>('capability_audit'), null as SkillCapabilityAudit | null, [], ['capability_audit']);
   const cats = ['all', ...new Set(q.data.skills.map((s) => s.category))];
   const toggleTool = async (t: Tool, patch: Partial<Tool>) => { await db().from('automation_tools').update(patch).eq('id', t.id); q.reload(); };
 
@@ -26,9 +27,13 @@ export function SkillsScreen() {
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div><h2 className="font-display text-xl font-semibold text-ink-100">Akademi & Yetenek Kütüphanesi</h2><p className="text-xs text-ink-400">Yetenekler Akademi’de eğitilir ve test edilir; botlar görevlerde yalnızca onaylı yetenekleri kullanır.</p></div>
-        <div className="flex gap-2"><Tabs value={tab} onChange={setTab} items={[{ id: 'academy', label: 'Akademi' }, { id: 'skills', label: 'Skill’ler', count: q.data.skills.length }, { id: 'tools', label: 'Tool’lar', count: q.data.tools.length }]} />
+        <div className="flex gap-2"><Tabs value={tab} onChange={setTab} items={[{ id: 'academy', label: 'Akademi' }, { id: 'skills', label: 'Skill’ler', count: q.data.skills.length }, { id: 'tools', label: 'Tool’lar', count: q.data.tools.length }]}/>
           {tab === 'skills' && isAdmin && <Button variant="primary" onClick={() => setEditing('new')} icon={<Plus className="w-4 h-4" />}>Skill</Button>}</div>
       </div>
+      {tab === 'skills' && audit.data && <div className="ops-panel p-3 text-xs text-ink-300">
+        <div className="flex flex-wrap items-center gap-1.5"><b className="text-ink-100">Gerçek yetenek kapsamı</b><Pill tone="info" dot={false}>{audit.data.summary.total_skills} skill</Pill><Pill tone="go" dot={false}>{audit.data.summary.handlers_registered} handler kayıtlı</Pill><Pill tone={audit.data.summary.handlers_missing ? 'stop' : 'idle'} dot={false}>{audit.data.summary.handlers_missing} handler eksik</Pill><Pill tone={audit.data.summary.connectors_not_ready ? 'wait' : 'go'} dot={false}>{audit.data.summary.connectors_not_ready} connector hazır değil</Pill></div>
+        <p className="mt-1 text-[10px] text-ink-500">Prompt-only yetenekler talimat bağlamıdır; tool/connector-backed etiketi yalnız kayıtlı runtime bağını gösterir. {audit.data.warning || 'Health özeti son connector işlemlerinden hesaplandı.'}</p>
+      </div>}
       {tab === 'academy' ? <Academy bots={q.data.bots} /> : q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : q.loading ? <StateView kind="loading" /> : tab === 'skills' ? (
         <>
           <div className="flex flex-wrap gap-1.5">{cats.map((c) => <button key={c} onClick={() => setCat(c)} className={cx('rounded-full px-3 py-1 text-[11px] font-semibold ring-1', cat === c ? 'ring-brand-green bg-ink-750 text-ink-100' : 'ring-ink-700 text-ink-400')}>{c === 'all' ? 'Tümü' : c}</button>)}</div>
@@ -36,6 +41,7 @@ export function SkillsScreen() {
             {q.data.skills.filter((s) => cat === 'all' || s.category === cat).map((s) => {
               const tools = (s.automation_skill_tools || []).map((l) => q.data.tools.find((t) => t.id === l.tool_id)).filter(Boolean) as Tool[];
               const capability = { ...s, tools };
+              const coverage = audit.data?.skills.find((item) => item.id === s.id);
               const kind = resolveCapabilityKind(capability);
               const risk = resolveCapabilityRisk(capability);
               const testStatus = resolveCapabilityTestStatus(s);
@@ -49,6 +55,7 @@ export function SkillsScreen() {
                   <p className="text-xs text-ink-400 mt-2 line-clamp-2">{s.description}</p>
                   <div className="flex flex-wrap gap-1 mt-2"><Pill tone={s.execution_mode === 'pipeline' ? 'go' : 'info'} dot={false}>{s.execution_mode === 'pipeline' ? 'PIPELINE (AI’sız)' : 'AI AGENT'}</Pill><Pill tone={kind === 'connector_backed' ? 'go' : kind === 'tool_backed' ? 'info' : 'idle'} dot={false}>{CAPABILITY_KIND_LABEL[kind]}</Pill><Pill tone={risk === 'external_action' ? 'stop' : risk === 'approval_required' ? 'wait' : risk === 'draft' ? 'info' : 'idle'} dot={false}>{CAPABILITY_RISK_LABEL[risk]}</Pill><Pill tone={testStatus === 'handler_verified' || testStatus === 'prompt_verified' ? 'go' : testStatus === 'failed' ? 'stop' : 'wait'} dot={false}>{CAPABILITY_TEST_STATUS_LABEL[testStatus]}</Pill></div>
                   <div className="mt-1 text-[10px] text-ink-500">{capabilityAuditText(capability)}</div>
+                  {coverage && <div className="rounded-lg bg-ink-850 px-2 py-1 text-[10px] text-ink-400">{coverage.handler_key ? `Handler: ${coverage.handler_key} · ${coverage.handler_registered ? 'kayıtlı' : 'eksik'}` : 'Handler bağı yok'}{coverage.connector_key ? ` · Connector: ${coverage.connector_key} · ${coverage.connector_health}` : ''}{coverage.blocking_reasons.length ? ` · ${coverage.blocking_reasons.join(' · ')}` : ''}</div>}
                   <div className="flex flex-wrap gap-1 mt-2">{tools.map((t) => <span key={t.id} className="text-[10px] font-mono rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t.tool_key}</span>)}</div>
                 </button>
               );

@@ -22,8 +22,9 @@ import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { PUBLIC_SITE, showroomEditorTick, sitePostTick, writeDistrictPost, writeShowroomTexts } from '../_shared/showroom.ts';
 import { inspectSitePost } from '../_shared/pure/content-quality.ts';
+import { auditCapabilitySkill, connectorHealthState, summarizeCapabilityAudit } from '../_shared/pure/capability-audit.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
-import { generateContent } from '../_shared/tools/registry.ts';
+import { generateContent, registeredHandlerKeys } from '../_shared/tools/registry.ts';
 import { createEditJob, editDone, editQueue, editToPool } from '../_shared/videoedit.ts';
 import { checkUpcoming, fixDraftText } from '../_shared/contentcheck.ts';
 
@@ -528,12 +529,67 @@ async function sitePostQuality(db: Db, post: Record<string, unknown>) {
   return inspectSitePost(post, brandName);
 }
 
+/**
+ * Skill metnini gerçek çalıştırılabilirlikten ayıran salt-okunur katalog raporu.
+ * Secret/token döndürmez; connector health yalnızca kayıtlı hesap durumu ve
+ * connector_activity özetinden hesaplanır.
+ */
+async function capabilityAudit(db: Db) {
+  resetAppSecrets();
+  await loadAppSecrets(db);
+  const [{ data: skills, error: se }, { data: links, error: le }, { data: tools, error: te }, { data: accounts }, { data: health, error: he }] = await Promise.all([
+    db.from('automation_skills').select('id,skill_key,display_name,capability_kind,handler_key,connector_key,capability_test_status').is('archived_at', null).order('display_name').limit(500),
+    db.from('automation_skill_tools').select('skill_id,tool_id').limit(2000),
+    db.from('automation_tools').select('id,tool_key,handler,platform,active').limit(500),
+    db.from('social_accounts').select('connector_key,connection_status,token_expires_at').limit(500),
+    db.from('connector_health').select('connector_key,last_ok_at,last_failed_at,failed_24h').limit(100),
+  ]);
+  if (se) throw se;
+  if (le) throw le;
+  if (te) throw te;
+  const toolById = new Map((tools || []).map((tool: { id: string; tool_key: string; handler: string | null; platform: string | null; active: boolean }) => [tool.id, tool]));
+  const linksBySkill = new Map<string, Array<{ tool_key: string; handler: string | null; platform: string | null; active: boolean }>>();
+  for (const link of (links || []) as Array<{ skill_id: string; tool_id: string }>) {
+    const tool = toolById.get(link.tool_id);
+    if (!tool) continue;
+    const current = linksBySkill.get(link.skill_id) || [];
+    current.push({ tool_key: tool.tool_key, handler: tool.handler, platform: tool.platform, active: tool.active });
+    linksBySkill.set(link.skill_id, current);
+  }
+  const accountByConnector = new Map<string, { connection_status: string; token_expires_at: string | null }>();
+  for (const account of (accounts || []) as Array<{ connector_key: string | null; connection_status: string; token_expires_at: string | null }>) {
+    if (account.connector_key && !accountByConnector.has(account.connector_key)) accountByConnector.set(account.connector_key, account);
+  }
+  const healthByConnector = new Map<string, { last_ok_at: string | null; last_failed_at: string | null; failed_24h: number }>();
+  for (const row of (health || []) as Array<{ connector_key: string; last_ok_at: string | null; last_failed_at: string | null; failed_24h: number }>) {
+    healthByConnector.set(row.connector_key, row);
+  }
+  const connectorFor = (key: string | null) => {
+    if (!key) return null;
+    const def = connectorByKey(key);
+    if (!def) return null;
+    const account = accountByConnector.get(key);
+    const status = resolveStatus(def, account ? { connection_status: account.connection_status, token_expires_at: account.token_expires_at } : null);
+    const recent = healthByConnector.get(key);
+    return { key, implemented: def.implemented, status, health_state: connectorHealthState({ registered: true, implemented: def.implemented, status,
+      last_ok_at: recent?.last_ok_at ?? null, failed_24h: recent?.failed_24h ?? 0 }), last_ok_at: recent?.last_ok_at ?? null,
+      last_failed_at: recent?.last_failed_at ?? null, failed_24h: recent?.failed_24h ?? 0 };
+  };
+  const knownHandlers = new Set(registeredHandlerKeys());
+  const items = ((skills || []) as Array<{ id: string; skill_key: string; display_name: string; capability_kind: string | null; handler_key: string | null; connector_key: string | null; capability_test_status: string | null }>).map((skill) =>
+    auditCapabilitySkill({ ...skill, tools: linksBySkill.get(skill.id) || [], connector: connectorFor(skill.connector_key) }, knownHandlers));
+  // Health view opsiyonel: katalog bağlarını yine de görünür tut.
+  const viewWarning = he ? 'connector_health görünümü okunamadı; health alanları yalnız hesap/registry durumunu yansıtır.' : null;
+  return { generated_at: new Date().toISOString(), summary: summarizeCapabilityAudit(items), skills: items, registered_handlers: [...knownHandlers], warning: viewWarning };
+}
+
 // ── Panel API ───────────────────────────────────────────────────────────────
 async function api(db: Db, req: Request) {
   const body = await req.json().catch(() => ({}));
   const action = String(body.action || '');
   switch (action) {
     case 'status': { await requireUser(db, req); return status(db); }
+    case 'capability_audit': { await requireUser(db, req); return capabilityAudit(db); }
     case 'inbox_reply': { await requireUser(db, req); return inboxReply(db, String(body.id || ''), String(body.message || '')); }
     case 'inbox_sync': { await requireUser(db, req); return inboxTick(db, true); }
     case 'radar_sync': { await requireUser(db, req); return radarTick(db, true); }
