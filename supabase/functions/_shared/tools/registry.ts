@@ -297,3 +297,8 @@ const handlers: Record<string, ToolHandler> = {
 export function getHandler(key: string): ToolHandler | undefined {
   return handlers[key];
 }
+
+/** Capability audit için yalnızca kayıtlı handler adlarını döndürür; handler çalıştırmaz. */
+export function registeredHandlerKeys(): string[] {
+  return Object.keys(handlers).sort();
+}

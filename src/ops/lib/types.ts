@@ -1,6 +1,7 @@
 // Panelde kullanılan satır tipleri (Supabase tablolarının alt kümeleri).
 import type { FindingType } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
 import type { AcademyOutputKind, CapabilityKind, CapabilityRisk, CapabilityTestStatus, CatalogSource } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
+import type { CapabilityAuditReport } from '../../../supabase/functions/_shared/pure/capability-audit.ts';
 export interface Bot {
   id: string; slug: string; name: string; bot_type: string; platform: string | null; icon: string; description: string; instructions: string;
   ai_agent_id: string | null; connector_key: string | null; permissions: { denied_tools?: string[]; max_runs_per_day?: number } | null;
@@ -16,6 +17,7 @@ export interface Skill {
   capability_test_status?: CapabilityTestStatus | null; capability_test_mission_id?: string | null; capability_tested_at?: string | null;
   automation_skill_tools?: Array<{ tool_id: string }>;
 }
+export type SkillCapabilityAudit = CapabilityAuditReport;
 export interface Tool {
   id: string; tool_key: string; name: string; description: string; category: string; min_role: 'staff' | 'admin'; approval_required: boolean;
   platform: string | null; input_schema: Record<string, unknown>; output_schema: Record<string, unknown>; handler: string; active: boolean;
