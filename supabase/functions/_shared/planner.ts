@@ -1,5 +1,5 @@
 // Aylık içerik planı: her koşuda bir hafta üretilir, kalan haftalar görev kuyruğu ile devam eder.
-import { aiComplete, defaultBrand, type EngineCtx, type TaskRow } from './context.ts';
+import { aiComplete, brandForContext, type EngineCtx, type TaskRow } from './context.ts';
 
 type Invoke = (toolKey: string, input: Record<string, unknown>) => Promise<{ ok: boolean; content: unknown }>;
 
@@ -29,7 +29,7 @@ export async function planWeek(ctx: EngineCtx, task: TaskRow, invoke: Invoke) {
   const from = week * 7 + 1;
   const to = Math.min(from + 6, daysInMonth);
   const platforms = cfg.platforms?.length ? cfg.platforms : ['instagram', 'facebook'];
-  const brand = await defaultBrand(ctx.db);
+  const brand = await brandForContext(ctx);
   const dates = Array.from({ length: to - from + 1 }, (_, i) => `${cfg.month.slice(0, 7)}-${String(from + i).padStart(2, '0')}`);
 
   const prompt = [

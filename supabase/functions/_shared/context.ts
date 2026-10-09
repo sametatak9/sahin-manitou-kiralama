@@ -13,7 +13,7 @@ export function serviceClient(): Db {
 }
 
 export interface BotRow {
-  id: string; slug: string; name: string; platform: string | null; status: string; instructions: string;
+  id: string; slug: string; name: string; platform: string | null; status: string; instructions: string; client_id?: string | null;
   connector_key: string | null; permissions: { denied_tools?: string[]; max_runs_per_day?: number } | null; ai_agent_id: string | null;
 }
 export interface SkillRow {
@@ -44,6 +44,20 @@ export interface EngineCtx {
   outputs: Record<string, unknown>;
   log: (level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: unknown) => Promise<void>;
   tokens: { in: number; out: number };
+}
+
+export interface BrandKitRow {
+  id: string;
+  client_id?: string | null;
+  name: string;
+  company_name: string;
+  logo_url?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  instagram?: string | null;
+  address?: string | null;
+  default_cta?: string | null;
+  [key: string]: unknown;
 }
 
 export function makeLogger(db: Db, runId: string | null) {
@@ -110,9 +124,19 @@ export async function aiComplete(ctx: Pick<EngineCtx, 'db' | 'runId' | 'actorId'
   }
 }
 
-export async function defaultBrand(db: Db) {
+export async function defaultBrand(db: Db): Promise<BrandKitRow | null> {
   const { data } = await db.from('brand_kits').select('*').order('is_default', { ascending: false }).limit(1).maybeSingle();
-  return data as Record<string, string> | null;
+  return data as BrandKitRow | null;
+}
+
+/** Bot müşteri bağlamına sahipse o müşterinin marka kitini seçer; yoksa varsayılanı kullanır. */
+export async function brandForContext(ctx: Pick<EngineCtx, 'db' | 'bot'>): Promise<BrandKitRow | null> {
+  const clientId = ctx.bot?.client_id;
+  if (clientId) {
+    const { data } = await ctx.db.from('brand_kits').select('*').eq('client_id', clientId).order('is_default', { ascending: false }).limit(1).maybeSingle();
+    if (data) return data as BrandKitRow;
+  }
+  return defaultBrand(ctx.db);
 }
 
 export function istanbulDayRange(now = new Date()) {
