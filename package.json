@@ -19,7 +19,8 @@
     "test:skill-router": "tsx tests/skill-router.test.ts",
     "test:finding-taxonomy": "tsx tests/finding-taxonomy.test.ts",
     "test:seo-audit": "tsx tests/seo-audit.test.ts",
-    "test:content-quality": "tsx tests/content-quality.test.ts"
+    "test:content-quality": "tsx tests/content-quality.test.ts",
+    "test:capability-registry": "tsx tests/capability-registry.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -10,12 +10,15 @@ import type { Bot } from '../lib/types';
 import { useSession } from '../session';
 import { Button, Field, Modal, Notice, Pill, StateView } from '../ui';
 import { MissionDetail } from './Missions';
+import { CAPABILITY_KIND_LABEL, CAPABILITY_RISK_LABEL, capabilityAuditText, resolveCapabilityKind, resolveCapabilityRisk } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
 
 interface AcademySkill {
   id: string; skill_key: string; display_name: string; description: string; category: string; instructions: string; enabled: boolean;
   lifecycle: 'draft' | 'testing' | 'approved' | 'retired'; version: number; search_terms: string[]; sources: string[];
   good_examples: string | null; bad_examples: string | null; test_goal: string | null; test_score: number | null; test_findings: number | null;
   last_tested_at: string | null; last_test_mission_id: string | null; approved_at: string | null;
+  capability_kind?: 'prompt_only' | 'tool_backed' | 'connector_backed' | null; risk_level?: 'read_only' | 'draft' | 'approval_required' | 'external_action' | null;
+  catalog_source?: 'native' | 'imported' | 'curated' | null; handler_key?: string | null; connector_key?: string | null;
 }
 interface Improvement { id: string; skill_id: string; mission_id: string | null; diagnosis: string; instructions_add: string | null; search_terms_add: string[]; search_terms_remove: string[]; sources_add: string[]; status: string; created_at: string; reviewer?: string }
 
@@ -33,7 +36,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const q = useQuery(async () => {
     const [s, i] = await Promise.all([
-      db().from('automation_skills').select('id,skill_key,display_name,description,category,instructions,enabled,lifecycle,version,search_terms,sources,good_examples,bad_examples,test_goal,test_score,test_findings,last_tested_at,last_test_mission_id,approved_at')
+      db().from('automation_skills').select('*')
         .is('archived_at', null).order('display_name'),
       db().from('skill_improvements').select('*').eq('status', 'pending').order('created_at', { ascending: false }).limit(100),
     ]);
@@ -63,6 +66,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
             <div className="font-display text-base font-semibold text-ink-100">Akademi — yetenek eğitimi, testi ve onayı</div>
             <p><b>1. Eğit:</b> Yeteneğin talimatını, arama terimlerini, kaynaklarını ve iyi/kötü örneklerini yazın. <b>2. Test et:</b> Yetenek 10 dakikalık gerçek bir göreve çıkar; getirdiği her bilgi <b>denetçi</b> tarafından kaynağında kontrol edilir ve doğruluk puanı çıkar. <b>3. Onayla:</b> Yalnızca <b>onaylı</b> yetenekler botların gerçek görevlerinde kullanılır.</p>
             <p><b>Claude denetimi:</b> Her sabah görevler bittikten sonra (≈10:00) Claude raporları açar, bulguların kaynağına bakarak gerçek/sahte/alakasız ayırır ve yeteneği kendisi geliştirir (yeni sürüm); özeti Telegram’a gönderir. <b>Koç önerileri:</b> Her görevden sonra koç, botun eksiklerini teşhis eder (ör. yanlış arama terimi, zayıf kaynak) ve somut düzeltme önerir. “Uygula” deyince yetenek bir üst sürüme geçer.</p>
+            <p><b>Katalog sınırı:</b> İçe aktarılan bir Manus/AI yeteneği önce prompt bağlamı olarak sınıflandırılır. Gerçek tool veya connector handler eşleşmesi yoksa sistem onu çalıştırılabilir araç gibi göstermez; bunun için katalog eşleşmesi, test kanıtı ve yönetici onayı gerekir.</p>
           </div>
         </div>
       </div>
@@ -72,6 +76,9 @@ export function Academy({ bots }: { bots: Bot[] }) {
           {sorted.map((s) => {
             const imps = q.data.imps.filter((i) => i.skill_id === s.id);
             const score = s.test_score == null ? null : Number(s.test_score);
+            const capability = { ...s, tools: s.handler_key ? [{ handler: s.handler_key, platform: s.connector_key }] : [] };
+            const capabilityKind = resolveCapabilityKind(capability);
+            const capabilityRisk = resolveCapabilityRisk(capability);
             return (
               <div key={s.id} className="ops-panel p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -79,6 +86,8 @@ export function Academy({ bots }: { bots: Bot[] }) {
                     <div className="text-[10px] font-mono text-ink-500">{s.skill_key} · {s.category}</div></div>
                   <Pill tone={LIFE[s.lifecycle].tone}>{LIFE[s.lifecycle].label}</Pill>
                 </div>
+                <div className="flex flex-wrap gap-1"><Pill tone={capabilityKind === 'connector_backed' ? 'go' : capabilityKind === 'tool_backed' ? 'info' : 'idle'} dot={false}>{CAPABILITY_KIND_LABEL[capabilityKind]}</Pill><Pill tone={capabilityRisk === 'external_action' ? 'stop' : capabilityRisk === 'approval_required' ? 'wait' : capabilityRisk === 'draft' ? 'info' : 'idle'} dot={false}>{CAPABILITY_RISK_LABEL[capabilityRisk]}</Pill></div>
+                <p className="text-[10px] text-ink-500">{capabilityAuditText(capability)}</p>
                 {s.test_goal && <p className="text-xs text-ink-300 line-clamp-3"><b>Test amacı:</b> {s.test_goal}</p>}
                 {s.search_terms?.length > 0 && <div className="flex flex-wrap gap-1">{s.search_terms.slice(0, 12).map((t) => <span key={t} className="text-[10px] rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t}</span>)}</div>}
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
