@@ -9,7 +9,11 @@ const PRICE: Array<{ match: RegExp; inp: number; out: number }> = [
   { match: /^claude-sonnet-5/, inp: 2, out: 10 },
   { match: /^claude-sonnet/, inp: 3, out: 15 },
   { match: /^claude-haiku/, inp: 1, out: 5 },
-  { match: /^gpt-4o-mini|^gpt-4\.1-nano|^gpt-5-nano/, inp: 0.15, out: 0.6 },
+  { match: /^gpt-5\.5/, inp: 5, out: 30 },
+  { match: /^gpt-5-nano/, inp: 0.05, out: 0.4 },
+  { match: /^gpt-5-mini/, inp: 0.25, out: 2 },
+  { match: /^gpt-5$/, inp: 1.25, out: 10 },
+  { match: /^gpt-4o-mini|^gpt-4\.1-nano/, inp: 0.15, out: 0.6 },
   { match: /^gpt-/, inp: 2.5, out: 10 },
   { match: /^gemini/, inp: 0.3, out: 2.5 }, // ücretsiz katmanda 0; ücretli olursa üst sınır tahmini
   { match: /^(groq\/|llama|openai\/gpt-oss|qwen|moonshot)/, inp: 0.15, out: 0.6 }, // Groq ücretsiz katmanda 0; ücretli üst sınır tahmini

@@ -10,7 +10,7 @@ export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const GITHUB_MODELS_URL = 'https://models.github.ai/inference/chat/completions';
 export type CompatProvider = 'openai' | 'groq' | 'openrouter' | 'github' | 'cerebras' | 'mistral';
 export const COMPAT: Record<CompatProvider, { url: string; testModel: string; agentModel: string; free: boolean }> = {
-  openai: { url: 'https://api.openai.com/v1/chat/completions', testModel: 'gpt-4o-mini', agentModel: 'gpt-4o-mini', free: false },
+  openai: { url: 'https://api.openai.com/v1/chat/completions', testModel: 'gpt-5-nano', agentModel: 'gpt-5-mini', free: false },
   groq: { url: GROQ_URL, testModel: 'llama-3.1-8b-instant', agentModel: 'llama-3.3-70b-versatile', free: true },
   openrouter: { url: OPENROUTER_URL, testModel: 'meta-llama/llama-3.3-70b-instruct:free', agentModel: 'meta-llama/llama-3.3-70b-instruct:free', free: true },
   github: { url: GITHUB_MODELS_URL, testModel: 'openai/gpt-4.1-mini', agentModel: 'openai/gpt-4.1-mini', free: true },

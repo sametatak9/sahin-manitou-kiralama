@@ -40,7 +40,7 @@ export function AgencyControlStrip() {
   }, [] as ModelRow[], [], ['ai_model_catalog']);
 
   useEffect(() => {
-    const preferred = getPreferredModel(overview.data.workspace?.default_model_key ?? 'claude-sonnet-5');
+    const preferred = getPreferredModel(overview.data.workspace?.default_model_key ?? 'gpt-5-mini');
     if (!window.localStorage.getItem('embay.agency.preferred-model')) setSelectedModel(preferred);
   }, [overview.data.workspace?.default_model_key]);
 
