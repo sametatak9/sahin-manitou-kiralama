@@ -6,6 +6,7 @@ import type { Skill, Tool } from '../lib/types';
 import { useSession } from '../session';
 import { Academy } from '../components/Academy';
 import type { Bot } from '../lib/types';
+import { CAPABILITY_KIND_LABEL, CAPABILITY_RISK_LABEL, capabilityAuditText, resolveCapabilityKind, resolveCapabilityRisk } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
 import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Pill, StateView, Tabs } from '../ui';
 
 export function SkillsScreen() {
@@ -34,6 +35,9 @@ export function SkillsScreen() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {q.data.skills.filter((s) => cat === 'all' || s.category === cat).map((s) => {
               const tools = (s.automation_skill_tools || []).map((l) => q.data.tools.find((t) => t.id === l.tool_id)).filter(Boolean) as Tool[];
+              const capability = { ...s, tools };
+              const kind = resolveCapabilityKind(capability);
+              const risk = resolveCapabilityRisk(capability);
               return (
                 <button key={s.id} onClick={() => isAdmin && setEditing(s)} className="ops-panel text-left p-4 hover:ring-1 hover:ring-brand-green/40">
                   <div className="flex items-start gap-3">
@@ -42,7 +46,8 @@ export function SkillsScreen() {
                       <div className="text-[10px] font-mono text-ink-500">{s.skill_key} · {s.category}</div></div>
                   </div>
                   <p className="text-xs text-ink-400 mt-2 line-clamp-2">{s.description}</p>
-                  <div className="flex flex-wrap gap-1 mt-2"><Pill tone={s.execution_mode === 'pipeline' ? 'go' : 'info'} dot={false}>{s.execution_mode === 'pipeline' ? 'PIPELINE (AI’sız)' : 'AI AGENT'}</Pill>{s.approval_required && <Pill tone="wait" dot={false}>ONAY</Pill>}</div>
+                  <div className="flex flex-wrap gap-1 mt-2"><Pill tone={s.execution_mode === 'pipeline' ? 'go' : 'info'} dot={false}>{s.execution_mode === 'pipeline' ? 'PIPELINE (AI’sız)' : 'AI AGENT'}</Pill><Pill tone={kind === 'connector_backed' ? 'go' : kind === 'tool_backed' ? 'info' : 'idle'} dot={false}>{CAPABILITY_KIND_LABEL[kind]}</Pill><Pill tone={risk === 'external_action' ? 'stop' : risk === 'approval_required' ? 'wait' : risk === 'draft' ? 'info' : 'idle'} dot={false}>{CAPABILITY_RISK_LABEL[risk]}</Pill></div>
+                  <div className="mt-1 text-[10px] text-ink-500">{capabilityAuditText(capability)}</div>
                   <div className="flex flex-wrap gap-1 mt-2">{tools.map((t) => <span key={t.id} className="text-[10px] font-mono rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t.tool_key}</span>)}</div>
                 </button>
               );
