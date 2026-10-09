@@ -2,7 +2,8 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { budgetBlock, recordUsage } from './ai/budget.ts';
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
 import type { AgentConfig } from './ai/index.ts';
-import { COMPAT, getAiKey } from './ai/keys.ts';
+import { getAiKey } from './ai/keys.ts';
+import { defaultModelForProvider, fallbackProviders } from './pure/model-routing.ts';
 
 export type Db = SupabaseClient;
 
@@ -72,12 +73,12 @@ export async function loadAgent(db: Db, agentId: string | null, fallbackKey = 'c
   const { data } = agentId ? await q.eq('id', agentId).maybeSingle() : await q.eq('agent_key', fallbackKey).maybeSingle();
   if (!data) throw new Error('Aktif AI agent bulunamadı');
   const agent = { ...data, temperature: Number(data.temperature) } as AgentConfig & { id: string };
-  // Ajanın sağlayıcısının anahtarı yoksa tanımlı başka sağlayıcıya geç (önce Claude, sonra Gemini)
+  // Ajanın sağlayıcısının anahtarı yoksa ortak, ucuz ve denetlenebilir fallback sırasını kullan.
   if (!(await getAiKey(agent.provider))) {
-    if (agent.provider !== 'anthropic' && (await getAiKey('anthropic'))) return { ...agent, provider: 'anthropic', model: 'claude-sonnet-5' };
-    if (agent.provider !== 'gemini' && (await getAiKey('gemini'))) return { ...agent, provider: 'gemini', model: Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest' };
-    if (agent.provider !== 'groq' && (await getAiKey('groq'))) return { ...agent, provider: 'groq', model: Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile' };
-    for (const p of ['cerebras', 'mistral', 'openrouter', 'github'] as const) if (agent.provider !== p && (await getAiKey(p))) return { ...agent, provider: p, model: COMPAT[p].agentModel };
+    for (const p of fallbackProviders(agent.provider)) {
+      if (p === agent.provider || !(await getAiKey(p))) continue;
+      return { ...agent, provider: p, model: defaultModelForProvider(p, 'agent') };
+    }
   }
   return agent;
 }
@@ -91,11 +92,10 @@ export async function aiComplete(ctx: Pick<EngineCtx, 'db' | 'runId' | 'actorId'
   try {
     const blocked = await budgetBlock(ctx.db);
     if (blocked) throw new Error(`${blocked}. Yapay zekâ çağrısı yapılmadı (Ayarlar → Harcama sınırı).`);
-    // Kredi/kota/erişim hatasında sıradaki anahtarı olan sağlayıcıya geç (Claude bakiyesi yokken Gemini → Groq → OpenRouter → GitHub)
+    // Kredi/kota/erişim hatasında sıradaki anahtarı olan sağlayıcıya geç (GPT-5 mini → web-capable/ücretsiz fallbacklar)
     let res: Awaited<ReturnType<ReturnType<typeof getProvider>['complete']>> | null = null; let lastErr: unknown = null; let used = agent;
     const chain: AgentConfig[] = [agent];
-    const alt: Array<[AgentConfig['provider'], string]> = [['gemini', Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest'], ['groq', Deno.env.get('GROQ_AGENT_MODEL') || 'llama-3.3-70b-versatile'],
-      ['cerebras', COMPAT.cerebras.agentModel], ['mistral', COMPAT.mistral.agentModel], ['openrouter', COMPAT.openrouter.agentModel], ['github', COMPAT.github.agentModel], ['anthropic', 'claude-sonnet-5']];
+    const alt: Array<[AgentConfig['provider'], string]> = fallbackProviders(agent.provider).slice(1).map((p) => [p, defaultModelForProvider(p, 'agent')]);
     for (const [p, m] of alt) if (p !== agent.provider && (await getAiKey(p))) chain.push({ ...agent, provider: p, model: m });
     for (const a of chain) {
       // JSON şemasını yalnızca Claude/OpenAI yerel olarak uygular: diğerlerine şema istemde açıkça verilir

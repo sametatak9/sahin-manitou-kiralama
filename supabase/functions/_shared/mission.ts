@@ -24,6 +24,7 @@ import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
 import { academyOutputEvidence, academyTestStatus } from './pure/capability-registry.ts';
 import { connectorHealthState, missionCapabilitySnapshot } from './pure/capability-audit.ts';
 import { registeredHandlerKeys } from './tools/registry.ts';
+import { routeForModel } from './pure/model-routing.ts';
 
 type Db = SupabaseClient;
 
@@ -287,7 +288,7 @@ export const ERROR_KIND: Record<string, string> = {
 };
 
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
-type CompatResearch = 'openrouter' | 'github' | 'cerebras' | 'mistral';
+type CompatResearch = 'openai' | 'openrouter' | 'github' | 'cerebras' | 'mistral';
 interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq' | CompatResearch; model: string; system: string; key: string }
 async function chooseAi(db: Db, botId: string | null, preferred?: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
@@ -297,6 +298,11 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
     const a = (data as any)?.ai_agents; agent = Array.isArray(a) ? a[0] : a;
   }
   const base = agent?.system_prompt || 'Sen Embay Yapı ve Şahin Manitou Kiralama için çalışan titiz bir araştırma botusun. Türkçe yaz. Asla bilgi uydurma.';
+  const requested = routeForModel(preferred);
+  if (requested?.provider === 'openai') {
+    const ok = await getAiKey('openai');
+    if (ok) return { provider: 'openai', model: requested.model, system: base, key: ok };
+  }
   const ak = await getAiKey('anthropic');
   if (ak) return { provider: 'anthropic', model: preferred?.startsWith('claude-') ? preferred : agent?.provider === 'anthropic' ? agent.model : 'claude-sonnet-5', system: base, key: ak };
   const gk = await getAiKey('gemini');
@@ -426,9 +432,10 @@ async function groqResearch(key: string, model: string, system: string, prompt: 
 /** GitHub Models ücretsiz katmanı ~8K token girdi kabul eder: uzun istem baştan ve sondan kırpılır. */
 const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, Math.round(max * 0.22))}\n…\n${t.slice(-Math.round(max * 0.78))}` : t);
 async function compatResearch(provider: CompatResearch, key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+  const tokenLimit = provider === 'openai' ? { max_completion_tokens: 3000 } : { max_tokens: 3000 };
   const res = await fetch(COMPAT[provider].url, {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, max_tokens: 3000, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: clip(prompt, provider === 'github' ? 12000 : 18000) }] }),
+    body: JSON.stringify({ model, ...tokenLimit, messages: [{ role: 'system', content: `${system}\n\nNOT: Bu modelin internette arama yetkisi yok. Yalnızca istemde verilen sayfa içeriği ve bilgilerle çalış; kaynak adresi istemde geçmeyen hiçbir bulgu yazma.` }, { role: 'user', content: clip(prompt, provider === 'github' ? 12000 : 18000) }] }),
   });
   const data = await res.json().catch(() => ({}));
   const label = AI_LABEL[provider] ?? provider;
@@ -441,19 +448,19 @@ async function compatResearch(provider: CompatResearch, key: string, model: stri
   return { text: String(data.choices?.[0]?.message?.content ?? ''), sources: [], tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0, searches: 0, model, provider };
 }
 
-const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', github: 'GitHub Models', cerebras: 'Cerebras', mistral: 'Mistral' };
+const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', openai: 'OpenAI', groq: 'Groq', openrouter: 'OpenRouter', github: 'GitHub Models', cerebras: 'Cerebras', mistral: 'Mistral' };
 function research(provider: string, key: string, model: string, system: string, prompt: string) {
   if (provider === 'anthropic') return anthropicResearch(key, model, system, prompt);
   if (provider === 'gemini') return geminiResearch(key, model, system, prompt);
-  if (['openrouter', 'github', 'cerebras', 'mistral'].includes(provider)) return compatResearch(provider as CompatResearch, key, model, system, prompt);
+  if (['openai', 'openrouter', 'github', 'cerebras', 'mistral'].includes(provider)) return compatResearch(provider as CompatResearch, key, model, system, prompt);
   return groqResearch(key, model, system, prompt);
 }
 const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p === 'gemini' ? (Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest')
-  : ['openrouter', 'github', 'cerebras', 'mistral'].includes(p) ? COMPAT[p as CompatResearch].agentModel : GROQ_RESEARCH_MODEL());
+  : ['openai', 'openrouter', 'github', 'cerebras', 'mistral'].includes(p) ? COMPAT[p as CompatResearch].agentModel : GROQ_RESEARCH_MODEL());
 
 /** Sırayla dener: seçilen sağlayıcı → diğerleri (Claude, Gemini, Groq). Kredi/anahtar/limit hatasında bir sonrakine geçer. */
 async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
-  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'cerebras', 'mistral', 'openrouter', 'github'].filter((p) => p !== c.provider)];
+  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'openai', 'cerebras', 'mistral', 'openrouter', 'github'].filter((p) => p !== c.provider)];
   const errors: string[] = [];
   let firstErr: unknown = null; let lastErr: unknown = null; let prev: string = c.provider;
   for (const p of chain) {

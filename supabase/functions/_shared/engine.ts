@@ -1,7 +1,6 @@
 // EMBAY BOT ENGINE: Bot = configuration + skills + tools + permissions + schedule.
 // Görev → bot/skill/tool yükle → izin kontrolü → (pipeline | AI agent) → run/log → retry/next_run.
 import { ConfigurationRequiredError, getProvider } from './ai/index.ts';
-import { COMPAT } from './ai/keys.ts';
 import { budgetBlock, recordUsage } from './ai/budget.ts';
 import type { AgentRunResult } from './ai/types.ts';
 import { loadAgent, makeLogger, type BotRow, type Db, type EngineCtx, type SkillRow, type TaskRow, type ToolRow } from './context.ts';
@@ -9,6 +8,7 @@ import { decideToolUse } from './pure/rules.ts';
 import { computeNextRun, retryDelaySeconds } from './pure/schedule.ts';
 import { getHandler } from './tools/registry.ts';
 import { planWeek } from './planner.ts';
+import { defaultModelForProvider, fallbackProviders } from './pure/model-routing.ts';
 
 export interface ExecuteOptions {
   trigger: 'schedule' | 'manual' | 'retry' | 'event';
@@ -176,7 +176,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
         const errStr = String((agentErr as Error)?.message || agentErr);
         const isQuota = /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing/i.test(errStr);
         if (isQuota) {
-          const fallbacks = (['anthropic', 'gemini', 'groq', 'cerebras', 'mistral', 'openrouter', 'github', 'openai'] as const).filter((p) => p !== ctx.agent!.provider);
+          const fallbacks = fallbackProviders(ctx.agent!.provider).slice(1);
           let recovered = false;
           for (const fallback of fallbacks) {
             try {
@@ -184,7 +184,7 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
               const altAgent = {
                 ...ctx.agent!,
                 provider: fallback,
-                model: fallback === 'gemini' ? 'gemini-flash-latest' : fallback === 'anthropic' ? 'claude-sonnet-5' : COMPAT[fallback].agentModel
+                model: defaultModelForProvider(fallback, 'agent')
               };
               res = await getProvider(fallback).runAgent(altAgent, {
                 system, prompt, maxTurns: 8,

@@ -8,8 +8,8 @@ import { budgetBlock, spendStatus } from '../_shared/ai/budget.ts';
 import { normalizeSkillIds, snapshotSkillIds } from '../_shared/pure/skill-snapshot.ts';
 
 type Db = SupabaseClient;
-// Görev başlatılırken seçilebilen modeller (varsayılan: botun AI ajanı, yoksa claude-sonnet-5 — daha ekonomik)
-const ALLOWED_MODELS = ['claude-opus-5', 'claude-sonnet-5'];
+// Görev başlatılırken seçilebilen modeller. Anahtar yoksa runtime güvenli fallback seçer.
+const ALLOWED_MODELS = ['gpt-5-nano', 'gpt-5-mini', 'gpt-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'];
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const cors = {
   'access-control-allow-origin': '*',

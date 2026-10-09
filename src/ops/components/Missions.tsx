@@ -23,12 +23,18 @@ export const ERROR_KIND: Record<string, string> = {
   ai_credit: 'AI kredisi / bakiyesi bitti', ai_auth: 'AI anahtarı geçersiz veya yetkisiz', search_unavailable: 'Canlı genel web araması kullanılamadı', repeated_error: 'Üst üste 3 adım hata verdi', timeout: 'Zaman aşımı', budget: 'Harcama sınırı doldu',
 };
 const MODELS = [
-  { id: '', label: 'Otomatik (ekonomik: Sonnet 5)' },
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — ekonomik (önerilen)' },
+  { id: '', label: 'Otomatik (chat/bot: GPT-5 mini; araştırma: web-capable fallback)' },
+  { id: 'gpt-5-nano', label: 'GPT-5 nano — ön eleme ve kısa işler' },
+  { id: 'gpt-5-mini', label: 'GPT-5 mini — genel bot ve Copilot (önerilen)' },
+  { id: 'gpt-5', label: 'GPT-5 — karmaşık sentez, daha pahalı' },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — web araştırması için güçlü fallback' },
   { id: 'claude-opus-5', label: 'Claude Opus 5 — en güçlü, ~2,5 kat pahalı' },
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 — hızlı yardımcı' },
 ];
-const PRICE: Record<string, [number, number]> = { 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10] };
+const PRICE: Record<string, [number, number]> = {
+  'gpt-5-nano': [0.05, 0.4], 'gpt-5-mini': [0.25, 2], 'gpt-5': [1.25, 10],
+  'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10],
+};
 export function costText(m: Pick<Mission, 'model' | 'tokens_in' | 'tokens_out'> & { cost_usd?: number | null }) {
   if (m.cost_usd && Number(m.cost_usd) > 0) return `≈ $${Number(m.cost_usd).toFixed(2)}`;
   const p = m.model ? PRICE[m.model] : undefined; if (!p || !(m.tokens_in + m.tokens_out)) return null;
@@ -52,8 +58,8 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
   const [more, setMore] = useState(false);
   const [search_for, setSearch] = useState('');
   const [report_spec, setReport] = useState('');
-  const ai = useQuery(() => callMissions<{ anthropic: boolean; gemini: boolean }>('ai_status'), null as { anthropic: boolean; gemini: boolean } | null, []);
-  const noAi = ai.data && !ai.data.anthropic && !ai.data.gemini;
+  const ai = useQuery(() => callMissions<Record<string, boolean>>('ai_status'), null as Record<string, boolean> | null, []);
+  const noAi = ai.data && !Object.values(ai.data).some(Boolean);
   const start = async () => {
     setBusy(true); setErr(null);
     const goal = f.goal.trim();
