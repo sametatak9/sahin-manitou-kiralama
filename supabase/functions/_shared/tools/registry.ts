@@ -1,8 +1,9 @@
 // Tool registry handler'ları. Botlar yalnızca buradaki fonksiyonları çağırabilir (sınırsız kod yok).
 // "propose" = bot çalışırken; "execute" = insan onayından sonra (approval executor).
-import { aiComplete, defaultBrand, istanbulDayRange, type EngineCtx } from '../context.ts';
+import { aiComplete, brandForContext, istanbulDayRange, type EngineCtx } from '../context.ts';
 import { resendEmail, telegramSend, waMeLink, whatsappCloudSend } from '../connectors/messaging.ts';
 import { normalizeDomain } from '../pure/rules.ts';
+import { contentDraftErrors, normalizeContentDraft } from '../pure/content.ts';
 import { publishContent } from '../publisher.ts';
 import { secret as appSecret } from '../secrets.ts';
 
@@ -22,11 +23,12 @@ const CONTENT_SCHEMA = {
 };
 
 async function brandLine(ctx: EngineCtx) {
-  const b = await defaultBrand(ctx.db);
-  return b ? `Marka: ${b.company_name}. Telefon: ${b.phone}. Web: ${b.website}. Instagram: ${b.instagram}. Adres: ${b.address}. Varsayılan CTA: ${b.default_cta}.` : '';
+  const b = await brandForContext(ctx);
+  return b ? `Marka: ${b.company_name}. Telefon: ${b.phone ?? ''}. Web: ${b.website ?? ''}. Instagram: ${b.instagram ?? ''}. Adres: ${b.address ?? ''}. Varsayılan CTA: ${b.default_cta ?? ''}.` : '';
 }
 
 export async function generateContent(ctx: EngineCtx, input: Record<string, unknown>) {
+  const brand = await brandForContext(ctx);
   const prompt = [
     `Platform: ${str(input.platform, 'instagram')}`,
     `Konu: ${str(input.topic, 'Manitou kiralama ve şantiye hizmetleri')}`,
@@ -38,7 +40,10 @@ export async function generateContent(ctx: EngineCtx, input: Record<string, unkn
     'Platformun karakter ve format kurallarına uy. Hashtag’leri # olmadan değil, # ile yaz. Uydurma rakam/müşteri/proje kullanma.',
   ].filter(Boolean).join('\n');
   const { json, generationId } = await aiComplete(ctx, 'create_content', prompt, CONTENT_SCHEMA);
-  return { ...json, ai_generation_id: generationId };
+  const draft = normalizeContentDraft(json);
+  const errors = contentDraftErrors(draft);
+  if (errors.length) throw Object.assign(new Error(`İçerik çıktısı eksik: ${errors.join(', ')}`), { code: 'CONTENT_OUTPUT_INVALID' });
+  return { ...draft, ai_generation_id: generationId, brand_kit_id: brand?.id ?? null, client_id: ctx.bot?.client_id ?? null };
 }
 
 const handlers: Record<string, ToolHandler> = {
@@ -68,7 +73,7 @@ const handlers: Record<string, ToolHandler> = {
     const format = str(input.format_key, 'instagram_post');
     const { data: tpl } = await ctx.db.from('design_templates').select('id,width,height,layout,format_key').eq('format_key', format).eq('active', true).order('template_key').limit(1).maybeSingle();
     if (!tpl) throw new Error(`Şablon bulunamadı: ${format}`);
-    const brand = await defaultBrand(ctx.db);
+    const brand = await brandForContext(ctx);
     const layers = {
       variant: (tpl.layout as { variant?: string })?.variant ?? 'hero',
       headline: str(input.headline), subtitle: str(input.subtitle), cta: str(input.cta, brand?.default_cta ?? ''),
@@ -89,14 +94,18 @@ const handlers: Record<string, ToolHandler> = {
     const caption = str(input.caption);
     const body = hashtags.length ? `${caption}\n\n${hashtags.join(' ')}` : caption;
     const scheduled = input.scheduled_at ? new Date(str(input.scheduled_at)) : null;
+    const brand = await brandForContext(ctx);
+    if (!str(input.title).trim() || !caption.trim() || !hashtags.length) throw Object.assign(new Error('Taslak kaydedilemedi: başlık, açıklama ve hashtag zorunlu'), { code: 'CONTENT_OUTPUT_INVALID' });
     const { data, error } = await ctx.db.from('social_drafts').insert({
-      brand: 'İkisi', title: str(input.title, 'Bot taslağı').slice(0, 200), body: body || '(boş)', caption, headline: str(input.headline) || null,
+      brand: brand?.company_name ?? 'İkisi', title: str(input.title, 'Bot taslağı').slice(0, 200), body, caption, headline: str(input.headline) || null,
       hashtags, cta: str(input.cta) || null, image_brief: str(input.image_brief) || null, design_brief: str(input.design_brief) || null,
       networks: ALLOWED_NETWORKS.includes(platform) ? [platform] : [], platform_targets: [platform], primary_platform: platform,
       scheduled_at: scheduled && !Number.isNaN(scheduled.getTime()) ? scheduled.toISOString() : null,
-      status: 'taslak', workflow_status: 'draft', archive_status: 'active', bot_id: ctx.bot?.id ?? null, skill_id: ctx.skill?.id ?? null,
+      status: 'taslak', workflow_status: 'draft', archive_status: 'active', bot_id: ctx.bot?.id ?? null, client_id: ctx.bot?.client_id ?? input.client_id ?? null, skill_id: ctx.skill?.id ?? null,
       task_id: ctx.task?.id ?? null, campaign_id: input.campaign_id || null, content_pillar: str(input.pillar) || null,
-      ai_generation_id: input.ai_generation_id || null, created_by: ctx.actorId,
+      ai_generation_id: input.ai_generation_id || null, brand_kit_id: brand?.id ?? input.brand_kit_id ?? null,
+      audience: str(input.audience) || null, objective: str(input.objective) || null, tone: str(input.tone) || null,
+      format: str(input.format) || null, created_by: ctx.actorId,
       kvkk_basis: 'Bot taslağı; yayın öncesi insan onayı zorunlu.',
     }).select('id').single();
     if (error) throw error;

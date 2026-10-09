@@ -27,6 +27,38 @@ function withTimeout<T>(p: Promise<T>, seconds: number): Promise<T> {
   ]);
 }
 
+type ToolInvoke = (toolKey: string, input: Record<string, unknown>) => Promise<{ ok: boolean; content: unknown }>;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+/** İçerik Botu: modelin tool sırasını atlamasına izin vermeden gerçek taslak + onay üretir. */
+async function runContentDraftPipeline(ctx: EngineCtx, invoke: ToolInvoke, baseInput: Record<string, unknown>) {
+  const generated = await invoke('create_content', {
+    ...baseInput,
+    topic: typeof baseInput.topic === 'string' && baseInput.topic.trim() ? baseInput.topic : 'Tenant marka hizmetleri için bilgilendirici sosyal medya içeriği',
+  });
+  if (!generated.ok) throw new Error(`create_content: ${JSON.stringify(generated.content).slice(0, 400)}`);
+  const content = asRecord(generated.content);
+  const saved = await invoke('save_draft', { ...baseInput, ...content, platform: baseInput.platform ?? 'instagram' });
+  if (!saved.ok) throw new Error(`save_draft: ${JSON.stringify(saved.content).slice(0, 400)}`);
+  const contentId = asRecord(saved.content).content_id;
+  if (typeof contentId !== 'string' || !contentId) throw new Error('save_draft: content_id dönmedi');
+  if (ctx.task?.id) {
+    const { error } = await ctx.db.from('automation_tasks').update({ content_id: contentId }).eq('id', ctx.task.id);
+    if (error) throw error;
+  }
+  const approval = await invoke('submit_approval', {
+    entity_type: 'content', entity_id: contentId, platform: baseInput.platform ?? 'instagram',
+    title: String(content.title || 'İçerik taslağı'),
+    summary: `${String(baseInput.platform ?? 'instagram')} · ${String(content.headline || content.title)} · insan onayı bekliyor`,
+    payload: { content_id: contentId, ai_generation_id: content.ai_generation_id ?? null },
+  });
+  if (!approval.ok) throw new Error(`submit_approval: ${JSON.stringify(approval.content).slice(0, 400)}`);
+  return { content_id: contentId, title: String(content.title || 'İçerik taslağı') };
+}
+
 async function teamRole(db: Db, userId: string) {
   const { data } = await db.from('team_members').select('role').eq('user_id', userId).maybeSingle();
   return data?.role as string | undefined;
@@ -109,6 +141,11 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
       if (skill.skill_key === 'campaign_planner' && task.input_config?.campaign_id) {
         const res = await planWeek(ctx, task, invoke);
         summary = res.summary; continuation = res.continuation;
+        return;
+      }
+      if (skill.skill_key === 'content_scheduler') {
+        const result = await runContentDraftPipeline(ctx, invoke, baseInput);
+        summary = `İçerik taslağı oluşturuldu ve onaya gönderildi: ${result.title}`;
         return;
       }
       if (skill.execution_mode === 'pipeline') {
