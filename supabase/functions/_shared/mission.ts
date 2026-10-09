@@ -14,6 +14,7 @@ import { isStaleFinding, RECENCY_RULES, requiresRecentEvidence, recencyWindow } 
 import { classifyFinishReason, verifiedFindings } from './pure/outcome.ts';
 import { findingDateIssue, makePublicationEvidence, publicationFromHtml, sourceSupportsTitle, trustedPublication, type PublicationEvidence } from './pure/publication.ts';
 import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './pure/policy.ts';
+import { researchReportSummary } from './pure/research-report.ts';
 
 type Db = SupabaseClient;
 
@@ -536,7 +537,7 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (!f.url || !f.title) return false;
     if (findingDateIssue(f.publication, f.url, m)) return false;
     if (seenBefore.has(canonical(f.url))) return false;
-    if (isStaleFinding(f)) return false; // 60 günden eski / sonuçlanmış ihale
+    if (policy === 'lead' && isStaleFinding(f)) return false; // güncel fırsat kuralları kalıcı sektör araştırmasına uygulanmaz
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
     findings.push({ ...f, at: new Date().toISOString(), step }); return true;
   };
@@ -777,15 +778,18 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   let summary = '';
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
   const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model);
+  const policy = missionPolicy(ctx, cur);
   // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
-  const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources) : null;
+  const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources, policy) : null;
   const findings = verifiedFindings(allFindings);
   const pending = allFindings.filter((f) => f.verdict !== 'verified' && f.verdict !== 'rejected');
   const classifiedReason = classifyFinishReason(reason, findings.length, cur.error_kind);
-  if (ai && findings.length) {
+  if (policy === 'research' && findings.length) summary = researchReportSummary(findings);
+  if (ai && findings.length && policy !== 'research') {
     try {
       const r = await aiCall(ai, [
         `Aşağıdaki bot görevinin sonuç raporunu Türkçe yaz. YALNIZCA verilen bulguları kullan, yeni bilgi ekleme, web araması yapma.`,
+        'MARKA: Kaynak firmaya ait tecrübe yılı, fiyat, sertifika veya başarı iddiasını müşterinin/ajansın kendi özelliği olarak yazma. Kazanılmış müşteri, yeni takipçi veya yorum iddiası yalnız gerçek ölçümle verilir.',
         `Görev: ${cur.title}\nAmaç: ${cur.goal}${cur.search_for ? `\nAranan: ${cur.search_for}` : ''}${cur.report_spec ? `\nRaporda olması gereken: ${cur.report_spec}` : ''}`,
         `Bulgular:\n${findings.map((f, i) => `${i + 1}. ${f.title} — ${f.detail}${f.fit ? ` [neden uygun: ${f.fit}]` : ''} (${f.url})`).join('\n').slice(0, 8000)}`,
         'Biçim: 1) 3-6 cümlelik yönetici özeti 2) madde madde sonuçlar 3) önerilen sonraki adım. Markdown başlık kullanma; düz paragraflar ve "- " maddeleri kullan.',
@@ -971,7 +975,7 @@ const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicio
 
 /** DENETİM: her bulgunun kaynağı açılır, içerik bulguyla karşılaştırılır; ardından ayrı bir AI "hakem" gerçeklik + güncellik + amaca uygunluk kararı verir.
  *  verified = kaynak bulguyu doğruluyor, somut ve güncel · suspicious = gerçek ama belirsiz/eski/dolaylı · rejected = uydurma, kaynakla çelişen veya amaç dışı. */
-export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[]): Promise<MissionAudit> {
+export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[], policy: MissionPolicy = 'lead'): Promise<MissionAudit> {
   const srcTitle = new Map(sources.map((s) => [canonical(s.url), s.title || '']));
   const srcPublication = new Map(sources.map((s) => [canonical(s.url), trustedPublication(s.publication, s.url)]));
   const checks = await Promise.all(findings.slice(0, 20).map(async (f) => {
@@ -1009,7 +1013,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     } catch (e) { await logStep(db, cur, cur.step_count + 1, 'error', `Denetim AI hakemi çalışmadı, kural tabanlı denetim yapıldı: ${String((e as Error).message).slice(0, 200)}`); }
   }
   checks.forEach((c, i) => {
-    const dateIssue = findingDateIssue(c.f.publication, c.f.url, cur) || isStaleFinding(c.f);
+    const dateIssue = findingDateIssue(c.f.publication, c.f.url, cur) || (policy === 'lead' ? isStaleFinding(c.f) : null);
     if (dateIssue) {
       c.f.verdict = 'rejected';
       c.f.verdict_reason = dateIssue; c.f.summary = undefined;
@@ -1029,7 +1033,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
   });
   for (const f of findings.slice(20)) {
     f.publication = srcPublication.get(canonical(f.url)); f.posted = f.publication?.posted;
-    const issue = findingDateIssue(f.publication, f.url, cur) || isStaleFinding(f);
+    const issue = findingDateIssue(f.publication, f.url, cur) || (policy === 'lead' ? isStaleFinding(f) : null);
     f.verdict = issue ? 'rejected' : 'suspicious'; f.verdict_reason = issue || 'İçerik denetim sınırı (ilk 20 bulgu) dışında kaldı — doğrulanmış müşteri değildir';
     if (issue) f.summary = undefined;
   }

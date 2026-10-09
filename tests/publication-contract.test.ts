@@ -24,6 +24,8 @@ truth(publicationDateIssue('2026-10-10', recent, now));
 equal(publicationDateIssue('2026-10-09', recent, now), null); // bugün, ileri saat bilgisi yok
 truth(publicationDateIssue(undefined, recent, now));
 equal(publicationDateIssue(undefined, { goal: 'Mimarlık ofisi profilleri' }, now), null);
+equal(publicationDateIssue('2025-04-15', { goal: 'Kalıcı ürün kataloglarını incele' }, now), null);
+truth(publicationDateIssue('2026-10-10', { goal: 'Kalıcı ürün kataloglarını incele' }, now));
 const source = makePublicationEvidence('2026-10-08', 'search_metadata', url)!;
 equal(source.posted, '2026-10-08');
 equal(findingDateIssue(source, url, recent, now), null);

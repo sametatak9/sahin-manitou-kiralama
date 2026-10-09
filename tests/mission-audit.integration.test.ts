@@ -51,3 +51,14 @@ Deno.test('Genel SaaS pazar görevi inşaat kelimesi gerektirmez; lead politikas
   equal(missionPolicy({ slug: 'insaat-is-bulucu', bot_type: 'research' }, m), 'lead');
   equal(missionPolicy({ slug: 'sosyal-buyume', bot_type: 'research' }, m), 'growth');
 });
+
+Deno.test('Eski yayın tarihli kalıcı katalog araştırma adayıdır, güncel lead değildir', async () => {
+  const m = { ...mission, title: 'Ürün katalogları', goal: 'Sektördeki kalıcı ürün kataloglarını incele' };
+  const f = finding(0); f.title = 'Ürün katalogları';
+  const publication = makePublicationEvidence('2025-04-15', 'search_metadata', f.url)!;
+  const sources = [{ url: f.url, title: f.title, publication }];
+  const research = await auditFindings(db, m, null, [f], sources, 'research');
+  equal([research.verified,research.suspicious,research.rejected], [0,1,0]);
+  const lead = await auditFindings(db, m, null, [{...f}], sources, 'lead');
+  equal(lead.rejected,1);
+});
