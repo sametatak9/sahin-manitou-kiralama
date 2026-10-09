@@ -290,7 +290,9 @@ export const ERROR_KIND: Record<string, string> = {
 // ── AI sağlayıcı seçimi: botun ajanı → anahtar yoksa tanımlı başka sağlayıcı ──
 type CompatResearch = 'openai' | 'openrouter' | 'github' | 'cerebras' | 'mistral';
 interface AiChoice { provider: 'anthropic' | 'gemini' | 'groq' | CompatResearch; model: string; system: string; key: string }
-async function chooseAi(db: Db, botId: string | null, preferred?: string | null): Promise<AiChoice | null> {
+const AI_PROVIDERS = ['anthropic', 'gemini', 'groq', 'openai', 'openrouter', 'github', 'cerebras', 'mistral'] as const;
+const isAiProvider = (value: string): value is AiChoice['provider'] => (AI_PROVIDERS as readonly string[]).includes(value);
+async function chooseAi(db: Db, botId: string | null, preferred?: string | null, preferredProvider?: string | null): Promise<AiChoice | null> {
   let agent: { provider: string; model: string; system_prompt: string } | null = null;
   if (botId) {
     const { data } = await db.from('automation_bots').select('ai_agents(provider,model,system_prompt)').eq('id', botId).maybeSingle();
@@ -299,9 +301,17 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null)
   }
   const base = agent?.system_prompt || 'Sen Embay Yapı ve Şahin Manitou Kiralama için çalışan titiz bir araştırma botusun. Türkçe yaz. Asla bilgi uydurma.';
   const requested = routeForModel(preferred);
-  if (requested?.provider === 'openai') {
-    const ok = await getAiKey('openai');
-    if (ok) return { provider: 'openai', model: requested.model, system: base, key: ok };
+  // Mission DB’sinde provider/model birlikte tutulur. Fallback sonrası örneğin
+  // Cerebras/gpt-oss-120b kaydı sonraki worker adımında OpenAI gpt-oss sanılmamalı.
+  const pinnedProvider = isAiProvider(String(preferredProvider || '').trim())
+    ? String(preferredProvider).trim() as AiChoice['provider']
+    : requested?.provider;
+  if (pinnedProvider) {
+    const ok = await getAiKey(pinnedProvider);
+    if (ok) {
+      const model = preferred && routeForModel(preferred)?.provider === pinnedProvider ? preferred : defaultModel(pinnedProvider);
+      return { provider: pinnedProvider, model, system: base, key: ok };
+    }
   }
   const ak = await getAiKey('anthropic');
   if (ak) return { provider: 'anthropic', model: preferred?.startsWith('claude-') ? preferred : agent?.provider === 'anthropic' ? agent.model : 'claude-sonnet-5', system: base, key: ak };
@@ -693,7 +703,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       await persist();
       return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut, error_kind: 'budget' }, 'budget');
     }
-    const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model);
+    const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model, m.provider);
     let useScan = !ai; let lastResults: WebResult[] = [];
     if (ai) try {
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
@@ -897,7 +907,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
 
   let summary = '';
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
-  const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model);
+  const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model, cur.provider);
   const policy = missionPolicy(ctx, cur);
   // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
   const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources, policy) : null;
