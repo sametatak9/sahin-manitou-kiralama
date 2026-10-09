@@ -82,7 +82,20 @@ export interface MissionAudit {
   rejected_items?: Array<{ title: string; url: string; reason: string }>;
 }
 export interface MissionSkillMeta { id: string; name: string; version: number }
-export interface MissionSkillUsage { count: number; detailed_count?: number; skills?: MissionSkillMeta[]; detailed_skills?: MissionSkillMeta[] }
+export interface MissionCapabilitySummary {
+  total_skills?: number; prompt_only?: number; tool_backed?: number; connector_backed?: number;
+  handlers_registered?: number; handlers_missing?: number; connectors_registered?: number; connectors_implemented?: number; connectors_not_ready?: number;
+  handler_verified?: number; prompt_verified?: number; unverified?: number; failed?: number;
+}
+export interface MissionCapabilityMeta {
+  id: string; name: string; version: number; capability_kind?: string; handler_key?: string | null; handler_registered?: boolean;
+  connector_key?: string | null; connector_registered?: boolean; connector_implemented?: boolean; connector_status?: string | null;
+  connector_health?: string; capability_test_status?: string; executable?: boolean; blocking_reasons?: string[];
+}
+export interface MissionSkillUsage {
+  count: number; detailed_count?: number; skills?: MissionSkillMeta[]; detailed_skills?: MissionSkillMeta[];
+  capability_summary?: MissionCapabilitySummary; capability_skills?: MissionCapabilityMeta[]; capability_warning?: string | null;
+}
 export interface Mission {
   id: string; bot_id: string | null; title: string; goal: string; target_url: string | null; search_for: string | null; report_spec: string | null;
   stop_condition: string | null; duration_minutes: number; status: 'running' | 'finalizing' | 'completed' | 'stopped' | 'failed' | 'blocked';

@@ -6,6 +6,8 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { ConfigurationRequiredError, extractJson } from './ai/types.ts';
 import { COMPAT, getAiKey, GROQ_URL } from './ai/keys.ts';
 import { telegramSend } from './connectors/messaging.ts';
+import { connectorByKey } from './connectors/registry.ts';
+import { resolveStatus } from './connectors/types.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { logActivity } from './activity.ts';
 import { tavilySearchDetailed, type WebResult } from './search.ts';
@@ -20,6 +22,8 @@ import { routeSkills } from './pure/skill-router.ts';
 import { classifyFindingType, FINDING_TYPE_LABEL, type FindingType } from './pure/finding-taxonomy.ts';
 import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
 import { academyOutputEvidence, academyTestStatus } from './pure/capability-registry.ts';
+import { connectorHealthState, missionCapabilitySnapshot } from './pure/capability-audit.ts';
+import { registeredHandlerKeys } from './tools/registry.ts';
 
 type Db = SupabaseClient;
 
@@ -477,12 +481,19 @@ async function logStep(db: Db, m: MissionRow, step: number, action: string, mess
   await db.from('bot_mission_steps').insert({ mission_id: m.id, step_no: step, action, target: target ?? null, message: message.slice(0, 2000), data: data ?? null,
     duration_ms: started ? Date.now() - started : null });
 }
-async function logSkillsLoadedOnce(db: Db, m: MissionRow, skills: Array<{ id: string; name: string; version: number }>, selected: Array<{ id: string; name: string; version: number }> = []) {
+async function logSkillsLoadedOnce(db: Db, m: MissionRow, skills: Array<{ id: string; name: string; version: number }>, selected: Array<{ id: string; name: string; version: number }> = [], capability?: { summary: unknown; skills: unknown[]; warning?: string | null }) {
   if (m.step_count !== 0) return;
   const safe = skills.map((s) => ({ id: s.id, name: s.name.slice(0, 120), version: Number(s.version) || 1 }));
   const selectedSafe = selected.map((s) => ({ id: s.id, name: s.name.slice(0, 120), version: Number(s.version) || 1 }));
+  const capabilitySummary = capability?.summary && typeof capability.summary === 'object' ? capability.summary as Record<string, unknown> : { total_skills: safe.length };
+  const handlerPart = typeof capabilitySummary.handlers_registered === 'number' && typeof capabilitySummary.handlers_missing === 'number'
+    ? ` · handler ${capabilitySummary.handlers_registered}/${capabilitySummary.handlers_registered + capabilitySummary.handlers_missing}` : '';
+  const connectorPart = typeof capabilitySummary.connector_backed === 'number' ? ` · connector ${capabilitySummary.connector_backed}` : '';
   const { error } = await db.from('bot_mission_steps').insert({ mission_id: m.id, step_no: 0, action: 'skills_loaded', target: null,
-    message: `${safe.length} uygun yetenek snapshot'ı · ${selectedSafe.length} ayrıntılı yüklendi`, data: { count: safe.length, detailed_count: selectedSafe.length, skills: safe, detailed_skills: selectedSafe }, duration_ms: null });
+    message: `${safe.length} uygun yetenek snapshot'ı · ${selectedSafe.length} ayrıntılı yüklendi${handlerPart}${connectorPart}`, data: {
+      count: safe.length, detailed_count: selectedSafe.length, skills: safe, detailed_skills: selectedSafe,
+      capability_summary: capabilitySummary, capability_skills: capability?.skills ?? [], capability_warning: capability?.warning ?? null,
+    }, duration_ms: null });
   // The partial unique index makes this safe if two leased workers race. A duplicate
   // audit event is expected and harmless; every other database error must surface.
   if (error && error.code !== '23505') throw error;
@@ -498,11 +509,50 @@ function pageDigest(p: PageFacts) {
     p.text ? `Metin (ilk bölüm): ${p.text.slice(0, 3500)}` : '',
   ].filter(Boolean).join('\n');
 }
-interface SkillRow { id: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; category: string | null; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number }
-const SKILL_COLS = 'id,display_name,instructions,enabled,lifecycle,category,search_terms,sources,good_examples,bad_examples,version';
+interface SkillRow { id: string; skill_key: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; category: string | null; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number; capability_kind: string | null; handler_key: string | null; connector_key: string | null; capability_test_status: string | null }
+const SKILL_COLS = 'id,skill_key,display_name,instructions,enabled,lifecycle,category,search_terms,sources,good_examples,bad_examples,version,capability_kind,handler_key,connector_key,capability_test_status';
+
+async function missionCapabilityAudit(db: Db, skills: SkillRow[]) {
+  const empty = missionCapabilitySnapshot([], new Set(registeredHandlerKeys()));
+  if (!skills.length) return { ...empty, warning: null as string | null };
+  const skillIds = skills.map((skill) => skill.id);
+  const connectorKeys = [...new Set(skills.map((skill) => skill.connector_key).filter((key): key is string => Boolean(key)))];
+  const [linkQuery, toolQuery, accountQuery, healthQuery] = await Promise.all([
+    db.from('automation_skill_tools').select('skill_id,tool_id').in('skill_id', skillIds).limit(500),
+    db.from('automation_tools').select('id,tool_key,handler,platform,active').limit(500),
+    connectorKeys.length ? db.from('social_accounts').select('connector_key,connection_status,token_expires_at').in('connector_key', connectorKeys).limit(500) : Promise.resolve({ data: [], error: null }),
+    connectorKeys.length ? db.from('connector_health').select('connector_key,last_ok_at,last_failed_at,failed_24h').in('connector_key', connectorKeys).limit(100) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const errors = [linkQuery.error, toolQuery.error, accountQuery.error, healthQuery.error].filter(Boolean);
+  const toolById = new Map((toolQuery.data || []).map((tool: { id: string; tool_key: string; handler: string | null; platform: string | null; active: boolean }) => [tool.id, tool]));
+  const linksBySkill = new Map<string, Array<{ tool_key: string; handler: string | null; platform: string | null; active: boolean }>>();
+  for (const link of (linkQuery.data || []) as Array<{ skill_id: string; tool_id: string }>) {
+    const tool = toolById.get(link.tool_id); if (!tool) continue;
+    const current = linksBySkill.get(link.skill_id) || [];
+    current.push({ tool_key: tool.tool_key, handler: tool.handler, platform: tool.platform, active: tool.active });
+    linksBySkill.set(link.skill_id, current);
+  }
+  const accountByConnector = new Map<string, { connection_status: string; token_expires_at: string | null }>();
+  for (const account of (accountQuery.data || []) as Array<{ connector_key: string; connection_status: string; token_expires_at: string | null }>) accountByConnector.set(account.connector_key, account);
+  const healthByConnector = new Map<string, { last_ok_at: string | null; last_failed_at: string | null; failed_24h: number }>();
+  for (const health of (healthQuery.data || []) as Array<{ connector_key: string; last_ok_at: string | null; last_failed_at: string | null; failed_24h: number }>) healthByConnector.set(health.connector_key, health);
+  const connectorFor = (key: string | null) => {
+    if (!key) return null;
+    const def = connectorByKey(key); if (!def) return null;
+    const account = accountByConnector.get(key); const recent = healthByConnector.get(key);
+    const status = resolveStatus(def, account ? { connection_status: account.connection_status, token_expires_at: account.token_expires_at } : null);
+    return { key, implemented: def.implemented, status, health_state: connectorHealthState({ registered: true, implemented: def.implemented, status,
+      last_ok_at: recent?.last_ok_at ?? null, failed_24h: recent?.failed_24h ?? 0 }), last_ok_at: recent?.last_ok_at ?? null,
+      last_failed_at: recent?.last_failed_at ?? null, failed_24h: recent?.failed_24h ?? 0 };
+  };
+  const snapshot = missionCapabilitySnapshot(skills.map((skill) => ({ id: skill.id, skill_key: skill.skill_key, display_name: skill.display_name,
+    version: skill.version, capability_kind: skill.capability_kind, handler_key: skill.handler_key, connector_key: skill.connector_key,
+    capability_test_status: skill.capability_test_status, tools: linksBySkill.get(skill.id) || [], connector: connectorFor(skill.connector_key) })), new Set(registeredHandlerKeys()));
+  return { ...snapshot, warning: errors.length ? 'Capability audit metadata sorgusu kısmen tamamlanamadı; çalışma promptu etkilenmedi.' : null };
+}
 /** Bot profili + kullanılacak yetenekler. Kural: görevlerde YALNIZCA Akademi'de onaylanmış (approved) yetenekler kullanılır;
  * yetenek testi (purpose=skill_test) görevinde test edilen yetenek onaysız olabilir. */
-async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose' | 'title' | 'goal' | 'search_for' | 'report_spec'>) {
+async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'skill_ids' | 'purpose' | 'title' | 'goal' | 'search_for' | 'report_spec' | 'step_count'>) {
   const isTest = m?.purpose === 'skill_test';
   let skills: SkillRow[] = [];
   let bot: { name?: string; instructions?: string; description?: string; slug?: string; bot_type?: string } | null = null;
@@ -517,6 +567,9 @@ async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'sk
   }
   if (botId) ({ data: bot } = await db.from('automation_bots').select('name,instructions,description,slug,bot_type').eq('id', botId).maybeSingle());
   skills = skills.filter((s) => s.enabled && (isTest || s.lifecycle === 'approved'));
+  const capability = m?.step_count === 0
+    ? await missionCapabilityAudit(db, skills)
+    : { ...missionCapabilitySnapshot([], new Set(registeredHandlerKeys())), warning: null as string | null };
   const route = routeSkills(skills.map((s) => ({ id: s.id, name: s.display_name, version: s.version, category: s.category, instructions: s.instructions, search_terms: s.search_terms, sources: s.sources })),
     [m?.title, m?.goal, m?.search_for, m?.report_spec].filter(Boolean).join('\n'), 8);
   const selectedIds = new Set(route.selectedIds);
@@ -531,6 +584,9 @@ async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'sk
     deferredSkills: metadata(skills.filter((s) => !selectedIds.has(s.id))),
     terms: [...new Set(selected.flatMap((s) => s.search_terms || []))],
     sources: [...new Set(selected.flatMap((s) => s.sources || []))],
+    capability_summary: capability.summary,
+    capability_skills: capability.skills,
+    capability_warning: capability.warning,
     text: [bot?.description, bot?.instructions ? `Bot talimatı: ${bot.instructions}` : '',
       `YETENEK KATALOĞU: ${selected.length}/${skills.length} yetenek bu görevin amacına göre ayrıntılı yüklendi. Snapshot'taki diğer yetenekler bağlıdır ancak bu görevde ayrıntılı talimat olarak kullanılmadı.`,
       ...withText.map((s) => [`Yetenek «${s.display_name}» (sürüm ${s.version}): ${s.instructions}`,
@@ -554,7 +610,7 @@ export async function stepMission(db: Db, m: MissionRow) {
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const ctx = await botContext(db, m.bot_id, m);
-  await logSkillsLoadedOnce(db, m, ctx.skills, ctx.selectedSkills);
+  await logSkillsLoadedOnce(db, m, ctx.skills, ctx.selectedSkills, { summary: ctx.capability_summary, skills: ctx.capability_skills, warning: ctx.capability_warning });
   const policy = missionPolicy(ctx, m);
   const terms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
   const seoMission = Boolean(m.target_url && (ctx.slug === 'seo-bot' || /technical seo|teknik seo|robots\.txt|sitemap\.xml|canonical|json-ld/i.test(`${m.title} ${m.goal} ${m.search_for ?? ''}`)));

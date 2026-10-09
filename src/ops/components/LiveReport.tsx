@@ -38,7 +38,8 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
     const typed = data as MissionSkillUsage;
     const skills = asSkills(typed.skills);
     const detailed = asSkills(typed.detailed_skills);
-    return { count: Number(typed.count) || skills.length, detailed_count: Number(typed.detailed_count) || detailed.length, skills, detailed_skills: detailed };
+    return { count: Number(typed.count) || skills.length, detailed_count: Number(typed.detailed_count) || detailed.length, skills, detailed_skills: detailed,
+      capability_summary: typed.capability_summary, capability_skills: typed.capability_skills, capability_warning: typed.capability_warning };
   }, [stepsQ.data]);
   const shownSkills = skillUsage.detailed_skills?.length ? skillUsage.detailed_skills : (skillUsage.skills ?? []);
   const list = useMemo(() => {
@@ -86,6 +87,12 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
               {!!skillUsage.detailed_count && <span className="opacity-80"> · {skillUsage.detailed_count} ayrıntılı yüklendi</span>}
               {shownSkills.length > 0 && <span className="opacity-80"> · {shownSkills.slice(0, 3).map((s) => `${s.name} v${s.version}`).join(' · ')}{shownSkills.length > 3 ? ` · +${shownSkills.length - 3}` : ''}</span>}
             </div>
+            {skillUsage.capability_summary && <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-[10px] opacity-90">
+              Capability audit · handler <b>{skillUsage.capability_summary.handlers_registered ?? 0}/{(skillUsage.capability_summary.handlers_registered ?? 0) + (skillUsage.capability_summary.handlers_missing ?? 0)}</b>
+              {' · '}connector-backed <b>{skillUsage.capability_summary.connector_backed ?? 0}</b>
+              {(skillUsage.capability_summary.connectors_not_ready ?? 0) > 0 && <> · bağlantı bekleyen <b>{skillUsage.capability_summary.connectors_not_ready}</b></>}
+            </div>}
+            {skillUsage.capability_warning && <div className="mt-1 text-[10px] text-amber-100">Capability audit uyarısı: {skillUsage.capability_warning}</div>}
             <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-[11px] opacity-90">
               Ayrı sınıflandırma · müşteri lead’i <b>{taxonomy.customerLeads}</b> · hedef işletme <b>{taxonomy.targetAccounts}</b> · kamu kurumu/fırsatı <b>{taxonomy.publicInstitutions}</b>
             </div>

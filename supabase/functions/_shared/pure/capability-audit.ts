@@ -138,3 +138,57 @@ export function summarizeCapabilityAudit(items: CapabilityAuditSkill[]): Capabil
   }
   return summary;
 }
+
+/**
+ * Mission auditine yazılacak küçük ve güvenli görünüm.
+ * Tam skill talimatları veya tool payload'ları burada tutulmaz; amaç yalnızca
+ * bu koşuda hangi capability'nin kayıtlı/çalıştırılabilir göründüğünü kanıtlamaktır.
+ */
+export interface MissionCapabilityInput extends CapabilityAuditSkillInput {
+  version?: number | null;
+}
+
+export interface MissionCapabilitySnapshotSkill {
+  id: string;
+  name: string;
+  version: number;
+  capability_kind: CapabilityKind;
+  handler_key: string | null;
+  handler_registered: boolean;
+  connector_key: string | null;
+  connector_registered: boolean;
+  connector_implemented: boolean;
+  connector_status: string | null;
+  connector_health: ConnectorHealthState;
+  capability_test_status: string;
+  executable: boolean;
+  blocking_reasons: string[];
+}
+
+export interface MissionCapabilitySnapshot {
+  summary: CapabilityAuditSummary;
+  skills: MissionCapabilitySnapshotSkill[];
+}
+
+export function missionCapabilitySnapshot(inputs: MissionCapabilityInput[], knownHandlers: ReadonlySet<string>): MissionCapabilitySnapshot {
+  const audited = inputs.map((input) => auditCapabilitySkill(input, knownHandlers));
+  return {
+    summary: summarizeCapabilityAudit(audited),
+    skills: audited.map((item, index) => ({
+      id: item.id,
+      name: item.display_name.slice(0, 120),
+      version: Number(inputs[index]?.version) || 1,
+      capability_kind: item.capability_kind,
+      handler_key: item.handler_key,
+      handler_registered: item.handler_registered,
+      connector_key: item.connector_key,
+      connector_registered: item.connector_registered,
+      connector_implemented: item.connector_implemented,
+      connector_status: item.connector_status,
+      connector_health: item.connector_health,
+      capability_test_status: item.capability_test_status,
+      executable: item.executable,
+      blocking_reasons: item.blocking_reasons.slice(0, 3),
+    })),
+  };
+}
