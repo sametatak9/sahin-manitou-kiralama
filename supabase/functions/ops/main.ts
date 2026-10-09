@@ -628,6 +628,29 @@ async function copilotChat(db: Db, req: Request, body: Record<string, unknown>) 
   return { mode: 'read_only' as const, client: { id: client.id, name: client.name }, ...normalizeCopilotResponse(result.json ?? { answer: result.text }) };
 }
 
+async function teamInvite(db: Db, body: Record<string, unknown>) {
+  const email = String(body.email ?? '').trim().toLowerCase();
+  const role = body.role === 'admin' ? 'admin' : 'staff';
+  const name = String(body.display_name ?? '').trim().slice(0, 80) || null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Geçerli bir e-posta girin', 'BAD_EMAIL');
+  let userId: string | null = null;
+  let invited = false;
+  for (let page = 1; page <= 10 && !userId; page++) {
+    const { data, error } = await db.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    userId = data.users.find((x) => x.email?.toLowerCase() === email)?.id ?? null;
+    if (data.users.length < 200) break;
+  }
+  if (!userId) {
+    const { data, error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo: `${PANEL_URL()}/` });
+    if (error) throw new HttpError(400, `Davet gönderilemedi: ${error.message}`, 'INVITE_FAILED');
+    userId = data.user.id; invited = true;
+  }
+  const { error } = await db.from('team_members').upsert({ user_id: userId, role, display_name: name ?? email.split('@')[0] }, { onConflict: 'user_id' });
+  if (error) throw error;
+  return { user_id: userId, invited, role };
+}
+
 // ── Panel API ───────────────────────────────────────────────────────────────
 async function api(db: Db, req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -636,6 +659,7 @@ async function api(db: Db, req: Request) {
     case 'status': { await requireUser(db, req); return status(db); }
     case 'capability_audit': { await requireUser(db, req); return capabilityAudit(db); }
     case 'copilot_chat': return copilotChat(db, req, body);
+    case 'team_invite': { await requireUser(db, req, 'admin'); return teamInvite(db, body); }
     case 'inbox_reply': { await requireUser(db, req); return inboxReply(db, String(body.id || ''), String(body.message || '')); }
     case 'inbox_sync': { await requireUser(db, req); return inboxTick(db, true); }
     case 'radar_sync': { await requireUser(db, req); return radarTick(db, true); }

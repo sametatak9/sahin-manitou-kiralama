@@ -122,6 +122,16 @@ function Team() {
   const q = useQuery(async () => unwrap(await db().from('team_members').select('*').order('created_at')) as Member[], [] as Member[], []);
   const [f, setF] = useState({ user_id: '', role: 'staff', display_name: '' });
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const [inv, setInv] = useState({ email: '', role: 'staff', display_name: '' });
+  const [inviting, setInviting] = useState(false);
+  const invite = async () => {
+    setInviting(true); setMsg(null);
+    try {
+      const r = await callOps<{ invited: boolean }>('team_invite', inv);
+      setMsg({ tone: 'ok', text: r.invited ? `${inv.email} adresine davet gönderildi; e-postadaki bağlantıyla şifre belirleyip panele girecek.` : `${inv.email} zaten kayıtlıydı; ekibe eklendi.` });
+      setInv({ email: '', role: 'staff', display_name: '' }); await q.reload();
+    } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setInviting(false); }
+  };
   const add = async () => { const { error } = await db().from('team_members').insert(f); setMsg(error ? { tone: 'error', text: errorText(error) } : { tone: 'ok', text: 'Ekip üyesi eklendi.' }); if (!error) { setF({ user_id: '', role: 'staff', display_name: '' }); q.reload(); } };
   const setRole = async (m: Member, role: string) => { const { error } = await db().from('team_members').update({ role }).eq('user_id', m.user_id); setMsg(error ? { tone: 'error', text: errorText(error) } : { tone: 'ok', text: `${m.display_name ?? 'Üye'} rolü kaydedildi.` }); q.reload(); };
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
@@ -137,16 +147,26 @@ function Team() {
         )}
       </Panel>
       {session.role === 'admin' && (
-        <Panel kicker="Yetkilendirme" title="Üye ekle">
+        <div className="space-y-4">
+        <Panel kicker="E-posta ile" title="Ekibe davet et">
+          <div className="space-y-3">
+            <Field label="E-posta"><input className="ops-input" type="email" inputMode="email" autoComplete="off" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value.trim() })} /></Field>
+            <Field label="Görünen ad"><input className="ops-input" value={inv.display_name} onChange={(e) => setInv({ ...inv, display_name: e.target.value })} /></Field>
+            <Field label="Rol"><select className="ops-input" value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value })}><option value="staff">Ekip (içerik, müşteri, görev)</option><option value="admin">Yönetici (yayın, bağlantı, ayarlar)</option></select></Field>
+            <Button variant="primary" className="w-full" loading={inviting} disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inv.email)} onClick={invite}>Davet gönder</Button>
+          </div>
+        </Panel>
+        <Panel kicker="Yetkilendirme" title="Kullanıcı kimliğiyle ekle">
           <p className="text-[11px] text-ink-400 mb-3">Kişi önce Supabase Auth’ta hesap açmalı (Dashboard → Authentication → Invite). Ardından kullanıcı kimliğini (UUID) buraya girin. Staff: içerik, müşteri, görev; Admin: yayın, e-posta, bot/skill yönetimi.</p>
           <div className="space-y-3">
             <Field label="Kullanıcı UUID"><input className="ops-input font-mono" value={f.user_id} onChange={(e) => setF({ ...f, user_id: e.target.value.trim() })} /></Field>
             <Field label="Görünen ad"><input className="ops-input" value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} /></Field>
             <Field label="Rol"><select className="ops-input" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}><option value="staff">staff</option><option value="admin">admin</option></select></Field>
             <Button variant="primary" className="w-full" disabled={!/^[0-9a-f-]{36}$/.test(f.user_id)} onClick={add}>Ekle</Button>
-            {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : 'error'}>{msg.text}</Notice>}
           </div>
         </Panel>
+        {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : 'error'}>{msg.text}</Notice>}
+        </div>
       )}
     </div>
   );
