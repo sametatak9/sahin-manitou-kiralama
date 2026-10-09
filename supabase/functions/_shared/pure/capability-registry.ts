@@ -2,6 +2,7 @@ export type CapabilityKind = 'prompt_only' | 'tool_backed' | 'connector_backed';
 export type CapabilityRisk = 'read_only' | 'draft' | 'approval_required' | 'external_action';
 export type CatalogSource = 'native' | 'imported' | 'curated';
 export type CapabilityTestStatus = 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed';
+export type AcademyOutputKind = 'findings' | 'action_list' | 'structured_output';
 
 export interface CapabilityToolRef {
   tool_key?: string | null;
@@ -19,12 +20,21 @@ export interface CapabilityInput {
   execution_mode?: string | null;
   capability_test_status?: string | null;
   test_score?: number | string | null;
+  academy_output_kind?: string | null;
+  test_output_count?: number | string | null;
   tools?: CapabilityToolRef[] | null;
+}
+
+export interface AcademyStepEvidence {
+  action?: string | null;
+  message?: string | null;
+  data?: unknown;
 }
 
 const KINDS = new Set<CapabilityKind>(['prompt_only', 'tool_backed', 'connector_backed']);
 const RISKS = new Set<CapabilityRisk>(['read_only', 'draft', 'approval_required', 'external_action']);
 const SOURCES = new Set<CatalogSource>(['native', 'imported', 'curated']);
+const OUTPUT_KINDS = new Set<AcademyOutputKind>(['findings', 'action_list', 'structured_output']);
 
 const valid = <T extends string>(value: string | null | undefined, allowed: Set<T>): T | null => {
   const normalized = value?.trim() as T | undefined;
@@ -51,6 +61,10 @@ export function resolveCapabilityRisk(input: CapabilityInput): CapabilityRisk {
 
 export function resolveCatalogSource(input: CapabilityInput): CatalogSource {
   return valid(input.catalog_source, SOURCES) ?? 'native';
+}
+
+export function resolveAcademyOutputKind(input: CapabilityInput): AcademyOutputKind {
+  return valid(input.academy_output_kind, OUTPUT_KINDS) ?? 'findings';
 }
 
 export const CAPABILITY_KIND_LABEL: Record<CapabilityKind, string> = {
@@ -91,6 +105,31 @@ export function academyTestStatus(input: CapabilityInput): CapabilityTestStatus 
   const score = Number(input.test_score);
   if (!Number.isFinite(score) || score < 60) return 'failed';
   return resolveCapabilityKind(input) === 'prompt_only' ? 'prompt_verified' : 'unverified';
+}
+
+function stepText(step: AcademyStepEvidence): string {
+  const parts: string[] = [];
+  if (typeof step.message === 'string') parts.push(step.message);
+  if (step.data && typeof step.data === 'object') {
+    const data = step.data as Record<string, unknown>;
+    for (const key of ['text_tail', 'text', 'output', 'content']) if (typeof data[key] === 'string') parts.push(data[key] as string);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Findings are scored by the source audit. Output-only skills need a separate
+ * contract: an empty findings array is expected, not evidence of failure.
+ */
+export function academyOutputEvidence(kindInput: string | null | undefined, steps: AcademyStepEvidence[]) {
+  const kind = resolveAcademyOutputKind({ academy_output_kind: kindInput });
+  if (kind === 'findings') return { kind, count: 0, score: null as number | null, passed: false, reason: 'Kaynak bulguları audit ile puanlanır' };
+  const text = steps.filter((step) => step.action === 'ai_research' || step.action === 'ai_report' || step.action === 'content_output').map(stepText).join('\n');
+  const items = [...text.matchAll(/^\s*(?:\d+\s*[.)]|[-*•])\s+\S.{4,}/gmu)].map((match) => match[0].trim());
+  const count = new Set(items).size;
+  const minimum = kind === 'action_list' ? 3 : 1;
+  const passed = count >= minimum;
+  return { kind, count, score: passed ? 100 : 0, passed, reason: passed ? `${count} yapılandırılmış çıktı maddesi bulundu` : `En az ${minimum} yapılandırılmış çıktı maddesi bekleniyordu` };
 }
 
 export function capabilityVerificationText(input: CapabilityInput): string {

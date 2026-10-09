@@ -19,7 +19,7 @@ import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
 import { classifyFindingType, FINDING_TYPE_LABEL, type FindingType } from './pure/finding-taxonomy.ts';
 import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
-import { academyTestStatus } from './pure/capability-registry.ts';
+import { academyOutputEvidence, academyTestStatus } from './pure/capability-registry.ts';
 
 type Db = SupabaseClient;
 
@@ -826,7 +826,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   if (['completed', 'stopped', 'failed'].includes(cur.status)) return { mission_id: m.id, already: cur.status };
   const allFindings = cur.findings || []; const sources = cur.sources || [];
   const [{ data: steps }, ctx] = await Promise.all([
-    db.from('bot_mission_steps').select('step_no,action,target,message,created_at').eq('mission_id', m.id).order('step_no').order('created_at'),
+    db.from('bot_mission_steps').select('step_no,action,target,message,data,created_at').eq('mission_id', m.id).order('step_no').order('created_at'),
     botContext(db, cur.bot_id, cur),
   ]);
 
@@ -868,12 +868,13 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   // KOÇ: raporu ve günlüğü inceleyip yeteneği iyileştirme önerisi çıkarır (Akademi'de onayınıza düşer)
   const coachNote = ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>) : null;
   if (cur.purpose === 'skill_test' && cur.skill_ids?.length) {
-    const { data: sk } = await db.from('automation_skills').select('lifecycle,capability_kind,handler_key,connector_key').eq('id', cur.skill_ids[0]).maybeSingle();
+    const { data: sk } = await db.from('automation_skills').select('lifecycle,capability_kind,handler_key,connector_key,academy_output_kind').eq('id', cur.skill_ids[0]).maybeSingle();
     if (sk) {
       const testedAt = new Date().toISOString();
-      const testScore = audit?.accuracy ?? 0;
-      const capabilityTestStatus = academyTestStatus({ capability_kind: sk.capability_kind, handler_key: sk.handler_key, connector_key: sk.connector_key, test_score: testScore });
-      await db.from('automation_skills').update({ test_score: testScore, test_findings: audit?.verified ?? 0, last_tested_at: testedAt,
+      const outputEvidence = academyOutputEvidence(sk.academy_output_kind, (steps || []) as Array<{ action?: string | null; message?: string | null; data?: unknown }>);
+      const testScore = outputEvidence.score ?? audit?.accuracy ?? 0;
+      const capabilityTestStatus = academyTestStatus({ capability_kind: sk.capability_kind, handler_key: sk.handler_key, connector_key: sk.connector_key, academy_output_kind: sk.academy_output_kind, test_score: testScore, test_output_count: outputEvidence.count });
+      await db.from('automation_skills').update({ test_score: testScore, test_findings: audit?.verified ?? 0, capability_test_output_count: outputEvidence.count, last_tested_at: testedAt,
         last_test_mission_id: cur.id, capability_test_status: capabilityTestStatus, capability_test_mission_id: cur.id, capability_tested_at: testedAt,
         ...(sk.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', cur.skill_ids[0]);
     }

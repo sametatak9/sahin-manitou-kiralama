@@ -16,6 +16,7 @@ interface AcademySkill {
   id: string; skill_key: string; display_name: string; description: string; category: string; instructions: string; enabled: boolean;
   lifecycle: 'draft' | 'testing' | 'approved' | 'retired'; version: number; search_terms: string[]; sources: string[];
   good_examples: string | null; bad_examples: string | null; test_goal: string | null; test_score: number | null; test_findings: number | null;
+  academy_output_kind?: 'findings' | 'action_list' | 'structured_output' | null; capability_test_output_count?: number | null;
   last_tested_at: string | null; last_test_mission_id: string | null; approved_at: string | null;
   capability_kind?: 'prompt_only' | 'tool_backed' | 'connector_backed' | null; risk_level?: 'read_only' | 'draft' | 'approval_required' | 'external_action' | null;
   catalog_source?: 'native' | 'imported' | 'curated' | null; handler_key?: string | null; connector_key?: string | null;
@@ -65,7 +66,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
           <GraduationCap className="w-6 h-6 text-brand-green shrink-0" />
           <div className="text-xs text-ink-300 space-y-1">
             <div className="font-display text-base font-semibold text-ink-100">Akademi — yetenek eğitimi, testi ve onayı</div>
-            <p><b>1. Eğit:</b> Yeteneğin talimatını, arama terimlerini, kaynaklarını ve iyi/kötü örneklerini yazın. <b>2. Test et:</b> Yetenek 10 dakikalık gerçek bir göreve çıkar; getirdiği her bilgi <b>denetçi</b> tarafından kaynağında kontrol edilir ve doğruluk puanı çıkar. <b>3. Onayla:</b> Yalnızca <b>onaylı</b> yetenekler botların gerçek görevlerinde kullanılır.</p>
+            <p><b>1. Eğit:</b> Yeteneğin talimatını, arama terimlerini, kaynaklarını ve iyi/kötü örneklerini yazın. <b>2. Test et:</b> Yetenek 10 dakikalık gerçek bir göreve çıkar; bulgu üreten skill’lerde kaynaklar denetlenir, aksiyon/rapor üreten skill’lerde beklenen çıktı sözleşmesi ölçülür. <b>3. Onayla:</b> Yalnızca <b>onaylı</b> yetenekler botların gerçek görevlerinde kullanılır.</p>
             <p><b>Claude denetimi:</b> Her sabah görevler bittikten sonra (≈10:00) Claude raporları açar, bulguların kaynağına bakarak gerçek/sahte/alakasız ayırır ve yeteneği kendisi geliştirir (yeni sürüm); özeti Telegram’a gönderir. <b>Koç önerileri:</b> Her görevden sonra koç, botun eksiklerini teşhis eder (ör. yanlış arama terimi, zayıf kaynak) ve somut düzeltme önerir. “Uygula” deyince yetenek bir üst sürüme geçer.</p>
             <p><b>Katalog sınırı:</b> İçe aktarılan bir Manus/AI yeteneği önce prompt bağlamı olarak sınıflandırılır. Gerçek tool veya connector handler eşleşmesi yoksa sistem onu çalıştırılabilir araç gibi göstermez; bunun için katalog eşleşmesi, test kanıtı ve yönetici onayı gerekir.</p>
           </div>
@@ -94,7 +95,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
                 {s.test_goal && <p className="text-xs text-ink-300 line-clamp-3"><b>Test amacı:</b> {s.test_goal}</p>}
                 {s.search_terms?.length > 0 && <div className="flex flex-wrap gap-1">{s.search_terms.slice(0, 12).map((t) => <span key={t} className="text-[10px] rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t}</span>)}</div>}
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
-                  {score == null ? <span>Henüz test edilmedi</span> : <span>Son test: <b className={score >= 60 ? 'text-emerald-700' : score >= 30 ? 'text-amber-700' : 'text-rose-700'}>%{score} doğruluk</b> · {s.test_findings ?? 0} doğrulanmış bulgu · {fmtDateTime(s.last_tested_at)}</span>}
+                  {score == null ? <span>Henüz test edilmedi</span> : <span>Son test: <b className={score >= 60 ? 'text-emerald-700' : score >= 30 ? 'text-amber-700' : 'text-rose-700'}>%{score} kanıt puanı</b> · {s.academy_output_kind && s.academy_output_kind !== 'findings' ? `${s.capability_test_output_count ?? 0} çıktı maddesi` : `${s.test_findings ?? 0} doğrulanmış bulgu`} · {fmtDateTime(s.last_tested_at)}</span>}
                   {s.last_test_mission_id && <button className="underline text-brand-green" onClick={() => setOpenMission(s.last_test_mission_id)}>test raporu</button>}
                 </div>
                 {isAdmin && (
