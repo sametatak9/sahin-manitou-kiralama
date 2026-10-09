@@ -53,8 +53,31 @@ export function AiBudgetPanel() {
             <div className="flex items-center justify-between gap-2"><SavedStamp at={q.data.updated_at} /><Button variant="primary" loading={busy} onClick={save} icon={<Save className="w-4 h-4" />}>Kaydet</Button></div>
           </>)}
           {msg && <Notice tone={msg.tone === 'ok' ? 'ok' : 'error'}>{msg.text}</Notice>}
+          <SpendBreakdown />
         </div>
       )}
     </Panel>
+  );
+}
+
+interface SpendRow { source: string; provider: string | null; model: string | null; calls: number; tokens: number; searches: number; cost_usd: number }
+
+function SpendBreakdown() {
+  const q = useQuery(async () => unwrap(await db().rpc('ai_spend_breakdown', { p_days: 30 })) as SpendRow[], [] as SpendRow[], []);
+  if (q.loading && !q.data.length) return null;
+  if (q.error) return <StateView kind="error" message={q.error} compact />;
+  if (!q.data.length) return <p className="text-xs text-ink-400">Son 30 günde kayıtlı yapay zekâ harcaması yok.</p>;
+  return (
+    <div>
+      <div className="text-[11px] font-semibold text-ink-300 mb-1.5">Son 30 gün · neye harcandı</div>
+      <ul className="divide-y divide-ink-800 rounded-xl ring-1 ring-ink-800">
+        {q.data.slice(0, 12).map((r, i) => (
+          <li key={`${r.source}-${r.model}-${i}`} className="flex items-center gap-2 px-3 py-2 text-xs">
+            <div className="min-w-0 flex-1"><div className="font-semibold text-ink-100 truncate">{r.source}</div><div className="text-[10px] text-ink-500 truncate">{r.model ?? r.provider ?? '—'} · {r.calls} çağrı{r.searches ? ` · ${r.searches} arama` : ''}</div></div>
+            <div className="font-mono tabular-nums text-ink-200">${Number(r.cost_usd).toFixed(2)}</div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
