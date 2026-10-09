@@ -29,14 +29,15 @@ export function OwnerTodos() {
   const [open, setOpen] = useState<string | null>(null);
   const q = useQuery(async () => {
     const today = `${dayKey(new Date())}T00:00:00+03:00`;
-    const [inbox, radar, check] = await Promise.all([
+    const [inbox, radar, check, models] = await Promise.all([
       db().from('social_inbox').select('reply_source').eq('replied', false).like('reply_source', 'kuyruk%').limit(200),
       db().from('audience_radar').select('id', { count: 'exact', head: true }).gte('done_at', today),
       db().from('owner_checklist').select('key,done_at'),
+      db().from('showroom_models').select('id', { count: 'exact', head: true }).eq('status', 'draft').is('archived_at', null),
     ]);
     const perm = (inbox.data ?? []).filter((r: { reply_source: string | null }) => /permission|izni|izin/i.test(r.reply_source ?? '')).length;
-    return { perm, radarDone: radar.count ?? 0, done: new Map(((check.data ?? []) as Array<{ key: string; done_at: string | null }>).map((r) => [r.key, r.done_at])) };
-  }, { perm: 0, radarDone: 0, done: new Map<string, string | null>() }, [], ['owner_checklist', 'audience_radar', 'social_inbox']);
+    return { perm, radarDone: radar.count ?? 0, modelDrafts: models.count ?? 0, done: new Map(((check.data ?? []) as Array<{ key: string; done_at: string | null }>).map((r) => [r.key, r.done_at])) };
+  }, { perm: 0, radarDone: 0, modelDrafts: 0, done: new Map<string, string | null>() }, [], ['owner_checklist', 'audience_radar', 'social_inbox']);
   const d = q.data;
   const toggle = async (key: string) => {
     const was = d.done.get(key);
@@ -48,6 +49,8 @@ export function OwnerTodos() {
       why: 'Yorum cevapları, gönderi erişimi ve istatistikler bu izinle çalışır.', steps: ['Uygulamalar → Facebook → Yeniden bağla', 'Açılan Meta ekranında TÜM izinleri onaylayın (yorumlar, istatistikler, mesajlar)'], link: { label: 'Uygulamalar', route: 'connections' } },
     { key: 'radar', auto: true, ok: d.radarDone >= 5, badge: `${Math.min(5, d.radarDone)}/5`, title: 'Bugünün 5 etkileşim kartı (5 dakika)',
       why: 'Ev yaptıran gerçek kişilerin gönderisine hazır yorumu bırakın; profilinize gelenler takipçi ve müşteri olur. Sabah 09:00’da Telegram’a da gelir.', link: { label: 'Büyüme Merkezi', route: 'growth' } },
+    { key: 'showroom', auto: true, ok: d.modelDrafts === 0, title: d.modelDrafts ? `${d.modelDrafts} ev modeli onayınızı bekliyor — sitede görünmüyor` : 'Ev vitrininde onay bekleyen model yok',
+      why: 'Editör Bot model yazısını hazırladı; siz okuyup yayınlayana kadar /evler sayfasında görünmez. Fiyat eklemek isteğe bağlıdır.', link: { label: 'Ev Vitrini', route: 'showroom' } },
   ];
   const items: Array<Todo & { ok: boolean; badge?: string }> = [...auto, ...MANUAL.map((m) => ({ ...m, ok: Boolean(d.done.get(m.key)) }))];
   const left = items.filter((i) => !i.ok).length;
