@@ -94,7 +94,7 @@ export function CopilotScreen() {
       </section>
 
       {error && <div className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">{error}</div>}
-      <section className="sticky bottom-20 rounded-2xl bg-white/95 p-2.5 shadow-lg ring-1 ring-slate-200 backdrop-blur lg:bottom-4">
+      <section className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] rounded-2xl bg-white/95 p-2.5 shadow-lg ring-1 ring-slate-200 backdrop-blur lg:bottom-4">
         <div className="flex items-end gap-2"><textarea value={input} onChange={(e) => setInput(e.target.value.slice(0, 4000))} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }} rows={2} placeholder="Örn. Son görevlerdeki riskleri kısaca açıkla…" className="min-h-[48px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none ring-1 ring-slate-200 placeholder:text-slate-400 focus:ring-indigo-300" aria-label="Copilot mesajı" /> <button type="button" onClick={() => void send()} disabled={busy || !input.trim()} className={cx('grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white transition', busy || !input.trim() ? 'bg-slate-300' : 'bg-indigo-600 hover:bg-indigo-700')} aria-label="Copilot’a gönder"><Send className="h-4 w-4" /></button></div>
         <div className="px-1 pt-1 text-[10px] text-slate-400">Enter gönderir · Shift+Enter yeni satır · Dış eylem ve canlı araştırma için kontrollü ekranlar kullanılır.</div>
       </section>
