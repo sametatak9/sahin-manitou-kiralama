@@ -468,10 +468,12 @@ async function logStep(db: Db, m: MissionRow, step: number, action: string, mess
 }
 async function logSkillsLoadedOnce(db: Db, m: MissionRow, skills: Array<{ id: string; name: string; version: number }>) {
   if (m.step_count !== 0) return;
-  const { data: existing } = await db.from('bot_mission_steps').select('id').eq('mission_id', m.id).eq('action', 'skills_loaded').limit(1);
-  if (existing?.length) return;
   const safe = skills.map((s) => ({ id: s.id, name: s.name.slice(0, 120), version: Number(s.version) || 1 }));
-  await logStep(db, m, 0, 'skills_loaded', `${safe.length} uygun yetenek bağlamı yüklendi`, null, { count: safe.length, skills: safe });
+  const { error } = await db.from('bot_mission_steps').insert({ mission_id: m.id, step_no: 0, action: 'skills_loaded', target: null,
+    message: `${safe.length} uygun yetenek bağlamı yüklendi`, data: { count: safe.length, skills: safe }, duration_ms: null });
+  // The partial unique index makes this safe if two leased workers race. A duplicate
+  // audit event is expected and harmless; every other database error must surface.
+  if (error && error.code !== '23505') throw error;
 }
 const canonical = (u: string) => { try { const x = new URL(u); x.hash = ''; return x.toString().replace(/\/$/, ''); } catch { return u; } };
 function pageDigest(p: PageFacts) {
