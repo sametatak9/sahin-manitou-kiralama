@@ -52,6 +52,7 @@ export function ShowroomScreen() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [picker, setPicker] = useState<null | 'cover' | 'gallery' | 'plan'>(null);
+  const [publishingPost, setPublishingPost] = useState<string | null>(null);
   const list = useMemo(() => q.data.filter((m) => (tab === 'archived' ? m.status === 'archived' : m.status !== 'archived')), [q.data, tab]);
 
   const open = (m: Model | 'new') => { setMsg(null); setEdit(m); setForm(m === 'new' ? EMPTY : toForm(m)); };
@@ -106,11 +107,23 @@ export function ShowroomScreen() {
     q.reload();
   };
   const setPostStatus = async (post: SitePost, status: SitePost['status']) => {
-    if (status === 'published' && (!post.title.trim() || !post.body?.trim())) {
-      setMsg({ tone: 'error', text: 'Yazı başlık ve gövde olmadan yayınlanamaz.' }); return;
+    if (status === 'published') {
+      setPublishingPost(post.id); setMsg(null);
+      try {
+        const r = await callOps<{ published: boolean; already?: boolean; quality?: { score: number; blocking: Array<{ message: string }> } }>('showroom_post_publish', { id: post.id });
+        if (!r.published) {
+          const reasons = (r.quality?.blocking ?? []).map((x) => x.message).join(' · ');
+          setMsg({ tone: 'error', text: `Yayın kalite kapısı geçilmedi: ${reasons || 'İçerik düzenlenmeli.'}` });
+        } else {
+          setMsg({ tone: 'ok', text: r.already ? 'Yazı zaten yayındaydı.' : `"${post.title}" onaylandı ve public sitede yayımlandı. Kalite skoru: ${r.quality?.score ?? '—'}/100.` });
+        }
+      } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); }
+      await posts.reload();
+      setPublishingPost(null);
+      return;
     }
     const { error } = await db().from('site_posts').update({ status }).eq('id', post.id);
-    setMsg(error ? { tone: 'error', text: error.message } : { tone: 'ok', text: status === 'published' ? `"${post.title}" onaylandı ve public sitede yayımlandı.` : `"${post.title}" arşivlendi.` });
+    setMsg(error ? { tone: 'error', text: error.message } : { tone: 'ok', text: status === 'archived' ? `"${post.title}" arşivlendi.` : `"${post.title}" taslağa alındı.` });
     posts.reload();
   };
 
@@ -183,9 +196,10 @@ export function ShowroomScreen() {
                     </div>
                     <h3 className="mt-1 text-sm font-semibold text-ink-100">{post.title}</h3>
                     {post.excerpt && <p className="mt-0.5 text-[11px] text-ink-400">{post.excerpt}</p>}
+                    {post.status === 'draft' && <p className="mt-1 text-[10px] text-ink-500">Yayın kapısı: URL · başlık · gövde · görsel · SEO başlığı/açıklaması · ilçe.</p>}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {post.status === 'draft' && <Button variant="primary" onClick={() => setPostStatus(post, 'published')}>Onayla ve yayınla</Button>}
+                    {post.status === 'draft' && <Button variant="primary" loading={publishingPost === post.id} onClick={() => setPostStatus(post, 'published')}>Kalite kontrolü + yayınla</Button>}
                     {post.status !== 'archived' && <Button variant="danger" icon={<Archive className="h-3.5 w-3.5" />} onClick={() => setPostStatus(post, 'archived')}>Arşivle</Button>}
                     {post.status === 'published' && <a className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-ink-200 ring-1 ring-ink-600" href={`${SITE}/blog/${post.slug}`} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Yazıyı aç</a>}
                   </div>

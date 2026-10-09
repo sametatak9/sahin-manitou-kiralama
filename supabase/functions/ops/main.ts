@@ -21,6 +21,7 @@ import { aiImage, aiImageLastError, factoryTick, planTick, renderBanner, renderB
 import { istanbulDayRange } from '../_shared/context.ts';
 import { driveTick, parseFolderId, syncDriveFolder } from '../_shared/drive.ts';
 import { PUBLIC_SITE, showroomEditorTick, sitePostTick, writeDistrictPost, writeShowroomTexts } from '../_shared/showroom.ts';
+import { inspectSitePost } from '../_shared/pure/content-quality.ts';
 import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_shared/publisher.ts';
 import { generateContent } from '../_shared/tools/registry.ts';
 import { createEditJob, editDone, editQueue, editToPool } from '../_shared/videoedit.ts';
@@ -514,6 +515,19 @@ async function canvaToken(db: Db) {
   return tokens.access_token as string;
 }
 
+async function sitePostQuality(db: Db, post: Record<string, unknown>) {
+  let brandName: string | null = null;
+  const clientId = typeof post.client_id === 'string' ? post.client_id : null;
+  if (clientId) {
+    const { data: client } = await db.from('agency_clients').select('brand_kit_id').eq('id', clientId).maybeSingle();
+    if (client?.brand_kit_id) {
+      const { data: kit } = await db.from('brand_kits').select('company_name').eq('id', client.brand_kit_id).maybeSingle();
+      brandName = kit?.company_name ?? null;
+    }
+  }
+  return inspectSitePost(post, brandName);
+}
+
 // ── Panel API ───────────────────────────────────────────────────────────────
 async function api(db: Db, req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -642,6 +656,27 @@ async function api(db: Db, req: Request) {
     case 'showroom_site_post': {
       const u = await requireUser(db, req, 'admin');
       return writeDistrictPost(db, typeof body.district === 'string' ? body.district : undefined, u.userId);
+    }
+    case 'showroom_post_quality': {
+      await requireUser(db, req);
+      const { data: post, error } = await db.from('site_posts').select('id,client_id,slug,kind,title,excerpt,body,cover_url,images,district,district_slug,seo_title,seo_description,status').eq('id', String(body.id || '')).maybeSingle();
+      if (error) throw error;
+      if (!post) throw new HttpError(404, 'Site yazısı bulunamadı');
+      return { id: post.id, quality: await sitePostQuality(db, post as Record<string, unknown>) };
+    }
+    case 'showroom_post_publish': {
+      const u = await requireUser(db, req);
+      const { data: post, error } = await db.from('site_posts').select('id,client_id,slug,kind,title,excerpt,body,cover_url,images,district,district_slug,seo_title,seo_description,status').eq('id', String(body.id || '')).maybeSingle();
+      if (error) throw error;
+      if (!post) throw new HttpError(404, 'Site yazısı bulunamadı');
+      const quality = await sitePostQuality(db, post as Record<string, unknown>);
+      if (!quality.ok) return { published: false, quality };
+      if (post.status === 'published') return { published: true, already: true, quality };
+      const { data: published, error: updateError } = await db.from('site_posts').update({ status: 'published' }).eq('id', post.id).eq('status', 'draft').select('id,status,published_at').maybeSingle();
+      if (updateError) throw updateError;
+      if (!published) throw new HttpError(409, 'Site yazısı aynı anda değişti; listeyi yenileyip tekrar deneyin', 'CONFLICT');
+      await db.rpc('write_audit_service', { p_actor: u.userId, p_action: 'publish_site_post', p_entity_type: 'site_posts', p_entity_id: post.id, p_summary: `Site yazısı yayınlandı: ${post.title}` });
+      return { published: true, quality, post: published };
     }
     // Panelden video düzenleme (kurgu / düzeltme) → GitHub Actions render kuyruğu
     // İçerik kontrol botu: tam kontrol listesi + "Bot düzeltsin"
