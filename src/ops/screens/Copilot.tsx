@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ASSISTANT_NAME } from '../brand';
 import { Ban, Bot, LockKeyhole, Search, Send, ShieldCheck, Sparkles } from 'lucide-react';
 import { useClient } from '../client';
 import { callOps, errorText } from '../lib/api';
@@ -70,7 +71,7 @@ export function CopilotScreen() {
         <div className="relative flex items-start gap-3">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 shadow-lg shadow-cyan-900/30"><Bot className="h-5 w-5" /></div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300">Agency Copilot</span><ModeBadge mode="read_only" /></div>
+            <div className="flex flex-wrap items-center gap-2"><span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300">{ASSISTANT_NAME}</span><ModeBadge mode="read_only" /></div>
             <h2 className="mt-1 font-display text-lg font-bold">{client?.name ?? 'Ajans'} için karar desteği</h2>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-300">Kayıtlı tenant bağlamı, son mission özetleri ve onaylı skill kataloğu üzerinden cevap verir. Web aramaz, tool çalıştırmaz, paylaşım veya kayıt değişikliği yapmaz.</p>
           </div>

@@ -125,7 +125,7 @@ function icon(name: string, x0: number, y0: number, size: number, color: string,
 }
 void PILLAR_ICON;
 
-type BannerOpts = { w: number; h: number; brand: Record<string, string> | null; brandName: string; badge: string; headline: string; subtitle: string; cta: string; photo?: Uint8Array | null; photoMime?: string; icon?: string };
+type BannerOpts = { w: number; h: number; brand: { phone?: string | null; website?: string | null } | null; brandName: string; badge: string; headline: string; subtitle: string; cta: string; photo?: Uint8Array | null; photoMime?: string; icon?: string };
 
 // ── EMBAY YAPI kimliği (Instagram @embayyapi): lacivert + kraliyet mavisi + bulutlu gökyüzü, beyaz çizgi ev logosu,
 //    kalın büyük harfli başlık, altta lacivert şerit (iki telefon + web). Eski tarzın modern hali: amblemli etiket, ✓ hizmet çipleri.
