@@ -46,6 +46,7 @@ export function routeForModel(model: string | null | undefined): ModelRoute | nu
   if (!value) return null;
   const exact = MODEL_ROUTES.find((route) => route.model.toLowerCase() === value);
   if (exact) return exact;
+  if (value.startsWith('gpt-oss-')) return { model: value, provider: 'cerebras', role: 'agent', rationale: 'Cerebras uyumlu gpt-oss model adı.' };
   if (value.startsWith('gpt-')) return { model: value, provider: 'openai', role: 'agent', rationale: 'OpenAI uyumlu model adı.' };
   if (value.startsWith('claude-')) return { model: value, provider: 'anthropic', role: 'agent', rationale: 'Anthropic uyumlu model adı.' };
   if (value.startsWith('gemini-')) return { model: value, provider: 'gemini', role: 'research', rationale: 'Gemini uyumlu model adı.' };

@@ -20,6 +20,7 @@ assert(resolveRequestedModel('gpt-5', ['gpt-5-mini', 'gpt-5']) === 'gpt-5', 'exp
 assert(resolveRequestedModel('unknown-model', ['gpt-5-mini', 'gpt-5']) === 'gpt-5-mini', 'unknown model must fall back safely');
 assert(routeForModel('gpt-5-mini')?.provider === 'openai', 'gpt-5-mini must route to OpenAI');
 assert(routeForModel('gpt-5-mini')?.role === 'chat', 'gpt-5-mini must be chat-first');
+assert(routeForModel('gpt-oss-120b')?.provider === 'cerebras', 'Cerebras gpt-oss must not be sent to OpenAI on the next worker step');
 assert(routeForModel('claude-sonnet-5')?.provider === 'anthropic', 'Claude route must remain supported');
 assert(shouldUseOpenAiForResearch('gpt-5'), 'explicit gpt model must be routable');
 assert(!shouldUseOpenAiForResearch(null), 'blank mission preference must not force OpenAI research');
