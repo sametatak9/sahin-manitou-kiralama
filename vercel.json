@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "bash scripts/vercel-ignore.sh",
   "rewrites": [
     { "source": "/higgsfield/1-salon-somine.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1EzMB-L1mEojIzXEa8Frj3DxWelgEklzh.jpg" },
     { "source": "/higgsfield/2-galeri-kat.jpg", "destination": "https://utngxnqlcayfjkknaysx.supabase.co/storage/v1/object/public/media-uploads/drive/1LD5GifUnk4a0BIpZ-ilovWHoTcyP9pn3.jpg" },
