@@ -6,6 +6,7 @@ import { finalizeMission, runDueMissions, stepMission, type MissionRow } from '.
 import { aiKeyAvailability, getAiKey, initKeyStore, liveKeyTest, markAiKey, type KeyProvider } from '../_shared/ai/keys.ts';
 import { budgetBlock, spendStatus } from '../_shared/ai/budget.ts';
 import { normalizeSkillIds, snapshotSkillIds } from '../_shared/pure/skill-snapshot.ts';
+import { resolveRequestedModel, DEFAULT_INTERACTIVE_MODEL } from '../_shared/pure/model-routing.ts';
 
 type Db = SupabaseClient;
 // Görev başlatılırken seçilebilen modeller. Anahtar yoksa runtime güvenli fallback seçer.
@@ -73,7 +74,10 @@ async function api(c: Db, req: Request) {
         eligibleIds = normalizeSkillIds((eligible || []).map((s) => s.id), 100);
       }
       const skillSnapshot = snapshotSkillIds({ requested: requestedSkillIds, botSkillIds, eligibleIds, botBound: Boolean(botId), max: 100 });
-      const model = ALLOWED_MODELS.includes(String(body.model)) ? String(body.model) : null;
+      // “Otomatik” seçim de audit edilebilir bir başlangıç tercihi taşımalı:
+      // runtime önce GPT-5 mini’yi dener, bakiye/anahtar/limit sorunu varsa
+      // kendi güvenli fallback zincirine geçer ve gerçek provider/model’i ayrıca kaydeder.
+      const model = resolveRequestedModel(body.model, ALLOWED_MODELS);
       const blocked = await budgetBlock(c);
       if (blocked) throw new HttpError(409, `${blocked}. Sınırı Ayarlar → Harcama sınırı bölümünden değiştirebilirsiniz.`, 'BUDGET_EXCEEDED');
       let schedule_id: string | null = null;
@@ -157,7 +161,7 @@ async function api(c: Db, req: Request) {
       const minutes = Math.max(5, Math.min(30, Number(body.minutes) || 10));
       const { data: bots } = await c.from('automation_bot_skills').select('bot_id').eq('skill_id', sk.id).limit(1);
       const now = Date.now();
-      const { data: m, error } = await c.from('bot_missions').insert({ purpose: 'skill_test', skill_ids: [sk.id], bot_id: bots?.[0]?.bot_id ?? null,
+      const { data: m, error } = await c.from('bot_missions').insert({ purpose: 'skill_test', model: DEFAULT_INTERACTIVE_MODEL, skill_ids: [sk.id], bot_id: bots?.[0]?.bot_id ?? null,
         title: `Yetenek testi: ${sk.display_name}`.slice(0, 200), goal: goal.slice(0, 4000), search_for: (sk.search_terms || []).join(', ') || null,
         duration_minutes: minutes, max_steps: Math.min(6, Math.max(3, Math.ceil(minutes / 3))), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
         locked_until: new Date(now + 150_000).toISOString() }).select('*').single();

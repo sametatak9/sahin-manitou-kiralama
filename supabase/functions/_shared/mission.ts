@@ -480,7 +480,9 @@ async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) =>
 function isQuotaOrRateLimit(err: unknown): boolean {
   if (err instanceof AiFatalError && (err.kind === 'ai_credit' || err.kind === 'ai_auth')) return true;
   const s = String((err as Error)?.message || err);
-  return /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing/i.test(s);
+  // Model adı/endpoint artık geçerli değilse de güvenli başka sağlayıcı denenebilir.
+  // Aksi halde tek bir eski provider modeli görevi gereksiz yere düşürür.
+  return /credit|balance|quota|rate_limit|too_many_requests|429|overloaded|billing|model_not_found|model not found|not found|unavailable|\b404\b/i.test(s);
 }
 
 // ── Yardımcılar ─────────────────────────────────────────────────────────────

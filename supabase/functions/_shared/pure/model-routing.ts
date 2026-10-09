@@ -35,6 +35,12 @@ export const DEFAULT_INTERACTIVE_MODEL = 'gpt-5-mini';
 export const DEFAULT_FAST_MODEL = 'gpt-5-nano';
 export const DEFAULT_RESEARCH_MODEL = 'claude-sonnet-5';
 
+/** Panelde “Otomatik” seçildiğinde kayıt altına alınacak ilk model tercihi. */
+export function resolveRequestedModel(preferred: string | null | undefined, allowed: readonly string[]): string {
+  const value = String(preferred || '').trim();
+  return allowed.includes(value) ? value : DEFAULT_INTERACTIVE_MODEL;
+}
+
 export function routeForModel(model: string | null | undefined): ModelRoute | null {
   const value = String(model || '').trim().toLowerCase();
   if (!value) return null;
