@@ -15,6 +15,7 @@ import { classifyFinishReason, verifiedFindings } from './pure/outcome.ts';
 import { findingDateIssue, makePublicationEvidence, publicationFromHtml, sourceSupportsTitle, trustedPublication, type PublicationEvidence } from './pure/publication.ts';
 import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './pure/policy.ts';
 import { researchReportSummary } from './pure/research-report.ts';
+import { searchBackedSocialProfile } from './pure/social-profile.ts';
 
 type Db = SupabaseClient;
 
@@ -983,7 +984,9 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     const publication = srcPublication.get(canonical(f.url));
     f.publication = publication; f.posted = publication?.posted;
     let host = ''; try { host = new URL(f.url).hostname; } catch { /* */ }
-    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || ''}`, match: inSources && sourceSupportsTitle(f.title, srcTitle.get(canonical(f.url)) || ''), desc: '' };
+    const searchBacked = policy === 'growth' ? searchBackedSocialProfile({ url: f.url, findingTitle: f.title, sourceTitle: srcTitle.get(canonical(f.url)), detail: f.detail, evidence: f.evidence, fit: f.fit, sourceUrlPresent: inSources }) : null;
+    if (searchBacked?.ok) return { f, reachable: true, excerpt: `Herkese açık arama sonucu profil başlığı/özeti: ${srcTitle.get(canonical(f.url)) || f.title}\n${f.evidence || f.detail || ''}`, match: true, desc: '', searchBacked: true, searchBackedReason: searchBacked.reason };
+    if (/news\.google\.com$/.test(host)) return { f, reachable: inSources, excerpt: `Haber başlığı (Google Haberler akışından): ${srcTitle.get(canonical(f.url)) || ''}`, match: inSources && sourceSupportsTitle(f.title, srcTitle.get(canonical(f.url)) || ''), desc: '', searchBacked: false, searchBackedReason: undefined };
     const p = await fetchPage(f.url).catch(() => null);
     // Sayfanın yayın metadata'sı, arama indeks tarihinden önceliklidir; AI posted alanı hiç kullanılmaz.
     if (p?.ok && p.publication && canonical(p.url) === canonical(f.url)) { f.publication = p.publication; f.posted = p.publication.posted; }
@@ -991,7 +994,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     const words = norm(f.title).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5).slice(0, 8);
     const idx = words.length ? norm(text).indexOf(words[0].slice(0, 5)) : -1;
     const excerpt = text ? text.slice(Math.max(0, idx - 200), Math.max(0, idx - 200) + 900) : (p?.error ?? `HTTP ${p?.status ?? '?'}`);
-    return { f, reachable: Boolean(p?.ok), excerpt, match: sourceSupportsTitle(f.title, text), desc: String(p?.description || p?.og?.['og:description'] || '').trim() };
+    return { f, reachable: Boolean(p?.ok), excerpt, match: sourceSupportsTitle(f.title, text), desc: String(p?.description || p?.og?.['og:description'] || '').trim(), searchBacked: false, searchBackedReason: undefined };
   }));
   const verdicts = new Map<number, { v: Finding['verdict']; r: string }>();
   if (ai && checks.length) {
@@ -1000,6 +1003,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
         'Sen bir DENETÇİSİN. Bir botun topladığı bulguları kaynaklarıyla karşılaştırıp gerçek ve kullanılabilir olup olmadığına karar ver. Kendi bilginle bulgu uydurma veya düzeltme.',
         `GÖREVİN AMACI: ${cur.goal}`,
         'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, görevin istediği çıktı türüne doğrudan uyuyor ve tarih şartını karşılıyor; "suspicious" = gerçek görünüyor ama kanıt zayıf, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma ya da görevin amacına uymuyor. Pazar/SEO/içerik araştırması ise görevle ilgili sektör kaynağı, açıkça müşteri talebi olmadığı belirtilerek geçerli olabilir.',
+        ...(policy === 'growth' ? ['GROWTH PROFİL KURALI: Instagram/Facebook profil sayfaları kullanım koşulları nedeniyle doğrudan açılmaz. Exact profil URL’si arama kaynaklarında mevcutsa ve başlık/özet işletme sinyaliyle eşleşiyorsa bu, hesap keşfi görevi için gerçek ve kullanılabilir kanıttır; doğrudan sayfa açılmadı diye otomatik olarak suspicious verme.'] : []),
         checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSUNUCU YAYIN KANITI: ${c.f.publication ? `${c.f.publication.posted} (${c.f.publication.origin})` : 'yok'}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
         'Her bulgu için ayrıca kaynağa dayanan 2-3 cümlelik TÜRKÇE ÖZET yaz: ne, kim, nerede, ne zaman, büyüklük; ve bizim için ne anlama geldiği. Kaynakta olmayan bilgi ekleme.',
         'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle","summary":"2-3 cümle özet"}]}',
@@ -1019,8 +1023,9 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
       c.f.verdict_reason = dateIssue; c.f.summary = undefined;
       return;
     }
-    // AI hakemi yoksa "doğrulandı" verilmez: kural yalnızca kaynağın var olduğunu gösterir, amaca uygunluğu değil
-    const v = verdicts.get(i) ?? (c.reachable && c.match ? { v: 'suspicious' as const, r: 'Kaynak var ve başlık kaynakta geçiyor; AI hakemi çalışmadığı için amaca uygunluk doğrulanmadı' }
+    // AI hakemi yoksa normal web bulgusu doğrulanmaz; Growth profil istisnasında exact arama kaynağı + işletme sinyali yeterli kanıttır.
+    const v = verdicts.get(i) ?? (c.searchBacked ? { v: 'verified' as const, r: c.searchBackedReason || 'Exact sosyal profil URL’si ve işletme sinyali gerçek arama kaynağıyla eşleşti' }
+      : c.reachable && c.match ? { v: 'suspicious' as const, r: 'Kaynak var ve başlık kaynakta geçiyor; AI hakemi çalışmadığı için amaca uygunluk doğrulanmadı' }
       : c.reachable ? { v: 'suspicious' as const, r: 'Kaynak açıldı ama bulgu metinde net görülmedi (kural tabanlı)' } : { v: 'suspicious' as const, r: 'Kaynak sayfası okunamadı (kural tabanlı)' });
     // Güvenlik: kaynağı açılamayan ve toplanan kaynaklarda da olmayan bulgu "doğrulandı" sayılmaz
     c.f.verdict = (!c.reachable || !c.match) && v.v === 'verified' ? 'suspicious' : v.v;
