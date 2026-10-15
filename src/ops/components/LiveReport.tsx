@@ -8,7 +8,7 @@ import { fmtDateTime } from '../lib/format';
 import type { Mission, MissionSkillMeta, MissionSkillUsage, MissionStep } from '../lib/types';
 import { Button, cx, Modal, Notice, Pill, StateView } from '../ui';
 import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
-import { classifyFindingType } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
+import { classifyFindingType, isSocialProfileUrl, isTargetAccountType } from '../../../supabase/functions/_shared/pure/finding-taxonomy.ts';
 
 export { waNumber } from './FindingCard';
 
@@ -24,7 +24,8 @@ export function LiveReport({ id, onClose }: { id: string; onClose: () => void })
     const all = m?.findings ?? [];
     return {
       customerLeads: all.filter((f) => f.verdict === 'verified' && (f.finding_type ?? classifyFindingType(f)) === 'customer_lead').length,
-      targetAccounts: all.filter((f) => f.verdict === 'verified' && ['business_or_partner', 'competitor_or_reference'].includes(f.finding_type ?? classifyFindingType(f))).length,
+      targetAccounts: all.filter((f) => f.verdict === 'verified'
+        && isTargetAccountType(f.finding_type ?? classifyFindingType(f), isSocialProfileUrl(f.url))).length,
       publicInstitutions: all.filter((f) => ['public_institution', 'public_opportunity'].includes(f.finding_type ?? classifyFindingType(f))).length,
     };
   }, [m?.findings]);

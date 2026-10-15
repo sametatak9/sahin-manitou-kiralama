@@ -28,6 +28,7 @@ export interface FindingTaxonomyInput {
 
 const normalize = (value: string) => value.toLocaleLowerCase('tr-TR')
   .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/ı/g, 'i')
   .replace(/[._/:\-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 const textOf = (input: FindingTaxonomyInput) => normalize([
@@ -38,9 +39,11 @@ const textOf = (input: FindingTaxonomyInput) => normalize([
 const PUBLIC_INSTITUTION = /\b(t c|belediye|bakanlik|bakanligi|kaymakam|kaymakamlik|valilik|valiligi|muhtarlik|devlet dairesi|resmi kurum|kamu kurumu|toki|dsi|karayollari|universite|hastane|okul mudurlugu|il ozel idaresi)\b/;
 const PUBLIC_OPPORTUNITY = /\b(ihale|kamu alimi|is alimi|tender|resmi ilan|dogrudan temin|teklif cagrisi|yapim isi|hizmet alim)\b/;
 const CUSTOMER_DEMAND = /\b(ariyor|araniyor|aramaktadir|yaptirmak istiyor|yaptirmak isteyen|hizmet ariyor|teklif almak|fiyat teklifi|talep|ihtiyac|is veren|isveren|tasaron ariyor|usta ariyor|muteahhit ariyor|kat karsiligi ariyor|arsa sahibi)\b/;
-const BUSINESS = /\b(firma|sirket|ofis|emlak|arsa ofisi|gayrimenkul|mimarlik|mimar|insaat|yapi|prefabrik|celik|villa|konut|muteahhit|tedarik|malzeme|uretic|uretim|hizmet ver|kiralama|makine|construction|builder|build)\b/;
-const COMPETITOR = /\b(rakip|uretic|uretim|hizmet ver|katalog|referans|proje tanitim|insaat firmasi|yapi firmasi|prefabrik|celik ev|construction|builder)\b/;
-const MEDIA = /\b(haber|medya|dergi|gazete|sektor medyasi|blog|rehber|liste|makale)\b/;
+const BUSINESS = /\b(firma|sirket|isletme|ticari|business|company|companies|firm|supplier|vendor|partner|contractor|ofis|emlak|arsa ofisi|gayrimenkul|mimarlik|mimar|insaat|yapi|prefabrik|celik|villa|konut|muteahhit|tedarik|malzeme|uretic|uretim|hizmet ver|kiralama|makine|construction|builder|build)\b/;
+const EXPLICIT_COMPETITOR = /\b(rakip|competitor|rival)\b/;
+const PARTNER = /\b(supplier|vendor|partner|tedarikci|tedarik|is ortagi|supply)\b/;
+const COMPETITOR = /\b(uretic|uretim|manufacturer|producer|katalog|referans|proje tanitim|prefabrik|celik ev|builder)\b/;
+const MEDIA = /\b(haber\w*|medya\w*|dergi\w*|gazete\w*|sektor medy\w*|blog\w*|rehber\w*|liste\w*|makale\w*|news|media|press|journal|magazine|newspaper)\b/;
 const SOCIAL = /\b(instagram|facebook|tiktok|linkedin|twitter|x com)\b/;
 
 /**
@@ -62,9 +65,11 @@ export function classifyFindingType(input: FindingTaxonomyInput): FindingType {
     return 'customer_lead';
   }
 
+  if (EXPLICIT_COMPETITOR.test(text)) return 'competitor_or_reference';
+  if (MEDIA.test(text)) return 'market_reference';
+  if (PARTNER.test(text)) return 'business_or_partner';
   if (COMPETITOR.test(text)) return 'competitor_or_reference';
   if (BUSINESS.test(text)) return 'business_or_partner';
-  if (MEDIA.test(text)) return 'market_reference';
   if (SOCIAL.test(text) && !BUSINESS.test(text)) return 'excluded';
   return 'market_reference';
 }
@@ -82,4 +87,28 @@ export const FINDING_TYPE_LABEL: Record<FindingType, string> = {
 
 export function isCustomerLead(input: FindingTaxonomyInput & { finding_type?: FindingType | null }): boolean {
   return (input.finding_type ?? classifyFindingType(input)) === 'customer_lead';
+}
+
+const SOCIAL_PROFILE_BLOCKLIST = new Set(['p', 'reel', 'reels', 'stories', 'explore', 'accounts', 'direct', 'share', 'watch', 'photo', 'video', 'videos', 'groups', 'events']);
+
+export function isSocialProfileUrl(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^(www\.|m\.)/, '');
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length !== 1 || SOCIAL_PROFILE_BLOCKLIST.has(parts[0].toLowerCase())) return false;
+    if (host === 'instagram.com') return /^[a-z0-9._]{2,30}$/i.test(parts[0]);
+    if (host === 'facebook.com') return /^[a-z0-9.\-]{2,60}$/i.test(parts[0]);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Verified business/competitor sites and relevant social media references can be manual target accounts, never customer leads. */
+export function isTargetAccountType(type: FindingType, isSocialProfile = false): boolean {
+  return type === 'business_or_partner'
+    || type === 'competitor_or_reference'
+    || (type === 'market_reference' && isSocialProfile);
 }

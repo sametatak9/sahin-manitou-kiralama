@@ -19,7 +19,7 @@ import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './p
 import { researchReportSummary } from './pure/research-report.ts';
 import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
-import { classifyFindingType, FINDING_TYPE_LABEL, type FindingType } from './pure/finding-taxonomy.ts';
+import { classifyFindingType, FINDING_TYPE_LABEL, isSocialProfileUrl, isTargetAccountType, type FindingType } from './pure/finding-taxonomy.ts';
 import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
 import { academyOutputEvidence, academyTestStatus } from './pure/capability-registry.ts';
 import { connectorHealthState, missionCapabilitySnapshot } from './pure/capability-audit.ts';
@@ -1205,7 +1205,7 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
         `GÖREVİN AMACI: ${cur.goal}`,
         'Karar ölçütleri: "verified" = kaynak metni bulguyu açıkça doğruluyor, görevin istediği çıktı türüne doğrudan uyuyor ve tarih şartını karşılıyor; "suspicious" = gerçek görünüyor ama kanıt zayıf, dolaylı veya sayfa okunamadı; "rejected" = kaynakla çelişiyor, uydurma ya da görevin amacına uymuyor. Pazar/SEO/içerik araştırması ise görevle ilgili sektör kaynağı, açıkça müşteri talebi olmadığı belirtilerek geçerli olabilir.',
         'BULGU TÜRÜ KURALI: İşletme profili, rakip/tedarikçi tanıtımı veya belediye/devlet kurumu kaydı müşteri lead’i değildir. Müşteri lead’i yalnız açık hizmet/iş talebi kanıtı olan kayıttır; kamu ihalesi ayrı kamu fırsatıdır. Tür metadata’sını değiştirme veya olmayan talep icat etme.',
-        ...(policy === 'growth' ? ['GROWTH PROFİL KURALI: Instagram/Facebook profil sayfaları kullanım koşulları nedeniyle doğrudan açılmaz. Exact profil URL’si arama kaynaklarında mevcutsa ve başlık/özet işletme sinyaliyle eşleşiyorsa bu, hesap keşfi görevi için gerçek ve kullanılabilir kanıttır; doğrudan sayfa açılmadı diye otomatik olarak suspicious verme.'] : []),
+        ...(policy === 'growth' ? ['GROWTH PROFİL KURALI: Instagram/Facebook profil sayfaları kullanım koşulları nedeniyle doğrudan açılmaz. Exact profil URL’si arama kaynaklarında mevcutsa ve başlık/özet işletme sinyaliyle eşleşiyorsa bu, hesap keşfi görevi için gerçek ve kullanılabilir kanıttır; doğrudan sayfa açılmadı diye otomatik olarak suspicious verme.', 'GROWTH HEDEF HESAP KURALI: Görev manuel inceleme/takip listesi istiyorsa, kaynakça doğrulanmış işletme/iş ortağı, rakip/referans ve sektör medyası sosyal profilleri geçerli hedef hesaptır; müşteri lead’i değildir. Kişisel hesap ve istenmeyen kamu kurumu farklı türde kalır. Herhangi bir takip, beğeni, yorum veya mesaj gönderme.'] : []),
         checks.map((c, i) => `#${i} BAŞLIK: ${c.f.title}\nTÜR: ${c.f.finding_type ?? 'belirsiz'}\nDETAY: ${c.f.detail}\nNEDEN UYGUN (bot): ${c.f.fit ?? '-'}\nLINK: ${c.f.url}\nSUNUCU YAYIN KANITI: ${c.f.publication ? `${c.f.publication.posted} (${c.f.publication.origin})` : 'yok'}\nSAYFA AÇILDI: ${c.reachable ? 'evet' : 'hayır'} · BAŞLIK SAYFADA GEÇİYOR: ${c.match ? 'evet' : 'hayır'}\nKAYNAKTAN KESİT: ${c.excerpt.slice(0, 700)}`).join('\n\n'),
         'Her bulgu için ayrıca kaynağa dayanan 2-3 cümlelik TÜRKÇE ÖZET yaz: ne, kim, nerede, ne zaman, büyüklük; ve bizim için ne anlama geldiği. Kaynakta olmayan bilgi ekleme.',
         'YALNIZCA şu JSON\'u döndür: {"items":[{"i":0,"verdict":"verified|suspicious|rejected","reason":"tek kısa cümle","summary":"2-3 cümle özet"}]}',
@@ -1261,7 +1261,8 @@ export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null
     const type = f.finding_type ?? classifyFindingType(f); acc[type] = (acc[type] ?? 0) + 1; return acc;
   }, {});
   const verified_customer_leads = findings.filter((f) => f.verdict === 'verified' && f.finding_type === 'customer_lead').length;
-  const verified_target_accounts = findings.filter((f) => f.verdict === 'verified' && ['business_or_partner', 'competitor_or_reference'].includes(f.finding_type ?? '')).length;
+  const verified_target_accounts = findings.filter((f) => f.verdict === 'verified'
+    && isTargetAccountType(f.finding_type ?? classifyFindingType(f), isSocialProfileUrl(f.url))).length;
   const audit: MissionAudit = { total: findings.length, verified: count('verified'), suspicious: count('suspicious'), rejected: count('rejected'),
     accuracy: findings.length ? Math.round((count('verified') / findings.length) * 100) : 0, checked_at: new Date().toISOString(), type_counts, verified_customer_leads, verified_target_accounts,
     rejected_items: findings.filter((f) => f.verdict === 'rejected').map((f) => ({ title: f.title, url: f.url, reason: f.verdict_reason ?? '' })).slice(0, 20) };
