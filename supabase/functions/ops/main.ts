@@ -572,7 +572,7 @@ async function capabilityAudit(db: Db) {
     const account = accountByConnector.get(key);
     const status = resolveStatus(def, account ? { connection_status: account.connection_status, token_expires_at: account.token_expires_at } : null);
     const recent = healthByConnector.get(key);
-    return { key, implemented: def.implemented, status, health_state: connectorHealthState({ registered: true, implemented: def.implemented, status,
+    return { key, name: def.name, implemented: def.implemented, status, health_state: connectorHealthState({ registered: true, implemented: def.implemented, status,
       last_ok_at: recent?.last_ok_at ?? null, failed_24h: recent?.failed_24h ?? 0 }), last_ok_at: recent?.last_ok_at ?? null,
       last_failed_at: recent?.last_failed_at ?? null, failed_24h: recent?.failed_24h ?? 0 };
   };
@@ -581,7 +581,8 @@ async function capabilityAudit(db: Db) {
     auditCapabilitySkill({ ...skill, tools: linksBySkill.get(skill.id) || [], connector: connectorFor(skill.connector_key) }, knownHandlers));
   // Health view opsiyonel: katalog bağlarını yine de görünür tut.
   const viewWarning = he ? 'connector_health görünümü okunamadı; health alanları yalnız hesap/registry durumunu yansıtır.' : null;
-  return { generated_at: new Date().toISOString(), summary: summarizeCapabilityAudit(items), skills: items, registered_handlers: [...knownHandlers], warning: viewWarning };
+  const connectors = CONNECTORS.map((def) => connectorFor(def.key)).filter(Boolean);
+  return { generated_at: new Date().toISOString(), summary: summarizeCapabilityAudit(items), skills: items, connectors, registered_handlers: [...knownHandlers], warning: viewWarning };
 }
 
 function copilotGuardResponse(mode: 'blocked_action' | 'needs_source', reason: string) {
@@ -592,11 +593,15 @@ function copilotGuardResponse(mode: 'blocked_action' | 'needs_source', reason: s
 }
 
 async function copilotChat(db: Db, req: Request, body: Record<string, unknown>) {
+  const requestStarted = performance.now();
+  const authStarted = performance.now();
   const u = await requireUser(db, req);
+  const authMs = Math.round(performance.now() - authStarted);
   const message = String(body.message ?? '').trim().slice(0, 4000);
   const decision = classifyCopilotIntent(message);
   if (decision.mode !== 'read_only') return copilotGuardResponse(decision.mode, decision.reason);
 
+  const contextStarted = performance.now();
   const requestedClient = String(body.client_id ?? '').trim();
   const clientQuery = db.from('agency_clients').select('id,name,slug,sector,region,services,audience,content_pillars,status').is('archived_at', null);
   const { data: client, error: clientError } = requestedClient
@@ -612,6 +617,7 @@ async function copilotChat(db: Db, req: Request, body: Record<string, unknown>) 
   ]);
   const failedContext = [missionsQ.error, skillsQ.error, modelsQ.error].find(Boolean);
   if (failedContext) throw failedContext;
+  const contextMs = Math.round(performance.now() - contextStarted);
 
   const context: CopilotContext = {
     client: {
@@ -622,10 +628,19 @@ async function copilotChat(db: Db, req: Request, body: Record<string, unknown>) 
     active_models: (modelsQ.data ?? []) as CopilotContext['active_models'],
   };
   const ctx = apiCtx(db, u.userId, u.role);
+  const agentStarted = performance.now();
   ctx.agent = await loadAgent(db, null, 'analyst');
+  const agentMs = Math.round(performance.now() - agentStarted);
+  const aiStarted = performance.now();
   const result = await aiComplete(ctx, 'copilot_read_only', buildCopilotPrompt(message, context), COPILOT_RESPONSE_SCHEMA,
     'Bu endpoint Agency Copilot\'tur. Salt-okunur kal; hiçbir tool, connector, web araması, yayın veya kayıt değişikliği çalıştırma.');
-  return { mode: 'read_only' as const, client: { id: client.id, name: client.name }, ...normalizeCopilotResponse(result.json ?? { answer: result.text }) };
+  const aiMs = Math.round(performance.now() - aiStarted);
+  return {
+    mode: 'read_only' as const,
+    client: { id: client.id, name: client.name },
+    ...normalizeCopilotResponse(result.json ?? { answer: result.text }),
+    diagnostics: { auth_ms: authMs, context_ms: contextMs, agent_ms: agentMs, ai_ms: aiMs, server_total_ms: Math.round(performance.now() - requestStarted) },
+  };
 }
 
 async function teamInvite(db: Db, body: Record<string, unknown>) {

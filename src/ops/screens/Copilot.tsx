@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ASSISTANT_NAME } from '../brand';
 import { Ban, Bot, LockKeyhole, Search, Send, ShieldCheck, Sparkles } from 'lucide-react';
 import { useClient } from '../client';
@@ -14,6 +14,7 @@ interface CopilotResult {
   facts: CopilotItem[];
   next_steps: CopilotItem[];
   evidence: CopilotItem[];
+  diagnostics?: { auth_ms?: number; context_ms?: number; agent_ms?: number; ai_ms?: number; server_total_ms?: number; browser_ms?: number };
 }
 interface ChatMessage { id: string; role: 'user' | 'assistant'; text: string; result?: CopilotResult }
 
@@ -27,9 +28,14 @@ function ResultDetails({ result }: { result: CopilotResult }) {
   const facts = result.facts ?? [];
   const next = result.next_steps ?? [];
   const evidence = result.evidence ?? [];
-  if (!facts.length && !next.length && !evidence.length) return null;
+  const diagnostics = result.diagnostics;
+  if (!facts.length && !next.length && !evidence.length && !diagnostics) return null;
+  const seconds = (ms?: number) => Number.isFinite(ms) ? `${((ms || 0) / 1000).toFixed(1)} sn` : '—';
   return (
     <div className="mt-3 space-y-2">
+      {diagnostics && <div className="flex flex-wrap gap-1.5" aria-label="Yanıt süreleri">
+        {[["Uçtan uca", diagnostics.browser_ms], ["Sunucu", diagnostics.server_total_ms], ["AI işlemi", diagnostics.ai_ms], ["Bağlam", diagnostics.context_ms]].map(([label, value]) => <span key={String(label)} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">{label}: <b>{seconds(typeof value === 'number' ? value : undefined)}</b></span>)}
+      </div>}
       {facts.length > 0 && <div className="grid gap-2 sm:grid-cols-2">{facts.map((item, i) => <div key={`${item.label}-${i}`} className="rounded-xl bg-white/70 ring-1 ring-slate-200 px-3 py-2"><div className="text-[10px] uppercase tracking-wider text-slate-500">{item.label}</div><div className="mt-0.5 text-xs font-semibold text-slate-800">{item.value}</div></div>)}</div>}
       {next.length > 0 && <div className="rounded-xl bg-indigo-50/80 ring-1 ring-indigo-100 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Sıradaki karar desteği</div><ul className="mt-1.5 space-y-1.5">{next.map((item, i) => <li key={`${item.title}-${i}`} className="text-xs text-slate-700"><b>{item.title}</b>{item.reason ? ` — ${item.reason}` : ''}</li>)}</ul></div>}
       {evidence.length > 0 && <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Bağlam kanıtı</div><ul className="mt-1.5 space-y-1">{evidence.map((item, i) => <li key={`${item.type}-${i}`} className="text-xs text-slate-600"><span className="font-semibold">{item.type}:</span> {item.detail}</li>)}</ul></div>}
@@ -48,20 +54,34 @@ export function CopilotScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!busy) return;
+    const started = Date.now();
+    const update = () => setElapsedSeconds(Math.floor((Date.now() - started) / 1000));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   const send = async (preset?: string) => {
     const text = (preset ?? input).trim();
     if (!text || busy) return;
     if (!client) { setError('Önce bir ajans müşterisi seçin.'); return; }
-    setInput(''); setError(null); setBusy(true);
+    setInput(''); setError(null); setElapsedSeconds(0); setBusy(true);
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', text };
     setMessages((old) => [...old, userMessage]);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60_000);
+    const requestStarted = performance.now();
     try {
-      const result = await callOps<CopilotResult>('copilot_chat', { client_id: client.id, message: text });
+      const response = await callOps<CopilotResult>('copilot_chat', { client_id: client.id, message: text }, { signal: controller.signal });
+      const result: CopilotResult = { ...response, diagnostics: { ...response.diagnostics, browser_ms: Math.round(performance.now() - requestStarted) } };
       setMessages((old) => [...old, { id: crypto.randomUUID(), role: 'assistant', text: result.answer, result }]);
-    } catch (e) { setError(errorText(e)); }
-    finally { setBusy(false); }
+    } catch (e) { setError(controller.signal.aborted ? 'Copilot 60 saniyede yanıt vermedi. Tarayıcı beklemesi sonlandırıldı; sunucu/model işlemi sürmüş olabilir. İstek salt-okunurdur; tekrar denemeden önce birkaç saniye bekleyin veya daha kısa bir soru sorun.' : errorText(e)); }
+    finally { window.clearTimeout(timeout); setBusy(false); }
   };
 
   return (
@@ -91,7 +111,7 @@ export function CopilotScreen() {
             {message.result && <ResultDetails result={message.result} />}
           </article>
         ))}
-        {busy && <div className="mr-16 rounded-2xl bg-white p-4 text-xs text-slate-500 ring-1 ring-slate-200"><span className="inline-flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />Tenant bağlamı okunuyor ve salt-okunur yanıt hazırlanıyor…</span></div>}
+        {busy && <div role="status" aria-live="polite" className="mr-16 rounded-2xl bg-white p-4 text-xs text-slate-500 ring-1 ring-slate-200"><span className="inline-flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />Salt-okunur yanıt hazırlanıyor · {elapsedSeconds} sn / 60 sn sınır</span></div>}
       </section>
 
       {error && <div className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">{error}</div>}

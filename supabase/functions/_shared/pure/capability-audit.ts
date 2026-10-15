@@ -11,6 +11,7 @@ export interface CapabilityToolBinding {
 
 export interface CapabilityConnectorBinding {
   key: string;
+  name?: string;
   implemented: boolean;
   status: string;
   health_state: ConnectorHealthState;
@@ -71,6 +72,7 @@ export interface CapabilityAuditReport {
   generated_at: string;
   summary: CapabilityAuditSummary;
   skills: CapabilityAuditSkill[];
+  connectors?: CapabilityConnectorBinding[];
   registered_handlers: string[];
   warning: string | null;
 }

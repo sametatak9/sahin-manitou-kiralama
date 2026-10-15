@@ -6,12 +6,14 @@ import { db, unwrap, useQuery } from '../lib/hooks';
 import { approvalLabel, approvalTone, BOT_STATUS, dayKey, fmtDateTime, istanbulToIso, platformMeta, relTime, RUN_LABELS, runTone, TASK_LABELS, taskTone, timeOf } from '../lib/format';
 import { computeNextRun, describeSchedule, isValidCron } from '../../../supabase/functions/_shared/pure/schedule.ts';
 import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
+import { summarizeBotCapabilities } from '../../../supabase/functions/_shared/pure/bot-capability.ts';
+import type { CapabilityAuditReport, CapabilityConnectorBinding } from '../../../supabase/functions/_shared/pure/capability-audit.ts';
 import type { Approval, Bot, Run, RunLog, Skill, Task, Tool } from '../lib/types';
 import { useRouter, useSession } from '../session';
 import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, SavedStamp, Stat, StateView, Tabs } from '../ui';
 
-interface Portfolio { bots: Bot[]; skills: Skill[]; tools: Tool[]; tasks: Task[]; runs: Run[]; agents: Array<{ id: string; name: string; model: string; provider: string }>; live: Record<string, number>; lastMission: Record<string, { at: string; findings: number }> }
-const EMPTY: Portfolio = { bots: [], skills: [], tools: [], tasks: [], runs: [], agents: [], live: {}, lastMission: {} };
+interface Portfolio { bots: Bot[]; skills: Skill[]; tools: Tool[]; tasks: Task[]; runs: Run[]; agents: Array<{ id: string; name: string; model: string; provider: string }>; live: Record<string, number>; lastMission: Record<string, { at: string; findings: number }>; capabilityAudit: CapabilityAuditReport | null; connectors: CapabilityConnectorBinding[]; capabilityError: string | null }
+const EMPTY: Portfolio = { bots: [], skills: [], tools: [], tasks: [], runs: [], agents: [], live: {}, lastMission: {}, capabilityAudit: null, connectors: [], capabilityError: null };
 
 async function loadPortfolio(): Promise<Portfolio> {
   const s = db();
@@ -32,7 +34,13 @@ async function loadPortfolio(): Promise<Portfolio> {
     if (m.status === 'running' || m.status === 'finalizing') live[m.bot_id] = (live[m.bot_id] ?? 0) + 1;
     if (!lastMission[m.bot_id]) lastMission[m.bot_id] = { at: m.created_at, findings: findingCounts(m.findings ?? []).verified };
   }
-  return { bots: unwrap(bots), skills: unwrap(skills), tools: unwrap(tools), tasks: unwrap(tasks), runs: unwrap(runs), agents: unwrap(agents), live, lastMission };
+  const [capabilityResult] = await Promise.allSettled([callOps<CapabilityAuditReport>('capability_audit')]);
+  return {
+    bots: unwrap(bots), skills: unwrap(skills), tools: unwrap(tools), tasks: unwrap(tasks), runs: unwrap(runs), agents: unwrap(agents), live, lastMission,
+    capabilityAudit: capabilityResult.status === 'fulfilled' ? capabilityResult.value : null,
+    connectors: capabilityResult.status === 'fulfilled' ? capabilityResult.value.connectors ?? [] : [],
+    capabilityError: capabilityResult.status === 'rejected' ? errorText(capabilityResult.reason) : null,
+  };
 }
 
 function botStats(p: Portfolio, botId: string) {
@@ -48,7 +56,7 @@ function botStats(p: Portfolio, botId: string) {
 export function BotsScreen() {
   const { state, go } = useRouter();
   const session = useSession();
-  const q = useQuery(loadPortfolio, EMPTY, [], ['automation_tasks', 'social_bot_runs', 'bot_missions']);
+  const q = useQuery(loadPortfolio, EMPTY, [], ['automation_tasks', 'social_bot_runs', 'bot_missions', 'social_accounts', 'automation_skills', 'automation_skill_tools', 'automation_tools']);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'waiting_connection' | 'paused' | 'archived'>('all');
 
@@ -73,6 +81,7 @@ export function BotsScreen() {
           {session.role === 'admin' && <Button variant="primary" onClick={() => setCreating(true)} icon={<Plus className="w-4 h-4" />}>Yeni bot</Button>}
         </div>
       </div>
+      {q.data.capabilityError && <Notice tone="warn">Yetenek/bağlantı denetimi alınamadı. Botları çalışır kabul etmeyin; yenileyip tekrar deneyin. {q.data.capabilityError}</Notice>}
       {q.loading ? <StateView kind="loading" /> : bots.length === 0 ? <StateView kind="empty" /> : (() => {
         const isLive = (b: Bot) => (q.data.live[b.id] ?? 0) > 0 || botStats(q.data, b.id).runs.some((r) => r.status === 'running');
         const groups: Array<{ key: string; title: string; hint: string; items: Bot[] }> = filter === 'all' ? [
@@ -108,6 +117,8 @@ export function BotsScreen() {
 function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; onOpen: () => void }) {
   const st = botStats(p, b.id); const meta = BOT_STATUS[b.status] ?? BOT_STATUS.active;
   const skillNames = (b.automation_bot_skills || []).map((l) => p.skills.find((s) => s.id === l.skill_id)?.display_name).filter(Boolean) as string[];
+  const capability = p.capabilityAudit ? summarizeBotCapabilities((b.automation_bot_skills || []).map((link) => link.skill_id), p.capabilityAudit.skills) : null;
+  const connector = b.connector_key ? p.connectors.find((item) => item.key === b.connector_key) : null;
   const lm = p.lastMission[b.id];
   const passive = b.status !== 'active';
   return (
@@ -127,6 +138,10 @@ function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; 
       <div className="px-4 py-3 space-y-2">
         <p className="text-[12px] text-ink-300 line-clamp-2 min-h-[2.4em]">{b.description}</p>
         <div className="flex flex-wrap gap-1">{skillNames.slice(0, 4).map((n) => <span key={n} className="text-[10px] rounded-md bg-emerald-50 ring-1 ring-emerald-200 px-1.5 py-0.5 text-emerald-900">{n}</span>)}{skillNames.length > 4 && <span className="text-[10px] text-ink-500">+{skillNames.length - 4}</span>}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-ink-500">
+          {capability && <span>{capability.promptOnly} talimat · {capability.handlerReady}/{capability.toolBacked} kayıtlı handler · {capability.connectorReady}/{capability.connectorBacked} hazır connector</span>}
+          {b.connector_key && <span className={cx('rounded-full px-1.5 py-0.5 ring-1', connector?.status === 'connected' ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'bg-amber-50 text-amber-800 ring-amber-200')}>{connector ? connectorStatusLabel(connector) : 'Bağlantı durumu bilinmiyor'}</span>}
+        </div>
       </div>
       <div className="grid grid-cols-4 gap-2 border-t border-ink-800 bg-ink-900/40 px-4 py-2.5 text-[10px]">
         <div><div className="font-mono text-ink-500">SON GÖREV</div><div className="text-ink-200 truncate">{lm ? relTime(lm.at) : st.last ? relTime(st.last.created_at) : '—'}</div></div>
@@ -135,6 +150,82 @@ function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; 
         <div><div className="font-mono text-ink-500">HATA</div><div className={st.errors ? 'text-rose-700 font-semibold' : 'text-ink-300'}>{st.errors}{st.blocked ? ` · ${st.blocked}⛔` : ''}</div></div>
       </div>
     </button>
+  );
+}
+
+function connectorStatusLabel(connector: CapabilityConnectorBinding): string {
+  if (connector.status === 'manual_only') return 'Yalnız manuel';
+  if (connector.status === 'api_unavailable') return 'Resmi API yok';
+  if (!connector.implemented) return 'Kod entegrasyonu eksik';
+  if (connector.status === 'connected') return 'Bağlı';
+  if (connector.status === 'oauth_required') return 'OAuth bağlantısı gerekli';
+  if (connector.status === 'api_key_required') return 'API yapılandırması gerekli';
+  if (connector.status === 'config_required') return 'Kurulum gerekli';
+  if (connector.status === 'expired') return 'Bağlantı süresi dolmuş';
+  if (connector.status === 'error') return 'Bağlantı hatalı';
+  return connector.status;
+}
+
+function BotCapabilityPanel({ bot, p, skills }: { bot: Bot; p: Portfolio; skills: Skill[] }) {
+  const summary = summarizeBotCapabilities(skills.map((skill) => skill.id), p.capabilityAudit?.skills ?? []);
+  const auditById = new Map((p.capabilityAudit?.skills ?? []).map((item) => [item.id, item]));
+  const connectorKeys = [...new Set([
+    bot.connector_key,
+    ...skills.map((skill) => auditById.get(skill.id)?.connector_key ?? null),
+  ].filter((key): key is string => Boolean(key)))];
+
+  return (
+    <Panel title="Gerçek yetenek ve bağlantı denetimi" kicker="Katalog kaydı ≠ canlı çalışma kanıtı">
+      {p.capabilityError && <div className="mb-3"><Notice tone="warn">Capability audit alınamadı; aşağıdaki sayaçlar tam kabul edilmemelidir. {p.capabilityError}</Notice></div>}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Atanmış skill" value={summary.assigned} sub={summary.missingAudit ? `${summary.missingAudit} audit kaydı eksik` : undefined} />
+        <Stat label="Prompt-only" value={summary.promptOnly} sub="Talimat metni; tek başına entegrasyon değil" />
+        <Stat label="Tool handler" value={`${summary.handlerReady}/${summary.toolBacked}`} sub="Handler kaydı / tool-backed skill" tone={summary.blocked ? 'wait' : undefined} />
+        <Stat label="Hazır connector" value={`${summary.connectorReady}/${summary.connectorBacked}`} sub="Connector-backed skill" tone={summary.connectorBacked > summary.connectorReady ? 'wait' : undefined} />
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <section className="rounded-xl bg-ink-900/50 p-3 ring-1 ring-ink-800">
+          <h3 className="text-xs font-semibold text-ink-100">Bu botun atanmış yetenekleri</h3>
+          {skills.length === 0 ? <p className="mt-2 text-xs text-ink-400">Bu bota atanmış skill yok.</p> : <ul className="mt-2 space-y-2">
+            {skills.map((skill) => {
+              const item = auditById.get(skill.id);
+              const activeBindings = item?.tool_bindings.filter((tool) => tool.active).length ?? 0;
+              const kind = item?.capability_kind === 'tool_backed'
+                ? item.handler_registered ? `Tool-backed · handler kayıtlı · ${activeBindings}/${item.tool_bindings.length} aktif binding` : 'Tool-backed · handler eksik'
+                : item?.capability_kind === 'connector_backed'
+                  ? `Connector-backed · ${item.connector_health}`
+                  : item ? 'Prompt-only · talimat metni' : 'Audit kaydı yok';
+              const test = item?.capability_test_status === 'handler_verified' ? 'Handler testi var'
+                : item?.capability_test_status === 'prompt_verified' ? 'Prompt testi var (handler kanıtı değil)'
+                  : item?.capability_test_status === 'failed' ? 'Test başarısız' : 'Test kanıtı yok';
+              return <li key={skill.id} className="flex items-start justify-between gap-2 text-[11px]">
+                <span className="min-w-0 text-ink-200">{skill.display_name}<span className="block text-ink-500">{kind} · {test}</span></span>
+                {item?.blocking_reasons.length ? <span className="max-w-[48%] text-right text-rose-300">{item.blocking_reasons.join(' · ')}</span> : null}
+              </li>;
+            })}
+          </ul>}
+        </section>
+        <section className="rounded-xl bg-ink-900/50 p-3 ring-1 ring-ink-800">
+          <h3 className="text-xs font-semibold text-ink-100">Resmi bağlantı durumu</h3>
+          {connectorKeys.length === 0 ? <p className="mt-2 text-xs text-ink-400">Bu bot için connector kaydı tanımlı değil; prompt-only skill bu bağlantının yerine geçmez.</p> : <ul className="mt-2 space-y-2">
+            {connectorKeys.map((key) => {
+              const connector = p.connectors.find((item) => item.key === key);
+              const audit = skills.map((skill) => auditById.get(skill.id)).find((item) => item?.connector_key === key);
+              const label = connector ? connectorStatusLabel(connector)
+                : audit?.connector_health === 'connected' ? 'Bağlı ve health kaydı var'
+                  : audit?.connector_health === 'no_recent_activity' ? 'Son başarılı aktivite kaydı yok'
+                    : audit?.connector_health ?? 'Durum bilinmiyor';
+              return <li key={key} className="flex items-center justify-between gap-2 text-[11px]">
+              <span className="text-ink-300">{connector?.name ?? key}</span>
+                <span className={cx('rounded-full px-2 py-0.5 ring-1', label === 'Bağlı' || label === 'Bağlı ve health kaydı var' ? 'bg-emerald-950 text-emerald-200 ring-emerald-800' : 'bg-amber-950 text-amber-200 ring-amber-800')}>{label}</span>
+              </li>;
+            })}
+          </ul>}
+          {summary.untested > 0 && <p className="mt-2 text-[10px] text-amber-300">{summary.untested} skill için güncel çalışma/test kanıtı yok.</p>}
+        </section>
+      </div>
+      <div className="mt-3"><Notice tone="info">“Handler kayıtlı” yalnızca kod registry’sinde bulunduğunu gösterir; görevin gerçekten başarıyla çalıştığı, görev geçmişi ve çıktıyla ayrıca doğrulanmalıdır. Prompt-only skill’ler talimat sağlar, Google/Meta hesabına erişim vermez.</Notice></div>
+    </Panel>
   );
 }
 
@@ -218,6 +309,7 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
       {tab === 'automation' && <TasksTab bot={bot} p={p} skills={botSkills} reload={reload} />}
 
       {tab === 'skills' && <SkillsTab bot={bot} p={p} skills={botSkills} reload={reload} isAdmin={isAdmin} />}
+      {tab === 'skills' && <BotCapabilityPanel bot={bot} p={p} skills={botSkills} />}
 
       {tab === 'skills' && (
         <Panel title="Kullanabildiği tool’lar" kicker="Skill’lerden türetilir · bot bazında yasaklanabilir">
