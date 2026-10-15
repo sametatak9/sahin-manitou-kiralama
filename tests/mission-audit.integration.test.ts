@@ -69,14 +69,16 @@ Deno.test('Growth profilleri müşteri lead’i, rakip/iş ortağı ve kamu kuru
     finding(1, 'https://www.instagram.com/catalcabld'),
     finding(2, 'https://www.instagram.com/eren.prefabrik'),
     finding(3, 'https://www.instagram.com/catalca_arsa_ofisi'),
+    finding(4, 'https://www.instagram.com/sektorhaberleri'),
   ];
   items[0].title = 'T.C. Çatalca Belediyesi (@catalcabld)'; items[0].detail = 'Resmî belediye kurumu ve yerel duyuru profili';
   items[1].title = 'Eren Prefabrik (@eren.prefabrik)'; items[1].detail = 'Prefabrik ve çelik yapı üreticisi, proje tanıtım hesabı';
   items[2].title = 'Çatalca Arsa Ofisi (@catalca_arsa_ofisi)'; items[2].detail = 'Arsa ve villa odaklı emlak işletmesi, iş ortağı adayı';
+  items[3].title = 'İstanbul Yapı Sektörü Haberleri (@sektorhaberleri)'; items[3].detail = 'İnşaat sektörü medyası ve pazar yazıları';
   const sources = items.map((f) => ({ url: f.url, title: f.title }));
   const audit = await auditFindings(db, { ...mission, title: 'Growth sektör hesap keşfi', goal: 'Embay Yapı için işletme hesapları bul' }, null, items, sources, 'growth');
-  equal(items.map((f) => f.finding_type), ['public_institution', 'competitor_or_reference', 'business_or_partner']);
-  equal([audit.verified_customer_leads, audit.verified_target_accounts, audit.type_counts?.public_institution], [0, 2, 1]);
+  equal(items.map((f) => f.finding_type), ['public_institution', 'competitor_or_reference', 'business_or_partner', 'market_reference']);
+  equal([audit.verified_customer_leads, audit.verified_target_accounts, audit.type_counts?.public_institution], [0, 3, 1]);
 });
 
 Deno.test('Scope guard reddi audit içinde excluded olarak korunur ve verified sayılmaz', async () => {
