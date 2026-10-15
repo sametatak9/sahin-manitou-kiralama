@@ -308,8 +308,8 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
 
       {tab === 'automation' && <TasksTab bot={bot} p={p} skills={botSkills} reload={reload} />}
 
-      {tab === 'skills' && <SkillsTab bot={bot} p={p} skills={botSkills} reload={reload} isAdmin={isAdmin} />}
       {tab === 'skills' && <BotCapabilityPanel bot={bot} p={p} skills={botSkills} />}
+      {tab === 'skills' && <SkillsTab bot={bot} p={p} skills={botSkills} reload={reload} isAdmin={isAdmin} />}
 
       {tab === 'skills' && (
         <Panel title="Kullanabildiği tool’lar" kicker="Skill’lerden türetilir · bot bazında yasaklanabilir">
