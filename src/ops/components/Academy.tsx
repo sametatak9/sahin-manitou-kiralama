@@ -11,6 +11,7 @@ import { useSession } from '../session';
 import { Button, Field, Modal, Notice, Pill, StateView } from '../ui';
 import { MissionDetail } from './Missions';
 import { CAPABILITY_KIND_LABEL, CAPABILITY_RISK_LABEL, CAPABILITY_TEST_STATUS_LABEL, capabilityAuditText, capabilityVerificationText, resolveCapabilityKind, resolveCapabilityRisk, resolveCapabilityTestStatus } from '../../../supabase/functions/_shared/pure/capability-registry.ts';
+import { canApproveSkillFromEvidence } from '../../../supabase/functions/_shared/pure/skill-lifecycle.ts';
 
 interface AcademySkill {
   id: string; skill_key: string; display_name: string; description: string; category: string; instructions: string; enabled: boolean;
@@ -82,6 +83,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
             const capabilityKind = resolveCapabilityKind(capability);
             const capabilityRisk = resolveCapabilityRisk(capability);
             const capabilityTestStatus = resolveCapabilityTestStatus(s);
+            const approvalReady = canApproveSkillFromEvidence(s);
             return (
               <div key={s.id} className="ops-panel p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -92,6 +94,7 @@ export function Academy({ bots }: { bots: Bot[] }) {
                 <div className="flex flex-wrap gap-1"><Pill tone={capabilityKind === 'connector_backed' ? 'go' : capabilityKind === 'tool_backed' ? 'info' : 'idle'} dot={false}>{CAPABILITY_KIND_LABEL[capabilityKind]}</Pill><Pill tone={capabilityRisk === 'external_action' ? 'stop' : capabilityRisk === 'approval_required' ? 'wait' : capabilityRisk === 'draft' ? 'info' : 'idle'} dot={false}>{CAPABILITY_RISK_LABEL[capabilityRisk]}</Pill><Pill tone={capabilityTestStatus === 'handler_verified' || capabilityTestStatus === 'prompt_verified' ? 'go' : capabilityTestStatus === 'failed' ? 'stop' : 'wait'} dot={false}>{CAPABILITY_TEST_STATUS_LABEL[capabilityTestStatus]}</Pill></div>
                 <p className="text-[10px] text-ink-500">{capabilityAuditText(capability)}</p>
                 <p className="text-[10px] text-ink-500">Academy kanıtı: {capabilityVerificationText(s)}{s.capability_tested_at ? ` · ${fmtDateTime(s.capability_tested_at)}` : ''}{capabilityKind !== 'prompt_only' && capabilityTestStatus !== 'handler_verified' ? ' · gerçek handler testi ayrıca gerekir' : ''}</p>
+                {s.lifecycle === 'retired' && <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-2">Bu yetenek silinmedi; yeniden test edilebilir. Eski emeklilik kararlarında neden ayrı kaydedilmemiş olabilir. Yeniden test, kendi başına göreve açmaz.</p>}
                 {s.test_goal && <p className="text-xs text-ink-300 line-clamp-3"><b>Test amacı:</b> {s.test_goal}</p>}
                 {s.search_terms?.length > 0 && <div className="flex flex-wrap gap-1">{s.search_terms.slice(0, 12).map((t) => <span key={t} className="text-[10px] rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t}</span>)}</div>}
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
@@ -101,8 +104,9 @@ export function Academy({ bots }: { bots: Bot[] }) {
                 {isAdmin && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     <Button variant="subtle" onClick={() => setEditing(s)} icon={<Pencil className="w-4 h-4" />}>Eğit / düzenle</Button>
-                    {s.lifecycle !== 'retired' && <Button variant="subtle" loading={busy === `t:${s.id}`} onClick={() => test(s)} icon={<FlaskConical className="w-4 h-4" />}>Test et</Button>}
-                    {s.lifecycle !== 'approved' && s.lifecycle !== 'retired' && <Button variant="primary" loading={busy === `l:${s.id}`} onClick={() => life(s, 'approved')} icon={<CheckCircle2 className="w-4 h-4" />}>Onayla (görevde kullan)</Button>}
+                    <Button variant="subtle" loading={busy === `t:${s.id}`} onClick={() => test(s)} icon={<FlaskConical className="w-4 h-4" />}>{s.lifecycle === 'retired' ? 'Yeniden test et' : 'Test et'}</Button>
+                    {s.lifecycle !== 'approved' && s.lifecycle !== 'retired' && approvalReady && <Button variant="primary" loading={busy === `l:${s.id}`} onClick={() => life(s, 'approved')} icon={<CheckCircle2 className="w-4 h-4" />}>Onayla (görevde kullan)</Button>}
+                    {s.lifecycle !== 'approved' && s.lifecycle !== 'retired' && !approvalReady && <span className="text-[10px] text-ink-500 self-center">Onay için son test tamamlanmalı; prompt-only için puan ≥60, tool/connector için gerçek handler kanıtı gerekir.</span>}
                     {s.lifecycle === 'approved' && <Button variant="ghost" loading={busy === `l:${s.id}`} onClick={() => life(s, 'testing')} icon={<Play className="w-4 h-4" />}>Teste geri al</Button>}
                     {s.lifecycle !== 'retired' && <Button variant="ghost" loading={busy === `l:${s.id}`} onClick={() => life(s, 'retired')} icon={<XCircle className="w-4 h-4" />}>Emekliye ayır</Button>}
                   </div>
