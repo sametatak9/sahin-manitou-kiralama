@@ -7,6 +7,7 @@ import { aiKeyAvailability, getAiKey, initKeyStore, liveKeyTest, markAiKey, type
 import { budgetBlock, spendStatus } from '../_shared/ai/budget.ts';
 import { normalizeSkillIds, snapshotSkillIds } from '../_shared/pure/skill-snapshot.ts';
 import { resolveRequestedModel, DEFAULT_INTERACTIVE_MODEL } from '../_shared/pure/model-routing.ts';
+import { lifecycleAfterSkillTestStart, type SkillLifecycle } from '../_shared/pure/skill-lifecycle.ts';
 
 type Db = SupabaseClient;
 // Görev başlatılırken seçilebilen modeller. Anahtar yoksa runtime güvenli fallback seçer.
@@ -153,7 +154,6 @@ async function api(c: Db, req: Request) {
       const u = await requireUser(c, req, 'admin');
       const { data: sk } = await c.from('automation_skills').select('id,display_name,test_goal,instructions,search_terms,lifecycle').eq('id', body.skill_id).maybeSingle();
       if (!sk) throw new HttpError(404, 'Yetenek bulunamadı');
-      if (sk.lifecycle === 'retired') throw new HttpError(409, 'Emekliye ayrılmış yetenek test edilemez');
       const goal = String(sk.test_goal || sk.instructions || '').trim();
       if (goal.length < 10) throw new HttpError(400, 'Yeteneğin test amacı (veya talimatı) boş — önce doldurun');
       const blocked = await budgetBlock(c);
@@ -166,7 +166,7 @@ async function api(c: Db, req: Request) {
         duration_minutes: minutes, max_steps: Math.min(6, Math.max(3, Math.ceil(minutes / 3))), deadline_at: new Date(now + minutes * 60_000).toISOString(), created_by: u.userId,
         locked_until: new Date(now + 150_000).toISOString() }).select('*').single();
       if (error) throw error;
-      await c.from('automation_skills').update({ last_test_mission_id: m.id, ...(sk.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', sk.id);
+      await c.from('automation_skills').update({ last_test_mission_id: m.id, lifecycle: lifecycleAfterSkillTestStart(sk.lifecycle as SkillLifecycle) }).eq('id', sk.id);
       await audit(c, u.userId, 'skill_test', 'automation_skills', sk.id, `Yetenek testi başlatıldı: ${sk.display_name}`);
       await background(stepMission(c, m as MissionRow).catch((e) => c.from('bot_missions').update({ locked_until: null, error: String(e).slice(0, 500) }).eq('id', m.id)));
       return { mission_id: m.id, deadline_at: m.deadline_at };
