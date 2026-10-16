@@ -101,6 +101,16 @@ export function extractExplicitExcludedTerms(text: string | null | undefined): s
       clause = clause.split(/\s+/).slice(-5).join(' ');
     }
     for (const item of clause.split(LIST_SPLIT)) {
+      const relatedPrefix = item.match(/^(.*?)\s+(?:ile\s+ilgili|ile\s+alakal[ıi]|hakk[ıi]nda|related\s+to|about)\b/iu)?.[1];
+      if (relatedPrefix) {
+        // Handle natural instructions such as “Şahin Manitou/Manitou ile ilgili
+        // her şeyi dışla”; keep each explicitly named alias, not the whole tail.
+        for (const alias of relatedPrefix.split(/[\/|]/)) {
+          const relatedTerm = cleanTerm(alias);
+          if (relatedTerm && relatedTerm.split(' ').length <= 5) found.push(relatedTerm);
+        }
+        continue;
+      }
       const term = cleanTerm(item.replace(/^(?:ve|veya)\s+/iu, ''));
       if (!term) continue;
       // Do not turn an entire instruction into an exclusion when the task used

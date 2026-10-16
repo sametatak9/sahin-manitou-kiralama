@@ -19,7 +19,7 @@ import { missionPolicy, RESEARCH_RELEVANCE_RULES, type MissionPolicy } from './p
 import { researchReportSummary } from './pure/research-report.ts';
 import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
-import { classifyFindingType, FINDING_TYPE_LABEL, isSocialProfileUrl, isTargetAccountType, type FindingType } from './pure/finding-taxonomy.ts';
+import { classifyFindingType, FINDING_TYPE_LABEL, isSocialProfileUrl, isTargetAccountType, type FindingTaxonomyInput, type FindingType } from './pure/finding-taxonomy.ts';
 import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
 import { academyOutputEvidence, academyTestStatus } from './pure/capability-registry.ts';
 import { connectorHealthState, missionCapabilitySnapshot } from './pure/capability-audit.ts';
@@ -54,6 +54,11 @@ export interface MissionAudit {
   scope_guard?: { enabled: boolean; canonical_brand: string | null; allowed_topics: string[]; allowed_geos: string[]; excluded_terms: string[] };
 }
 interface Source { url: string; title?: string; publication?: PublicationEvidence }
+
+/** Model-supplied taxonomy is advisory only; server rules own the final type. */
+function authoritativeFindingType(finding: FindingTaxonomyInput & { verification?: Finding['verification'] }): FindingType {
+  return finding.verification === 'technical_http' ? 'technical_seo' : classifyFindingType(finding);
+}
 
 const UA = 'Mozilla/5.0 (compatible; EmbayResearchBot/1.0; +https://embay-panel.vercel.app)';
 // Kullanım koşullarında otomatik veri toplamayı yasaklayan / giriş gerektiren platformlar: doğrudan sayfa okunmaz,
@@ -664,7 +669,7 @@ export async function stepMission(db: Db, m: MissionRow) {
     if (seenBefore.has(canonical(f.url)) && f.verification !== 'technical_http') return false;
     if (policy === 'lead' && f.verification !== 'technical_http' && isStaleFinding(f)) return false; // güncel fırsat kuralları kalıcı sektör araştırmasına uygulanmaz
     if (findings.some((x) => canonical(x.url) === canonical(f.url) && x.title === f.title)) return false;
-    findings.push({ ...f, finding_type: f.finding_type ?? classifyFindingType(f), at: new Date().toISOString(), step }); return true;
+    findings.push({ ...f, finding_type: authoritativeFindingType(f), at: new Date().toISOString(), step }); return true;
   };
   async function failSearchUnavailable(details: string) {
     const error = `Canlı genel web araması yapılamadı; görev yeni AI adımları ve gereksiz harcama oluşmaması için durduruldu. ${details}`.slice(0, 500);
@@ -1164,8 +1169,7 @@ const VERDICT: Record<string, string> = { verified: '✅ Doğrulandı', suspicio
 export async function auditFindings(db: Db, cur: MissionRow, ai: AiChoice | null, findings: Finding[], sources: Source[], policy: MissionPolicy = 'lead', scope?: MissionScopeContract): Promise<MissionAudit> {
   const scopeRejected = new WeakSet(findings.filter((f) => f.verdict === 'rejected' && /^Kapsam guard/i.test(f.verdict_reason || '')));
   for (const f of findings) {
-    f.finding_type ??= classifyFindingType(f);
-    if (scopeRejected.has(f)) f.finding_type = 'excluded';
+    f.finding_type = scopeRejected.has(f) ? 'excluded' : authoritativeFindingType(f);
     if (scope?.canonicalBrand) {
       f.title = canonicalizeTenantBrand(f.title, scope.canonicalBrand) || f.title;
       f.detail = canonicalizeTenantBrand(f.detail, scope.canonicalBrand) || f.detail;

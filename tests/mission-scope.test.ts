@@ -13,7 +13,7 @@ let checks = 0;
 const equal = (actual: unknown, expected: unknown) => { assert.deepEqual(actual, expected); checks++; };
 const ok = (value: unknown, message: string) => { assert.ok(value, message); checks++; };
 
-const goal = 'Embay Yapı için yalnızca gerçek işletme profilleri araştır. Kişisel hesap, kamu kurumu, Şahin Manitou ve iş arayan ilanlarını dışla.';
+const goal = 'Embay Yapı için yalnızca gerçek işletme profilleri araştır. Kişisel hesapları, kamu kurumlarını, iş ilanlarını ve Şahin Manitou/Manitou ile ilgili her şeyi kesinlikle dışla.';
 const scope = buildMissionScope({
   title: 'Embay Yapı profil keşfi',
   goal,
@@ -47,7 +47,13 @@ ok(!wrongGeo.allowed, 'explicit location policy should reject a mismatched geo w
 const brandText = canonicalizeTenantBrand('Embey Yapı için hazırlanan öneri', 'Embay Yapı');
 equal(brandText, 'Embay Yapı için hazırlanan öneri');
 equal(canonicalizeTenantBrand('EMBAY YAPI projesi', 'Embay Yapı'), 'Embay Yapı projesi');
-equal(extractExplicitExcludedTerms(goal), ['kisisel hesap', 'kamu kurumu', 'sahin manitou', 'is arayan ilanlarini']);
+const extracted = extractExplicitExcludedTerms(goal);
+ok(extracted.includes('sahin manitou'), 'the explicit multi-word brand exclusion must survive a long natural-language clause');
+ok(extracted.includes('manitou'), 'the brand alias in a slash-separated “related to” phrase must be extracted');
+ok(extracted.includes('is ilanlarini'), 'the other explicit exclusions in the same clause must remain intact');
+const longScope = buildMissionScope({ goal, canonicalBrand: 'Embay Yapı' });
+ok(longScope.excludedTerms.includes('manitou'), 'the compiled scope must contain the short brand alias');
+ok(!evaluateScopeQuery('instagram manitou kiralama', longScope).allowed, 'the real-world off-scope query must be blocked');
 
 const generic = buildMissionScope({ title: 'SaaS pazar araştırması', goal: 'Genel SaaS kaynaklarını incele' });
 ok(!generic.enabled, 'generic research without explicit policy must remain unguarded');
