@@ -90,3 +90,14 @@ Deno.test('Scope guard reddi audit içinde excluded olarak korunur ve verified s
   equal(f.finding_type, 'excluded');
   equal(verifiedFindings([f]).length, 0);
 });
+
+Deno.test('Modelin customer_lead etiketi gerçek işletme profilini lead yapamaz', async () => {
+  const f = finding(12, 'https://www.instagram.com/local.builder');
+  f.title = 'Instagram Business Account';
+  f.detail = 'Public construction company profile showcasing completed projects';
+  f.finding_type = 'customer_lead'; // untrusted model-provided metadata
+  const sources = [{ url: f.url, title: f.title }];
+  const audit = await auditFindings(db, { ...mission, title: 'Growth business profile research', goal: 'Find public construction business profiles' }, null, [f], sources, 'growth');
+  equal(f.finding_type, 'business_or_partner');
+  equal([audit.type_counts?.customer_lead ?? 0, audit.type_counts?.business_or_partner, audit.verified_customer_leads], [0, 1, 0]);
+});
