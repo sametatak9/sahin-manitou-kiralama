@@ -90,7 +90,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
     return (
       <button onClick={() => { go(item.id); setDrawer(false); }}
         className={cx('group relative w-full flex items-center gap-3 rounded-xl px-3 py-2 text-left transition',
-          active ? 'bg-ink-750 text-ink-100 ring-1 ring-ink-600' : 'text-ink-300 hover:text-ink-100 hover:bg-ink-850')}>
+          active ? 'bg-brand-lightbg text-ink-100 ring-1 ring-brand-green/15' : 'text-ink-300 hover:text-ink-100 hover:bg-ink-850')}>
         {active && <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-brand-green" />}
         <Icon className={cx('w-4 h-4 shrink-0', active ? 'text-brand-green' : 'text-ink-400 group-hover:text-ink-200')} />
         {!compact && <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold truncate">{item.label}</span><span className="block text-[10px] text-ink-500 truncate">{item.hint}</span></span>}
@@ -107,7 +107,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         </div>
         <div>
           <div className="font-display text-sm font-bold tracking-wide text-ink-100">{PRODUCT_NAME}</div>
-          <div className="text-[10px] tracking-[0.18em] text-ink-400">İÇERİK · MÜŞTERİ · BOT</div>
+          <div className="text-[10px] tracking-[0.18em] text-ink-400">AJANS OPERASYON ALANI</div>
         </div>
       </div>
       <div className="px-2 pb-3"><ClientSwitcher /></div>
@@ -128,7 +128,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
           </div>
         ))}
       </nav>
-      <div className="m-2 rounded-2xl bg-ink-850 ring-1 ring-ink-700 p-3 flex items-center gap-3">
+      <div className="m-2 rounded-2xl bg-white ring-1 ring-ink-700 p-3 flex items-center gap-3 shadow-sm">
         <div className="w-8 h-8 rounded-xl bg-brand-green/20 text-brand-green font-display font-bold flex items-center justify-center">{session.displayName.slice(0, 1).toUpperCase()}</div>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold text-ink-100 truncate">{session.displayName}</div>
@@ -141,9 +141,9 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
 
   return (
     <div className="ops-root min-h-screen flex">
-      <aside className="hidden lg:block w-64 shrink-0 border-r border-ink-800 sticky top-0 h-screen bg-ink-950/60 backdrop-blur">{sidebar}</aside>
+      <aside className="hidden lg:block w-64 shrink-0 border-r border-ink-700 sticky top-0 h-screen bg-white/90 backdrop-blur">{sidebar}</aside>
       {drawer && (
-        <div className="lg:hidden fixed inset-0 z-[60] bg-ink-950/80 backdrop-blur-sm flex flex-col justify-end p-3 sm:p-4" onClick={() => setDrawer(false)}>
+        <div className="lg:hidden fixed inset-0 z-[60] bg-slate-950/35 backdrop-blur-sm flex flex-col justify-end p-3 sm:p-4" onClick={() => setDrawer(false)}>
           <div className="w-full max-h-[85vh] overflow-y-auto ops-scroll bg-ink-900 border border-ink-700/80 rounded-3xl p-5 shadow-2xl ops-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between pb-3 border-b border-ink-800">
               <div>
@@ -204,7 +204,7 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
         </div>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-40 border-b border-ink-800 bg-ink-950/80 backdrop-blur">
+        <header className="sticky top-0 z-40 border-b border-ink-700 bg-white/90 backdrop-blur">
           <div className="flex items-center gap-3 px-4 sm:px-6 h-14">
             <button className="lg:hidden p-2 -ml-2 rounded-lg text-ink-300 hover:bg-ink-800" onClick={() => setDrawer(true)}><Menu className="w-5 h-5" /></button>
             <div className="min-w-0">
@@ -212,17 +212,17 @@ export function OpsShell({ children, onLogout }: { children: ReactNode; onLogout
             </div>
             <div className="ml-auto flex items-center gap-3 text-xs text-ink-300">
               <span className="lg:hidden"><ClientSwitcher compact /></span>
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-ink-850 ring-1 ring-ink-700 px-2.5 py-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-signal-go ops-pulse" /> İstanbul <Clock />
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white ring-1 ring-ink-700 px-2.5 py-1 text-ink-400">
+                {client?.region || 'Türkiye'} · <Clock />
               </span>
             </div>
           </div>
         </header>
-        <main className="flex-1 px-4 sm:px-6 py-5 pb-28 lg:pb-8 ops-grid-bg">
+        <main className="flex-1 px-4 sm:px-6 py-5 pb-28 lg:pb-8">
           <div className="max-w-[1400px] mx-auto"><AgencyControlStrip /><div className="mt-4"><PageGuide route={current.id} />{children}</div></div>
         </main>
       </div>
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-ink-700 bg-ink-900/95 backdrop-blur px-2 pb-[env(safe-area-inset-bottom)]">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-ink-700 bg-white/95 backdrop-blur px-2 pb-[env(safe-area-inset-bottom)]">
         <div className="grid grid-cols-6">
           {MOBILE.map((id) => {
             const item = all.find((i) => i.id === id)!;
