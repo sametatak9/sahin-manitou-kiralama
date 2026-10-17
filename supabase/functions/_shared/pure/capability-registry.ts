@@ -1,7 +1,7 @@
 export type CapabilityKind = 'prompt_only' | 'tool_backed' | 'connector_backed';
 export type CapabilityRisk = 'read_only' | 'draft' | 'approval_required' | 'external_action';
 export type CatalogSource = 'native' | 'imported' | 'curated';
-export type CapabilityTestStatus = 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed';
+export type CapabilityTestStatus = 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed' | 'blocked';
 export type AcademyOutputKind = 'findings' | 'action_list' | 'structured_output';
 
 export interface CapabilityToolRef {
@@ -67,6 +67,15 @@ export function resolveAcademyOutputKind(input: CapabilityInput): AcademyOutputK
   return valid(input.academy_output_kind, OUTPUT_KINDS) ?? 'findings';
 }
 
+export function isAcademyOutputOnlyTest(kind: string | null | undefined): boolean {
+  return resolveAcademyOutputKind({ academy_output_kind: kind }) !== 'findings';
+}
+
+export function isAcademyTestInfrastructureBlocked(input: { error_kind?: string | null; finish_reason?: string | null }): boolean {
+  const infraErrors = new Set(['ai_credit', 'ai_auth', 'search_unavailable', 'budget', 'timeout', 'repeated_error']);
+  return infraErrors.has(String(input.error_kind ?? '')) || ['error', 'budget', 'no_ai'].includes(String(input.finish_reason ?? ''));
+}
+
 export const CAPABILITY_KIND_LABEL: Record<CapabilityKind, string> = {
   prompt_only: 'PROMPT-ONLY',
   tool_backed: 'TOOL-BACKED',
@@ -91,10 +100,11 @@ export const CAPABILITY_TEST_STATUS_LABEL: Record<CapabilityTestStatus, string> 
   prompt_verified: 'PROMPT TESTİ GEÇTİ',
   handler_verified: 'HANDLER DOĞRULANDI',
   failed: 'TEST BAŞARISIZ',
+  blocked: 'ALTYAPI ENGELİ',
 };
 
 export function resolveCapabilityTestStatus(input: CapabilityInput): CapabilityTestStatus {
-  return valid(input.capability_test_status, new Set<CapabilityTestStatus>(['unverified', 'prompt_verified', 'handler_verified', 'failed'])) ?? 'unverified';
+  return valid(input.capability_test_status, new Set<CapabilityTestStatus>(['unverified', 'prompt_verified', 'handler_verified', 'failed', 'blocked'])) ?? 'unverified';
 }
 
 /**
@@ -113,6 +123,9 @@ function stepText(step: AcademyStepEvidence): string {
   if (step.data && typeof step.data === 'object') {
     const data = step.data as Record<string, unknown>;
     for (const key of ['text_tail', 'text', 'output', 'content']) if (typeof data[key] === 'string') parts.push(data[key] as string);
+    if (Array.isArray(data.academy_output_items)) {
+      parts.push(data.academy_output_items.filter((item): item is string => typeof item === 'string').map((item, index) => `${index + 1}) ${item}`).join('\n'));
+    }
   }
   return parts.join('\n');
 }
@@ -123,13 +136,13 @@ function stepText(step: AcademyStepEvidence): string {
  */
 export function academyOutputEvidence(kindInput: string | null | undefined, steps: AcademyStepEvidence[]) {
   const kind = resolveAcademyOutputKind({ academy_output_kind: kindInput });
-  if (kind === 'findings') return { kind, count: 0, score: null as number | null, passed: false, reason: 'Kaynak bulguları audit ile puanlanır' };
+  if (kind === 'findings') return { kind, count: 0, items: [] as string[], score: null as number | null, passed: false, reason: 'Kaynak bulguları audit ile puanlanır' };
   const text = steps.filter((step) => step.action === 'ai_research' || step.action === 'ai_report' || step.action === 'content_output').map(stepText).join('\n');
-  const items = [...text.matchAll(/^\s*(?:\d+\s*[.)]|[-*•])\s+\S.{4,}/gmu)].map((match) => match[0].trim());
-  const count = new Set(items).size;
+  const items = [...new Set([...text.matchAll(/^\s*(?:\d+\s*[.)]|[-*•])\s+\S.{4,}/gmu)].map((match) => match[0].trim()))];
+  const count = items.length;
   const minimum = kind === 'action_list' ? 3 : 1;
   const passed = count >= minimum;
-  return { kind, count, score: passed ? 100 : 0, passed, reason: passed ? `${count} yapılandırılmış çıktı maddesi bulundu` : `En az ${minimum} yapılandırılmış çıktı maddesi bekleniyordu` };
+  return { kind, count, items, score: passed ? 100 : 0, passed, reason: passed ? `${count} yapılandırılmış çıktı maddesi bulundu` : `En az ${minimum} yapılandırılmış çıktı maddesi bekleniyordu` };
 }
 
 export function capabilityVerificationText(input: CapabilityInput): string {

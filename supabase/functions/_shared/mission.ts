@@ -21,7 +21,7 @@ import { searchBackedSocialProfile } from './pure/social-profile.ts';
 import { routeSkills } from './pure/skill-router.ts';
 import { classifyFindingType, FINDING_TYPE_LABEL, isSocialProfileUrl, isTargetAccountType, type FindingTaxonomyInput, type FindingType } from './pure/finding-taxonomy.ts';
 import { runSeoAudit, seoAuditDetail } from './pure/seo-audit.ts';
-import { academyOutputEvidence, academyTestStatus } from './pure/capability-registry.ts';
+import { academyOutputEvidence, academyTestStatus, isAcademyOutputOnlyTest, isAcademyTestInfrastructureBlocked } from './pure/capability-registry.ts';
 import { connectorHealthState, missionCapabilitySnapshot } from './pure/capability-audit.ts';
 import { registeredHandlerKeys } from './tools/registry.ts';
 import { routeForModel } from './pure/model-routing.ts';
@@ -332,13 +332,13 @@ async function chooseAi(db: Db, botId: string | null, preferred?: string | null,
 
 interface AiResult { text: string; sources: Source[]; tokensIn: number; tokensOut: number; searches: number; toolErrors?: string[]; model?: string; provider?: string }
 
-async function anthropicResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+async function anthropicResearch(key: string, model: string, system: string, prompt: string, allowWebSearch = true): Promise<AiResult> {
   if (!key) throw new ConfigurationRequiredError('ANTHROPIC_API_KEY');
   const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: 100_000 });
-  const tools = [
+  const tools = allowWebSearch ? [
     { type: 'web_search_20260209', name: 'web_search', max_uses: 3, user_location: { type: 'approximate', country: 'TR', city: 'Istanbul', timezone: 'Europe/Istanbul' } },
     { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2, blocked_domains: NO_SCRAPE_HOSTS, max_content_tokens: 4000 },
-  ];
+  ] : undefined;
   // deno-lint-ignore no-explicit-any
   const messages: any[] = [{ role: 'user', content: prompt }];
   const sources: Source[] = []; let text = ''; let tokensIn = 0; let tokensOut = 0; let searches = 0; const toolErrors: string[] = [];
@@ -346,7 +346,7 @@ async function anthropicResearch(key: string, model: string, system: string, pro
     // deno-lint-ignore no-explicit-any
     let res: any;
     try {
-      res = await client.beta.messages.create({ model, max_tokens: 4000, system, tools, messages, output_config: { effort: 'medium' },
+      res = await client.beta.messages.create({ model, max_tokens: 4000, system, ...(tools ? { tools } : {}), messages, output_config: { effort: 'medium' },
         ...(model.startsWith('claude-opus-5') ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}) } as any);
     } catch (e) {
       if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw new AiFatalError('ai_auth', `Anthropic anahtarı reddedildi (${e.status})`);
@@ -385,9 +385,9 @@ async function geminiOnce(key: string, model: string, system: string, prompt: st
   return { res, data, detail: JSON.stringify(data).slice(0, 300) };
 }
 
-async function geminiResearch(key: string, model: string, system: string, prompt: string): Promise<AiResult> {
+async function geminiResearch(key: string, model: string, system: string, prompt: string, allowWebSearch = true): Promise<AiResult> {
   if (!key) throw new ConfigurationRequiredError('GEMINI_API_KEY');
-  let withSearch = Date.now() > geminiSearchOffUntil;
+  let withSearch = allowWebSearch && Date.now() > geminiSearchOffUntil;
   let m = model;
   let r = await geminiOnce(key, m, system, prompt, withSearch);
   for (let i = 0; i < 3 && !r.res.ok; i++) {
@@ -466,9 +466,9 @@ async function compatResearch(provider: CompatResearch, key: string, model: stri
 }
 
 const AI_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', openai: 'OpenAI', groq: 'Groq', openrouter: 'OpenRouter', github: 'GitHub Models', cerebras: 'Cerebras', mistral: 'Mistral' };
-function research(provider: string, key: string, model: string, system: string, prompt: string) {
-  if (provider === 'anthropic') return anthropicResearch(key, model, system, prompt);
-  if (provider === 'gemini') return geminiResearch(key, model, system, prompt);
+function research(provider: string, key: string, model: string, system: string, prompt: string, allowWebSearch = true) {
+  if (provider === 'anthropic') return anthropicResearch(key, model, system, prompt, allowWebSearch);
+  if (provider === 'gemini') return geminiResearch(key, model, system, prompt, allowWebSearch);
   if (['openai', 'openrouter', 'github', 'cerebras', 'mistral'].includes(provider)) return compatResearch(provider as CompatResearch, key, model, system, prompt);
   return groqResearch(key, model, system, prompt);
 }
@@ -476,8 +476,9 @@ const defaultModel = (p: string) => (p === 'anthropic' ? 'claude-sonnet-5' : p =
   : ['openai', 'openrouter', 'github', 'cerebras', 'mistral'].includes(p) ? COMPAT[p as CompatResearch].agentModel : GROQ_RESEARCH_MODEL());
 
 /** Sırayla dener: seçilen sağlayıcı → diğerleri (Claude, Gemini, Groq). Kredi/anahtar/limit hatasında bir sonrakine geçer. */
-async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void): Promise<AiResult> {
-  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'openai', 'cerebras', 'mistral', 'openrouter', 'github'].filter((p) => p !== c.provider)];
+async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) => Promise<void> | void, allowWebSearch = true): Promise<AiResult> {
+  const chain = [c.provider, ...['anthropic', 'gemini', 'groq', 'openai', 'cerebras', 'mistral', 'openrouter', 'github'].filter((p) => p !== c.provider)]
+    .filter((provider) => allowWebSearch || provider !== 'groq');
   const errors: string[] = [];
   let firstErr: unknown = null; let lastErr: unknown = null; let prev: string = c.provider;
   for (const p of chain) {
@@ -487,7 +488,7 @@ async function aiCall(c: AiChoice, prompt: string, onFailover?: (msg: string) =>
       if (!isQuotaOrRateLimit(firstErr)) break; // ilk hata kredi/anahtar/limit değilse yedeğe geçme
       if (onFailover) await onFailover(`${AI_LABEL[prev]} kullanılamadı (${String((lastErr as Error)?.message || lastErr).slice(0, 80)}) — yedek ${AI_LABEL[p]} ile devam ediliyor.`);
     }
-    try { return await research(p, key, p === c.provider ? c.model : defaultModel(p), c.system, prompt); }
+    try { return await research(p, key, p === c.provider ? c.model : defaultModel(p), c.system, prompt, allowWebSearch); }
     catch (e) { errors.push(`${AI_LABEL[p]}: ${String((e as Error).message || e).slice(0, 140)}`); firstErr ??= e; lastErr = e; prev = p; }
   }
   if (errors.length <= 1 && firstErr) throw firstErr;
@@ -535,8 +536,8 @@ function pageDigest(p: PageFacts) {
     p.text ? `Metin (ilk bölüm): ${p.text.slice(0, 3500)}` : '',
   ].filter(Boolean).join('\n');
 }
-interface SkillRow { id: string; skill_key: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; category: string | null; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number; capability_kind: string | null; handler_key: string | null; connector_key: string | null; capability_test_status: string | null }
-const SKILL_COLS = 'id,skill_key,display_name,instructions,enabled,lifecycle,category,search_terms,sources,good_examples,bad_examples,version,capability_kind,handler_key,connector_key,capability_test_status';
+interface SkillRow { id: string; skill_key: string; display_name: string; instructions: string | null; enabled: boolean; lifecycle: string; category: string | null; search_terms: string[] | null; sources: string[] | null; good_examples: string | null; bad_examples: string | null; version: number; capability_kind: string | null; handler_key: string | null; connector_key: string | null; capability_test_status: string | null; academy_output_kind?: string | null }
+const SKILL_COLS = 'id,skill_key,display_name,instructions,enabled,lifecycle,category,search_terms,sources,good_examples,bad_examples,version,capability_kind,handler_key,connector_key,capability_test_status,academy_output_kind';
 
 async function missionCapabilityAudit(db: Db, skills: SkillRow[]) {
   const empty = missionCapabilitySnapshot([], new Set(registeredHandlerKeys()));
@@ -623,6 +624,7 @@ async function botContext(db: Db, botId: string | null, m?: Pick<MissionRow, 'sk
     capability_summary: capability.summary,
     capability_skills: capability.skills,
     capability_warning: capability.warning,
+    academy_output_kind: isTest ? (skills[0]?.academy_output_kind ?? 'findings') : 'findings',
     text: [bot?.description, bot?.instructions ? `Bot talimatı: ${bot.instructions}` : '',
       `YETENEK KATALOĞU: ${selected.length}/${skills.length} yetenek bu görevin amacına göre ayrıntılı yüklendi. Snapshot'taki diğer yetenekler bağlıdır ancak bu görevde ayrıntılı talimat olarak kullanılmadı.`,
       ...withText.map((s) => [`Yetenek «${s.display_name}» (sürüm ${s.version}): ${s.instructions}`,
@@ -646,11 +648,12 @@ export async function stepMission(db: Db, m: MissionRow) {
   let tokensIn = m.tokens_in, tokensOut = m.tokens_out;
   let stopMet = false; let stopReason = '';
   const ctx = await botContext(db, m.bot_id, m);
+  const outputOnlyTest = m.purpose === 'skill_test' && isAcademyOutputOnlyTest(ctx.academy_output_kind);
   await logSkillsLoadedOnce(db, m, ctx.skills, ctx.selectedSkills, { summary: ctx.capability_summary, skills: ctx.capability_skills, warning: ctx.capability_warning });
   const policy = missionPolicy(ctx, m);
   const scope = buildMissionScope({ title: m.title, goal: m.goal, searchFor: m.search_for, reportSpec: m.report_spec,
     canonicalBrand: ctx.brand_name, allowedTopics: searchTerms(m.search_for) });
-  const rawTerms = [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
+  const rawTerms = outputOnlyTest ? [] : [...new Set([...searchTerms(m.search_for), ...ctx.terms])].slice(0, 20);
   const termFilter = filterScopeQueries(rawTerms, scope);
   const terms = termFilter.allowed;
   const seoMission = Boolean(m.target_url && (ctx.slug === 'seo-bot' || /technical seo|teknik seo|robots\.txt|sitemap\.xml|canonical|json-ld/i.test(`${m.title} ${m.goal} ${m.search_for ?? ''}`)));
@@ -682,7 +685,7 @@ export async function stepMission(db: Db, m: MissionRow) {
 
   try {
     let pageNote = '';
-    if (m.target_url && !visited.has(canonical(m.target_url))) {
+    if (!outputOnlyTest && m.target_url && !visited.has(canonical(m.target_url))) {
       const t0 = Date.now();
       if (seoMission && step === 1) {
         seoAudit = await runSeoAudit(m.target_url);
@@ -725,6 +728,12 @@ export async function stepMission(db: Db, m: MissionRow) {
       return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut, error_kind: 'budget' }, 'budget');
     }
     const ai = aiDown ? null : await chooseAi(db, m.bot_id, m.model, m.provider);
+    if (outputOnlyTest && !ai) {
+      const error = 'Academy output-only testi ölçülemedi: kullanılabilir AI sağlayıcısı yok. Herhangi bir web taraması yapılmadı.';
+      await logStep(db, m, step, 'error', error);
+      await persist();
+      return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut }, 'no_ai');
+    }
     let useScan = !ai; let lastResults: WebResult[] = [];
     if (ai) try {
       const remainingMin = Math.max(0, Math.round((new Date(m.deadline_at).getTime() - Date.now()) / 60000));
@@ -732,7 +741,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       let newsNote = ''; let stepResults: WebResult[] = [];
       const searchProviders = new Set<string>(); const searchFailures = new Set<string>();
       let broadSearchSucceeded = false;
-      if (!m.target_url && terms.length) {
+      if (!outputOnlyTest && !m.target_url && terms.length) {
         // Her adımda 2 konu. Önce gerçek web araması (Tavily, anahtar varsa), yoksa/boşsa Google Haberler yedeği.
         const rawQs = [terms[((step - 1) * 2) % terms.length], terms[((step - 1) * 2 + 1) % terms.length]].filter((x, i, a) => a.indexOf(x) === i);
         const queryFilter = filterScopeQueries(rawQs, scope);
@@ -793,25 +802,26 @@ export async function stepMission(db: Db, m: MissionRow) {
         m.report_spec ? `RAPORDA OLMASI GEREKEN: ${m.report_spec}` : '', m.stop_condition ? `ERKEN BİTİŞ KOŞULU: ${m.stop_condition}` : '',
         ctx.text ? `BOT PROFİLİ VE YETENEKLERİ:\n${ctx.text}` : '',
         `Adım ${step} / en fazla ${m.max_steps}. Kalan süre ≈ ${remainingMin} dk.`,
-        recentRequired ? `GEÇERLİ YAYIN TARİHİ ARALIĞI: ${recencyWindow(m).from}–${recencyWindow(m).to}. Yayın tarihi sunucu metadata'sıyla kontrol edilir.` : '',
+        !outputOnlyTest && recentRequired ? `GEÇERLİ YAYIN TARİHİ ARALIĞI: ${recencyWindow(m).from}–${recencyWindow(m).to}. Yayın tarihi sunucu metadata'sıyla kontrol edilir.` : '',
         pageNote ? `HEDEF SAYFANIN GERÇEK İÇERİĞİ (sunucu tarafında çekildi):\n${pageNote}` : '',
         seenBefore.size ? `DAHA ÖNCEKİ GÜNLERDE RAPORLANMIŞ KAYITLAR (bunları tekrar verme, yalnızca YENİ olanları bul):\n${[...seenBefore].slice(0, 60).join('\n')}` : '',
         findings.length ? `ŞU ANA KADARKİ BULGULAR (tekrarlama):\n${findings.map((f) => `- ${f.title} (${f.url})`).join('\n').slice(0, 3000)}` : 'Henüz bulgu yok.',
         visited.size ? `İNCELENEN ADRESLER: ${[...visited].slice(-15).join(', ')}` : '',
         COMPLIANCE_RULES,
         policy === 'lead' ? RELEVANCE_RULES : RESEARCH_RELEVANCE_RULES,
-        RECENCY_RULES,
-        recentRequired ? 'TARİH KAPISI (ZORUNLU): Bu görev güncel bir zaman penceresi istiyor. Her bulguda posted alanı arama sonucunun gerçek yayın tarihiyle doldurulmalı; kaynakta tarih yoksa bulguyu yazma. “2 saat önce”, “bugün” veya benzeri göreli tarihleri kendin çıkarma ya da uydurma.' : '',
-        scopePrompt(scope),
+        !outputOnlyTest ? RECENCY_RULES : '',
+        !outputOnlyTest && recentRequired ? 'TARİH KAPISI (ZORUNLU): Bu görev güncel bir zaman penceresi istiyor. Her bulguda posted alanı arama sonucunun gerçek yayın tarihiyle doldurulmalı; kaynakta tarih yoksa bulguyu yazma. “2 saat önce”, “bugün” veya benzeri göreli tarihleri kendin çıkarma ya da uydurma.' : '',
+        !outputOnlyTest ? scopePrompt(scope) : '',
+        outputOnlyTest ? 'ACADEMY OUTPUT-ONLY TESTİ: Bu testte web araması, sayfa okuma, connector/tool çağrısı veya dış eylem yapma. Yalnızca verilen test amacı ve hedef yetenek talimatlarını kullan; dış dünyaya dair doğrulanmamış gerçek, URL veya ölçüm uydurma. 5–8 somut ve kısa çıktı maddesi üret; en sonda academy_output dizisini aynı maddelerle doldur ve new_findings dizisini boş bırak.' :
         newsNote ? 'BU ADIMIN İŞİ: Arama sunucu tarafında yapıldı ve sonuçları aşağıda. Görevin AMACINA uyan somut, kaynak destekli kayıtları değerlendir; o sonucun linkini AYNEN kullan. Başlık tek başına müşteri talebi kanıtı değildir. Uygun kayıt yoksa boş liste döndür.' :
         'Bu adımda göreve en çok katkı verecek araştırmayı yap (en fazla 3 web araması ve 2 sayfa okuma hakkın var; aramaları AYNI ANDA değil TEK TEK yap — önce bir arama, sonucu değerlendir, sonra gerekirse bir sonrakini; bir araç hata verirse tekrar deneme, elindeki sonuçlarla devam et). Yalnızca gerçekten gördüğün, kaynağı olan bilgileri yaz; asla uydurma.',
-        'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.',
-        'Adım başına EN FAZLA 8 bulgu ver; detail en fazla 2 kısa cümle, evidence en fazla 1 cümle olsun (yanıt kesilmesin). Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
+        !outputOnlyTest ? 'ÖNEMLİ: Bir arama sonucunun başlığı ve özeti (snippet) geçerli bir kaynaktır. Arama sonuçlarında gördüğün her uygun ilan / duyuru / ihale / firma kaydını, o sonucun linkiyle birlikte bulgu olarak yaz; bilinmeyen alanları boş bırak. Yalnızca kategori/liste sayfası olan sonuçları (tek bir ilana değil) bulgu sayma. Bu adımda hiç uygun kayıt görmediysen boş liste döndür.' : '',
+        outputOnlyTest ? 'Çıktı maddeleri birbirinden farklı, uygulanabilir ve test amacıyla doğrudan ilgili olsun; kişisel veri, harici yayın veya gönderim üretme.' : 'Adım başına EN FAZLA 8 bulgu ver; detail en fazla 2 kısa cümle, evidence en fazla 1 cümle olsun (yanıt kesilmesin). Görev bir liste istiyorsa (ör. "en güncel 20 ilan"), her liste öğesini AYRI bir bulgu olarak ver: title = ilan/firma adı, detail = açıklama + (varsa) kurumsal iletişim + tarih, url = ilanın/sayfanın kendi linki. Daha önce verilmiş öğeleri tekrarlama.',
         newsNote ? `GERÇEK ARAMA SONUÇLARI (Tavily genel web ve/veya Google News RSS; tarih varsa gösterilir; başlık — kaynak + link):\n${newsNote}` : '',
-        'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)","relevance":8,"fit":"görevle neden ilgili (tek cümle)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
+        outputOnlyTest ? 'Yanıtının SONUNDA tek JSON bloğu ver: {"academy_output":["çıktı maddesi 1","çıktı maddesi 2","çıktı maddesi 3"],"new_findings":[],"next_focus":""}' : 'Yanıtının SONUNDA tek bir JSON bloğu ver: {"new_findings":[{"title":"kısa başlık","detail":"açıklama","url":"kaynak URL","evidence":"kaynaktan kısa alıntı","company":"firma (varsa)","location":"il/ilçe (varsa)","posted":"ilan/yayın tarihi (varsa)","phone":"KURUMSAL telefon (varsa)","email":"kurumsal e-posta (varsa)","website":"firma web sitesi (varsa)","relevance":8,"fit":"görevle neden ilgili (tek cümle)"}],"stop_condition_met":false,"stop_reason":"","next_focus":"sonraki adımda neye bakılmalı"}',
       ].filter(Boolean).join('\n\n');
       const t0 = Date.now();
-      const r = await aiCall(ai, prompt, async (msg) => { await logStep(db, m, step, 'ai_failover', msg); });
+      const r = await aiCall(ai, prompt, async (msg) => { await logStep(db, m, step, 'ai_failover', msg); }, !outputOnlyTest);
       tokensIn += r.tokensIn; tokensOut += r.tokensOut;
       const stepCost = await recordUsage(db, { source: 'mission', ref_id: m.id, provider: r.provider ?? ai.provider, model: r.model ?? ai.model, tokens_in: r.tokensIn, tokens_out: r.tokensOut, searches: r.searches });
       m.cost_usd = Math.round(((Number(m.cost_usd) || 0) + stepCost) * 10000) / 10000; m.web_searches = (m.web_searches ?? 0) + r.searches;
@@ -819,9 +829,11 @@ export async function stepMission(db: Db, m: MissionRow) {
       for (const s of r.sources) if (!sources.some((x) => canonical(x.url) === canonical(s.url))) sources.push(s);
       const allowed = new Set([...sources.map((s) => canonical(s.url)), ...visited]);
       const j = (extractJson(r.text.slice(r.text.lastIndexOf('{"new_findings"') >= 0 ? r.text.lastIndexOf('{"new_findings"') : 0)) ?? extractJson(r.text) ?? salvageFindings(r.text)) as
-        { new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string; relevance?: number | string; fit?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
+        { academy_output?: string[]; new_findings?: Array<{ title?: string; detail?: string; url?: string; evidence?: string; company?: string; location?: string; posted?: string; phone?: string; email?: string; website?: string; relevance?: number | string; fit?: string }>; stop_condition_met?: boolean; stop_reason?: string; next_focus?: string } | null;
+      const academyOutputItems = Array.isArray(j?.academy_output) ? j.academy_output.map((item) => String(item).trim()).filter((item) => item.length > 4).slice(0, 12) : [];
+      const candidateFindings = outputOnlyTest ? [] : (j?.new_findings ?? []);
       // Native AI araçlarının tarih iddiası değil, en fazla 3 izinli sayfanın yayın metadata'sı kullanılır.
-      const undated = [...new Set((j?.new_findings ?? []).map((f) => f.url).filter((url): url is string => Boolean(url && allowed.has(canonical(url)) && !sources.find((s) => canonical(s.url) === canonical(url))?.publication)))].slice(0, 3);
+      const undated = [...new Set(candidateFindings.map((f) => f.url).filter((url): url is string => Boolean(url && allowed.has(canonical(url)) && !sources.find((s) => canonical(s.url) === canonical(url))?.publication)))].slice(0, 3);
       if (recentRequired) await Promise.all(undated.map(async (url) => {
         const p = await fetchPage(url).catch(() => null);
         if (!p?.ok || !p.publication || canonical(p.url) !== canonical(url)) return;
@@ -830,7 +842,7 @@ export async function stepMission(db: Db, m: MissionRow) {
       }));
       let added = 0, dropped = 0, offTopic = 0, dateDropped = 0, scopeRejected = 0;
       const anchors = anchorWords(m);
-      for (const f of j?.new_findings ?? []) {
+      for (const f of candidateFindings) {
         if (!f.url || !allowed.has(canonical(f.url))) { dropped++; continue; }
         const url = String(f.url);
         const publication = trustedPublication(sources.find((s) => canonical(s.url) === canonical(url))?.publication, url);
@@ -862,16 +874,26 @@ export async function stepMission(db: Db, m: MissionRow) {
         ? canonicalizeTenantBrand(j.next_focus, ctx.brand_name)
         : j?.next_focus ? 'Kapsam guard: sonraki adım yalnızca izinli konu ve bölgelerle sınırlı.' : null;
       if (stopReason && !evaluateScopeCandidate({ detail: stopReason }, scope).allowed) stopReason = 'Kapsam guard nedeniyle modelin kapsam dışı bitiş açıklaması kullanılmadı.';
-      await logStep(db, m, step, 'ai_research', `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${dateDropped ? ` · ${dateDropped} tarih kanıtsız/aralık dışı aday elendi` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${scopeRejected ? ` · ${scopeRejected} kapsam dışı aday reddedildi` : ''}${safeNextFocus ? ` · sonraki odak: ${safeNextFocus}` : ''}`,
+      await logStep(db, m, step, outputOnlyTest ? 'content_output' : 'ai_research', outputOnlyTest ? `Academy output-only: ${academyOutputItems.length} çıktı maddesi · web araması kapalı` : `${AI_LABEL[r.provider ?? ai.provider] ?? ai.provider} / ${r.model ?? ai.model}: ${r.searches} web araması, ${r.sources.length} kaynak · ${added} yeni bulgu${dropped ? ` · ${dropped} kaynaksız bulgu atıldı` : ''}${dateDropped ? ` · ${dateDropped} tarih kanıtsız/aralık dışı aday elendi` : ''}${offTopic ? ` · ${offTopic} alakasız kayıt elendi` : ''}${scopeRejected ? ` · ${scopeRejected} kapsam dışı aday reddedildi` : ''}${safeNextFocus ? ` · sonraki odak: ${safeNextFocus}` : ''}`,
         null, { searches: r.searches, sources: r.sources.slice(0, 20), added, source_dropped: dropped, date_dropped: dateDropped, off_topic: offTopic, scope_rejected: scopeRejected,
-          scope_guard: { enabled: scope.enabled, excluded_terms: scope.excludedTerms, canonical_brand: scope.canonicalBrand }, stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: canonicalizeTenantBrand(r.text.slice(-1500), ctx.brand_name) || r.text.slice(-1500) }, t0);
+          scope_guard: { enabled: scope.enabled, excluded_terms: scope.excludedTerms, canonical_brand: scope.canonicalBrand }, stop_condition_met: stopMet, stop_reason: stopReason, parsed: Boolean(j), tool_errors: r.toolErrors ?? [], text_tail: canonicalizeTenantBrand(r.text.slice(-1500), ctx.brand_name) || r.text.slice(-1500),
+          academy_output_items: outputOnlyTest ? academyOutputItems : undefined, academy_output_kind: outputOnlyTest ? ctx.academy_output_kind : undefined }, t0);
       await db.from('bot_missions').update({ provider: r.provider ?? ai.provider, model: r.model ?? ai.model }).eq('id', m.id);
       const aiSearchSucceeded = r.searches > 0 || r.sources.length > 0;
-      if (isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: aiSearchSucceeded, findingCount: findings.length })) {
+      if (!outputOnlyTest && isSearchUnavailable({ hasTargetUrl: Boolean(m.target_url), broadWebSucceeded: broadSearchSucceeded, nativeSearchSucceeded: aiSearchSucceeded, findingCount: findings.length })) {
         const limited = searchProviders.has('Google News RSS') ? 'Google News RSS çalıştı fakat genel web araması sağlayıcısı değildir.' : '';
         return await failSearchUnavailable([...searchFailures, limited, ...(r.toolErrors ?? []).slice(0, 3)].filter(Boolean).join(' · ') || 'Tavily, RSS ve yerleşik AI araması sonuç üretmedi');
       }
     } catch (e) {
+      if (outputOnlyTest) {
+        const kind = e instanceof AiFatalError ? e.kind : 'repeated_error';
+        const error = `Academy output-only testi altyapı nedeniyle ölçülemedi: ${String((e as Error).message || e).slice(0, 300)}`;
+        m.error_kind = kind; m.error = error;
+        await db.from('bot_missions').update({ error_kind: kind, error: error.slice(0, 500) }).eq('id', m.id);
+        await logStep(db, m, step, 'error', error);
+        await persist();
+        return await finalizeMission(db, { ...m, findings, sources, visited: [...visited], step_count: step, tokens_in: tokensIn, tokens_out: tokensOut, error_kind: kind, error }, 'error');
+      }
       if (e instanceof AiFatalError && !m.target_url && lastResults.length) {
         let n = 0; for (const f of ruleFindings(lastResults, m, policy)) if (addFinding(f)) n++;
         await logStep(db, m, step, 'rule_filter', `Yapay zekâ kullanılamadı (${String(e.message).slice(0, 120)}) → kural tabanlı ön eleme ${n} aday buldu (denetimde doğrulanacak)`);
@@ -955,16 +977,24 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   let tokensIn = cur.tokens_in, tokensOut = cur.tokens_out;
   const ai = reason === 'error' || reason === 'budget' || cur.error_kind === 'ai_credit' || cur.error_kind === 'ai_auth' || (await budgetBlock(db)) ? null : await chooseAi(db, cur.bot_id, cur.model, cur.provider);
   const policy = missionPolicy(ctx, cur);
+  const outputOnlyTest = cur.purpose === 'skill_test' && isAcademyOutputOnlyTest(ctx.academy_output_kind);
+  const testInfrastructureBlocked = cur.purpose === 'skill_test' && isAcademyTestInfrastructureBlocked({ error_kind: cur.error_kind, finish_reason: reason });
   const scope = buildMissionScope({ title: cur.title, goal: cur.goal, searchFor: cur.search_for, reportSpec: cur.report_spec,
     canonicalBrand: ctx.brand_name, allowedTopics: searchTerms(cur.search_for) });
   // DENETİM: her bulgu kaynağında kontrol edilir; "elendi" olanlar rapora girmez (denetim kaydında gerekçesiyle durur)
-  const audit = allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources, policy, scope) : null;
+  const audit = !outputOnlyTest && allFindings.length ? await auditFindings(db, cur, ai, allFindings, sources, policy, scope) : null;
   if (audit) audit.scope_guard = { enabled: scope.enabled, canonical_brand: scope.canonicalBrand, allowed_topics: scope.allowedTopics, allowed_geos: scope.allowedGeos, excluded_terms: scope.excludedTerms };
   const findings = verifiedFindings(allFindings);
   const pending = allFindings.filter((f) => f.verdict !== 'verified' && f.verdict !== 'rejected');
   const classifiedReason = classifyFinishReason(reason, findings.length, cur.error_kind);
+  if (outputOnlyTest && !testInfrastructureBlocked) {
+    const evidence = academyOutputEvidence(ctx.academy_output_kind, (steps || []) as Array<{ action?: string | null; message?: string | null; data?: unknown }>);
+    summary = evidence.items.length
+      ? `Academy çıktısı (${evidence.count} madde):\n${evidence.items.join('\n')}`
+      : `Output-only testte yeterli yapılandırılmış çıktı oluşmadı. ${evidence.reason}.`;
+  }
   if (policy === 'research' && findings.length) summary = researchReportSummary(findings);
-  if (ai && findings.length && policy !== 'research') {
+  if (!outputOnlyTest && ai && findings.length && policy !== 'research') {
     try {
       const r = await aiCall(ai, [
         `Aşağıdaki bot görevinin sonuç raporunu Türkçe yaz. YALNIZCA verilen bulguları kullan, yeni bilgi ekleme, web araması yapma.`,
@@ -978,6 +1008,9 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
       await db.from('bot_missions').update({ cost_usd: Math.round(((Number(cur.cost_usd) || 0) + c) * 10000) / 10000 }).eq('id', cur.id);
     } catch (e) { summary = ''; await logStep(db, cur, cur.step_count + 1, 'error', `Özet yazılamadı: ${String((e as Error).message).slice(0, 300)}`); }
   }
+  if (!summary && outputOnlyTest && testInfrastructureBlocked) {
+    summary = `Academy testi altyapı nedeniyle ölçülemedi; yetenek başarısız sayılmadı. Engel: ${ERROR_KIND[cur.error_kind ?? ''] ?? (reason === 'no_ai' ? 'kullanılabilir AI sağlayıcısı yok' : reason === 'budget' ? 'harcama sınırı' : 'AI/search altyapı hatası')}. Sorun giderildikten sonra yeniden test edin.`;
+  }
   if (!summary && classifiedReason === 'error') {
     summary = `Görev hata ile bitti: ${ERROR_KIND[cur.error_kind ?? ''] ?? 'bilinmeyen hata'}.${cur.error ? ` Ayrıntı: ${cur.error}` : ''}${findings.length ? ` Hata öncesi ${findings.length} kaynaklı bulgu toplanmıştı.` : ''}`;
   }
@@ -990,7 +1023,7 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
   }
 
   // KOÇ: raporu ve günlüğü inceleyip yeteneği iyileştirme önerisi çıkarır (Akademi'de onayınıza düşer)
-  const coachNoteRaw = ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>, scope) : null;
+  const coachNoteRaw = !outputOnlyTest && ai && classifiedReason !== 'admin_stop' ? await coachMission(db, cur, ai, ctx, audit, (steps || []) as Array<{ action: string; message: string }>, scope) : null;
   const coachNote = coachNoteRaw ? canonicalizeTenantBrand(coachNoteRaw, ctx.brand_name) : null;
   if (cur.purpose === 'skill_test' && cur.skill_ids?.length) {
     const { data: sk } = await db.from('automation_skills').select('lifecycle,capability_kind,handler_key,connector_key,academy_output_kind').eq('id', cur.skill_ids[0]).maybeSingle();
@@ -998,8 +1031,8 @@ export async function finalizeMission(db: Db, m: MissionRow, reason: string) {
       const testedAt = new Date().toISOString();
       const outputEvidence = academyOutputEvidence(sk.academy_output_kind, (steps || []) as Array<{ action?: string | null; message?: string | null; data?: unknown }>);
       const testScore = outputEvidence.score ?? audit?.accuracy ?? 0;
-      const capabilityTestStatus = academyTestStatus({ capability_kind: sk.capability_kind, handler_key: sk.handler_key, connector_key: sk.connector_key, academy_output_kind: sk.academy_output_kind, test_score: testScore, test_output_count: outputEvidence.count });
-      await db.from('automation_skills').update({ test_score: testScore, test_findings: audit?.verified ?? 0, capability_test_output_count: outputEvidence.count, last_tested_at: testedAt,
+      const capabilityTestStatus = testInfrastructureBlocked ? 'blocked' : academyTestStatus({ capability_kind: sk.capability_kind, handler_key: sk.handler_key, connector_key: sk.connector_key, academy_output_kind: sk.academy_output_kind, test_score: testScore, test_output_count: outputEvidence.count });
+      await db.from('automation_skills').update({ test_score: testInfrastructureBlocked ? null : testScore, test_findings: testInfrastructureBlocked ? 0 : audit?.verified ?? 0, capability_test_output_count: outputEvidence.count, last_tested_at: testedAt,
         last_test_mission_id: cur.id, capability_test_status: capabilityTestStatus, capability_test_mission_id: cur.id, capability_tested_at: testedAt,
         ...(sk.lifecycle === 'draft' ? { lifecycle: 'testing' } : {}) }).eq('id', cur.skill_ids[0]);
     }
@@ -1034,9 +1067,12 @@ ${coachNote ? `<h2>Koç notu (botun eksikleri)</h2><div class="sum">${esc(coachN
   await db.from('bot_missions').update({ status, finish_reason: classifiedReason, finished_at: finishedAt, summary, report_html: html, tokens_in: tokensIn, tokens_out: tokensOut, locked_until: null,
     ...(audit ? { audit, findings: allFindings } : {}), ...(coachNote ? { coach_note: coachNote } : {}) }).eq('id', m.id);
   await logStep(db, cur, cur.step_count + 1, 'finalize', `Rapor hazırlandı · ${REASON[classifiedReason] ?? classifiedReason} · ${findings.length} bulgu${audit ? ` · denetim: %${audit.accuracy} doğruluk (✅${audit.verified} ⚠️${audit.suspicious} ❌${audit.rejected})` : ''}`);
-  if (missionPolicy(ctx, cur) === 'growth') await saveSocialProspects(db, cur, findings);
-  if (missionPolicy(ctx, cur) === 'lead') await savePortfolio(db, cur, findings);
-  await sendMissionTelegram(db, cur, classifiedReason, summary, findings, audit);
+  // Academy tests are simulations: never write prospect/portfolio records or send notifications.
+  if (cur.purpose !== 'skill_test') {
+    if (missionPolicy(ctx, cur) === 'growth') await saveSocialProspects(db, cur, findings);
+    if (missionPolicy(ctx, cur) === 'lead') await savePortfolio(db, cur, findings);
+    await sendMissionTelegram(db, cur, classifiedReason, summary, findings, audit);
+  }
   return { mission_id: m.id, finalized: true, reason: classifiedReason, findings: findings.length };
 }
 
