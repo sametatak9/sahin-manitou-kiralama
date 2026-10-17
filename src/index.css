@@ -150,6 +150,57 @@ button:active { transform: scale(.985); }
   .agency-holo-btn { transition: none; }
 }
 
+/* ── Faz C v0: ajans kokpiti (yalnız Home + Bot Merkezi görsel katmanı) ── */
+.agency-home-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  padding: 1.3rem 1.4rem;
+  background:
+    radial-gradient(460px 190px at 100% 0%, rgba(34, 211, 238, .13), transparent 68%),
+    radial-gradient(400px 190px at 0% 110%, rgba(99, 102, 241, .09), transparent 66%),
+    linear-gradient(145deg, #FFFFFF 0%, #F5F8FE 100%);
+  border: 1px solid rgba(180, 198, 227, .72);
+  box-shadow: 0 14px 34px -25px rgba(30, 41, 59, .34), inset 0 1px rgba(255,255,255,.94);
+}
+.agency-home-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  width: 100%;
+  min-height: 100px;
+  padding: .9rem;
+  border: 1px solid #D5E0F2;
+  border-radius: 18px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 5px 16px -14px rgba(22,66,143,.36);
+  text-align: left;
+  transition: transform .18s cubic-bezier(.23,1,.32,1), box-shadow .18s ease, border-color .18s ease;
+}
+.agency-home-stat:hover { transform: translateY(-1px); border-color: #B4C6E3; box-shadow: 0 12px 24px -18px rgba(22,66,143,.38); }
+.agency-home-stat:active { transform: scale(.99); }
+.agency-home-stat:focus-visible, .agency-home-action:focus-visible { outline: 3px solid rgba(30,91,198,.3); outline-offset: 2px; }
+.agency-home-stat-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 14px; color: #1E5BC6; background: #EAF1FC; }
+.agency-home-stat-label { color: #586985; font-size: 10px; font-weight: 700; line-height: 1.25; letter-spacing: .04em; }
+.agency-home-stat-value { margin-top: .32rem; color: #0E1A33; font: 700 23px/1.05 'Montserrat', sans-serif; font-variant-numeric: tabular-nums; }
+.agency-home-stat-sub { margin-top: .3rem; color: #7A8BA8; font-size: 10px; line-height: 1.35; }
+.agency-home-action { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 42px; padding: .55rem .85rem; border-radius: 14px; font-size: 11px; font-weight: 700; transition: transform .16s cubic-bezier(.23,1,.32,1), box-shadow .16s ease, background .16s ease; }
+.agency-home-action:hover { transform: translateY(-1px); }
+.agency-home-action:active { transform: scale(.98); }
+.agency-home-action-primary { color: #FFFFFF; background: #1E5BC6; box-shadow: 0 8px 18px -12px rgba(30,91,198,.75); }
+.agency-home-action-primary:hover { background: #16428F; }
+.agency-home-action-secondary { color: #23304A; background: rgba(255,255,255,.88); border: 1px solid #D5E0F2; }
+.agency-bot-summary { padding: .6rem .75rem; border: 1px solid #D5E0F2; border-radius: 16px; background: rgba(255,255,255,.96); box-shadow: 0 5px 16px -14px rgba(22,66,143,.36); }
+.agency-bot-card { border: 1px solid #D5E0F2; border-radius: 22px; box-shadow: 0 5px 18px -15px rgba(22,66,143,.36); transition: box-shadow .18s ease, border-color .18s ease; }
+.agency-bot-card:hover { box-shadow: 0 14px 28px -19px rgba(22,66,143,.42); }
+.agency-bot-card-live { border-color: rgba(30,91,198,.48); box-shadow: 0 0 0 3px rgba(30,91,198,.06), 0 8px 22px -16px rgba(30,91,198,.4); }
+.agency-bot-card-head { background: radial-gradient(440px 150px at 100% 0%, rgba(34,211,238,.15), transparent 70%), linear-gradient(135deg,#F2F6FC 0%,#FFFFFF 62%,#EEF3FB 100%); }
+.agency-bot-card:focus-visible { outline: 3px solid rgba(30,91,198,.3); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .agency-home-stat, .agency-home-action, .agency-bot-card { transition: none; }
+  .agency-home-stat:hover, .agency-home-action:hover { transform: none; }
+}
+
 /* Bot raporu (HTML belge) önizlemesi */
 .report-doc h1 { font-size: 1.25rem; font-weight: 700; margin: 0 0 .5rem; }
 .report-doc h2 { font-size: 1rem; font-weight: 700; margin: 1rem 0 .4rem; }
