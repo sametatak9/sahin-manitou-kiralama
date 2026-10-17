@@ -21,7 +21,7 @@ interface AcademySkill {
   last_tested_at: string | null; last_test_mission_id: string | null; approved_at: string | null;
   capability_kind?: 'prompt_only' | 'tool_backed' | 'connector_backed' | null; risk_level?: 'read_only' | 'draft' | 'approval_required' | 'external_action' | null;
   catalog_source?: 'native' | 'imported' | 'curated' | null; handler_key?: string | null; connector_key?: string | null;
-  capability_test_status?: 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed' | null; capability_test_mission_id?: string | null; capability_tested_at?: string | null;
+  capability_test_status?: 'unverified' | 'prompt_verified' | 'handler_verified' | 'failed' | 'blocked' | null; capability_test_mission_id?: string | null; capability_tested_at?: string | null;
 }
 interface Improvement { id: string; skill_id: string; mission_id: string | null; diagnosis: string; instructions_add: string | null; search_terms_add: string[]; search_terms_remove: string[]; sources_add: string[]; status: string; created_at: string; reviewer?: string }
 
@@ -59,6 +59,8 @@ export function Academy({ bots }: { bots: Bot[] }) {
     const r = (s: AcademySkill) => (RESEARCH.has(s.category) || s.test_goal ? 0 : 1) * 10 + ({ testing: 0, draft: 1, approved: 2, retired: 3 }[s.lifecycle]);
     return r(a) - r(b);
   });
+  const retiredSkills = q.data.skills.filter((s) => s.lifecycle === 'retired');
+  const retiredShort = retiredSkills.filter((s) => (s.instructions ?? '').trim().length < 120).length;
 
   return (
     <div className="space-y-4">
@@ -74,6 +76,9 @@ export function Academy({ bots }: { bots: Bot[] }) {
         </div>
       </div>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      {isAdmin && retiredSkills.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+        <b>Emekli yetenekler silinmedi.</b> Bilinen toplu emeklilik kuralı, onaylı olup talimatı 120 karakterden kısa olan yetenekleri kapatmaktı. Şu anda {retiredShort}/{retiredSkills.length} emekli kaydın talimatı bu eşikten kısa; eski kayıtlarda her yetenek için ayrı emeklilik nedeni tutulmadığı için bu sayı tek tek geçmiş gerekçeyi kanıtlamaz. Uygun olanlar yeniden test edilip yalnızca test kanıtı yeterliyse onaya açılabilir.
+      </div>}
       {q.loading && !q.data.skills.length ? <StateView kind="loading" /> : q.error ? <StateView kind="error" title="Akademi okunamadı" message={q.error} /> : !sorted.length ? <StateView kind="empty" title="Veri bulunamadı" /> : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           {sorted.map((s) => {
@@ -95,10 +100,11 @@ export function Academy({ bots }: { bots: Bot[] }) {
                 <p className="text-[10px] text-ink-500">{capabilityAuditText(capability)}</p>
                 <p className="text-[10px] text-ink-500">Academy kanıtı: {capabilityVerificationText(s)}{s.capability_tested_at ? ` · ${fmtDateTime(s.capability_tested_at)}` : ''}{capabilityKind !== 'prompt_only' && capabilityTestStatus !== 'handler_verified' ? ' · gerçek handler testi ayrıca gerekir' : ''}</p>
                 {s.lifecycle === 'retired' && <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-2">Bu yetenek silinmedi; yeniden test edilebilir. Eski emeklilik kararlarında neden ayrı kaydedilmemiş olabilir. Yeniden test, kendi başına göreve açmaz.</p>}
+                {capabilityTestStatus === 'blocked' && <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-2">Son test altyapı/sağlayıcı engeli nedeniyle ölçülemedi; bu yetenek başarısız sayılmaz. Raporu açıp engeli kontrol edin, sonra yeniden test edin.</p>}
                 {s.test_goal && <p className="text-xs text-ink-300 line-clamp-3"><b>Test amacı:</b> {s.test_goal}</p>}
                 {s.search_terms?.length > 0 && <div className="flex flex-wrap gap-1">{s.search_terms.slice(0, 12).map((t) => <span key={t} className="text-[10px] rounded bg-ink-800 px-1.5 py-0.5 text-ink-300">{t}</span>)}</div>}
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
-                  {score == null ? <span>Henüz test edilmedi</span> : <span>Son test: <b className={score >= 60 ? 'text-emerald-700' : score >= 30 ? 'text-amber-700' : 'text-rose-700'}>%{score} kanıt puanı</b> · {s.academy_output_kind && s.academy_output_kind !== 'findings' ? `${s.capability_test_output_count ?? 0} çıktı maddesi` : `${s.test_findings ?? 0} doğrulanmış bulgu`} · {fmtDateTime(s.last_tested_at)}</span>}
+                  {score == null ? capabilityTestStatus === 'blocked' ? <span>Son test altyapı engeliyle ölçülemedi · {fmtDateTime(s.last_tested_at)}</span> : <span>Henüz test edilmedi</span> : <span>Son test: <b className={score >= 60 ? 'text-emerald-700' : score >= 30 ? 'text-amber-700' : 'text-rose-700'}>%{score} kanıt puanı</b> · {s.academy_output_kind && s.academy_output_kind !== 'findings' ? `${s.capability_test_output_count ?? 0} çıktı maddesi` : `${s.test_findings ?? 0} doğrulanmış bulgu`} · {fmtDateTime(s.last_tested_at)}</span>}
                   {s.last_test_mission_id && <button className="underline text-brand-green" onClick={() => setOpenMission(s.last_test_mission_id)}>test raporu</button>}
                 </div>
                 {isAdmin && (
@@ -143,6 +149,7 @@ function TrainModal({ skill, onClose, onSaved }: { skill: AcademySkill; onClose:
   const [f, setF] = useState({
     display_name: skill.display_name, instructions: skill.instructions ?? '', test_goal: skill.test_goal ?? '', search_terms: (skill.search_terms ?? []).join(', '),
     sources: (skill.sources ?? []).join(', '), good_examples: skill.good_examples ?? '', bad_examples: skill.bad_examples ?? '',
+    academy_output_kind: skill.academy_output_kind ?? 'findings',
   });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const list = (v: string) => v.split(/[,\n]/).map((x) => x.trim()).filter((x) => x.length > 1).slice(0, 30);
@@ -152,6 +159,7 @@ function TrainModal({ skill, onClose, onSaved }: { skill: AcademySkill; onClose:
       const { error } = await db().from('automation_skills').update({
         display_name: f.display_name.trim().slice(0, 80), instructions: f.instructions.trim().slice(0, 8000), test_goal: f.test_goal.trim().slice(0, 4000) || null,
         search_terms: list(f.search_terms), sources: list(f.sources).map((x) => x.replace(/^https?:\/\//, '').replace(/\/.*$/, '')),
+        academy_output_kind: f.academy_output_kind,
         good_examples: f.good_examples.trim().slice(0, 3000) || null, bad_examples: f.bad_examples.trim().slice(0, 3000) || null,
         version: skill.version + 1, ...(skill.lifecycle === 'approved' ? {} : { lifecycle: skill.lifecycle }),
       }).eq('id', skill.id);
@@ -165,6 +173,7 @@ function TrainModal({ skill, onClose, onSaved }: { skill: AcademySkill; onClose:
         <Field label="Ad"><input className="ops-input" value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} /></Field>
         <Field label="Talimat (bot bu yeteneği kullanırken neye dikkat etsin)"><textarea className="ops-input min-h-[110px]" value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })} /></Field>
         <Field label="Test amacı" hint="Test görevinde botun ne bulması gerektiği"><textarea className="ops-input min-h-[70px]" value={f.test_goal} onChange={(e) => setF({ ...f, test_goal: e.target.value })} /></Field>
+        <Field label="Test çıktısı" hint="Bulgu arama yetenekleri kaynak denetiminden; checklist/plan yetenekleri web araması olmadan gerçek çıktı üretimiyle ölçülür."><select className="ops-input" value={f.academy_output_kind} onChange={(e) => setF({ ...f, academy_output_kind: e.target.value as NonNullable<AcademySkill['academy_output_kind']> })}><option value="findings">Kaynaklı bulgular</option><option value="action_list">Aksiyon/checklist listesi</option><option value="structured_output">Yapılandırılmış çıktı</option></select></Field>
         <Field label="Arama terimleri" hint="Virgülle; insanların/firmaların gerçekten yazacağı ifadeler"><textarea className="ops-input min-h-[60px]" value={f.search_terms} onChange={(e) => setF({ ...f, search_terms: e.target.value })} /></Field>
         <Field label="Tercih edilen kaynaklar" hint="Virgülle alan adları (ör. ilan.gov.tr, emlakkulisi.com)"><input className="ops-input" value={f.sources} onChange={(e) => setF({ ...f, sources: e.target.value })} /></Field>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
