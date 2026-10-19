@@ -74,13 +74,13 @@ export function ClientsScreen() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-3xl bg-gradient-to-br from-[#0F1A33] via-[#1B2B55] to-[#0F1A33] text-white p-4 sm:p-5 flex flex-wrap items-center gap-3">
+      <section className="ops-hero flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-mono tracking-[0.2em] text-[#E2C98F]">REKLAM AJANSI · MÜŞTERİ PORTFÖYÜ</div>
+          <div className="text-[10px] font-semibold tracking-[0.18em] text-white/70">REKLAM AJANSI · MÜŞTERİ PORTFÖYÜ</div>
           <h2 className="font-display text-xl font-semibold mt-0.5">{clients.length} işletme · {connected.length} bağlı hesap</h2>
           <p className="text-[12px] text-[#C8D1E3] mt-1 max-w-2xl">Her işletme bir müşteri. Botlar (içerik, büyüme radarı, yorum yanıtı) seçili müşterinin marka bilgisi, hedef kitlesi ve etiketleriyle çalışır. Yeni işletme ekleyin, Instagram/Facebook hesabını bağlayıp aşağıdan o işletmeye atayın.</p>
         </div>
-        <button type="button" onClick={() => open('new')} className="inline-flex items-center gap-1.5 rounded-full bg-[#C9A45C] text-[#0A1226] px-4 py-2 text-[13px] font-bold"><Plus className="w-4 h-4" />Yeni işletme ekle</button>
+        <button type="button" onClick={() => open('new')} className="ops-hero-btn-primary inline-flex items-center gap-1.5"><Plus className="w-4 h-4" />Yeni işletme ekle</button>
       </section>
 
       {msg && !edit && <Notice tone={msg.tone}>{msg.text}</Notice>}

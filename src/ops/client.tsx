@@ -34,8 +34,8 @@ export function ClientSwitcher({ compact = false }: { compact?: boolean }) {
   const { clients, client, setClientId } = useClient();
   if (!client) return null;
   return (
-    <label className={compact ? 'relative inline-flex items-center gap-2 rounded-full bg-ink-850 ring-1 ring-ink-700 pl-1 pr-2 py-1 max-w-[52vw]' : 'relative flex items-center gap-2.5 rounded-2xl bg-ink-850 ring-1 ring-ink-700 p-2 hover:ring-brand-green/50 transition cursor-pointer'}>
-      <span className={compact ? 'w-6 h-6 rounded-full grid place-items-center text-[10px] font-bold text-white shrink-0' : 'w-9 h-9 rounded-xl grid place-items-center text-xs font-bold text-white shrink-0'} style={{ background: client.color || '#1E3FA0' }}>{initials(client.name)}</span>
+    <label title={client.name} className={compact ? 'agency-client-switcher relative inline-flex items-center gap-2 rounded-full bg-white ring-1 ring-ink-700 pl-1 pr-2 py-1 max-w-[52vw] shadow-sm' : 'agency-client-switcher relative flex items-center gap-2.5 rounded-2xl bg-white ring-1 ring-ink-700 p-2 hover:ring-brand-green/50 transition cursor-pointer shadow-sm'}>
+      <span className={compact ? 'agency-client-avatar w-6 h-6 rounded-full grid place-items-center text-[10px] font-bold text-white shrink-0' : 'agency-client-avatar w-9 h-9 rounded-xl grid place-items-center text-xs font-bold text-white shrink-0'} style={{ background: client.color || '#1E3FA0' }}>{initials(client.name)}</span>
       <span className="min-w-0 flex-1">
         {!compact && <span className="block text-[9px] font-mono uppercase tracking-[0.18em] text-ink-500">Müşteri</span>}
         <span className={compact ? 'block text-[12px] font-semibold text-ink-100 truncate' : 'block text-[13px] font-semibold text-ink-100 truncate'}>{client.name}</span>

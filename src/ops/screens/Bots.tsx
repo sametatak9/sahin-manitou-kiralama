@@ -74,7 +74,7 @@ export function BotsScreen() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-semibold text-ink-100">Bot Merkezi</h2>
-          <p className="text-xs text-ink-400">Bota tıklayın → “Görev ver”: amaç, link, aranacak şey ve süre verin; bot çalışır ve raporu altta listeler.</p>
+          <p className="text-xs text-ink-400 max-w-2xl">Kartlarda botun gerçek çalışma durumu, son raporu, yetenek türü ve bağlantı hazırlığı görünür. Bu v0 görsel katmandır; görev başlatma akışını değiştirmez.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Tabs value={filter} onChange={setFilter} items={[{ id: 'all', label: 'Tümü' }, { id: 'active', label: 'Aktif' }, { id: 'waiting_connection', label: 'Bağlantı bekliyor' }, { id: 'paused', label: 'Duraklatılan' }, { id: 'archived', label: 'Arşiv' }]} />
@@ -94,7 +94,7 @@ export function BotsScreen() {
           <div className="space-y-5">
             {filter === 'all' && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {groups.map((g) => <div key={g.key} className="rounded-xl bg-white ring-1 ring-ink-700 px-3 py-2"><div className="text-lg font-bold text-ink-100 tabular-nums">{g.items.length}</div><div className="text-[11px] text-ink-400">{g.title}</div></div>)}
+                {groups.map((g) => <div key={g.key} className="agency-bot-summary"><div className="text-lg font-bold text-ink-100 tabular-nums">{g.items.length}</div><div className="text-[11px] text-ink-400">{g.title}</div></div>)}
               </div>
             )}
             {groups.filter((g) => g.items.length).map((g) => (
@@ -122,28 +122,27 @@ function BotCard({ b, p, live, onOpen }: { b: Bot; p: Portfolio; live: boolean; 
   const lm = p.lastMission[b.id];
   const passive = b.status !== 'active';
   return (
-    <button type="button" onClick={onOpen} className={cx('text-left rounded-2xl overflow-hidden bg-white shadow-sm ring-1 transition hover:shadow-md', live ? 'ring-sky-400/60' : 'ring-ink-700/70 hover:ring-brand-green/50', passive && 'opacity-80')}>
-      <div className={cx('relative px-4 pt-3.5 pb-3 text-white bg-gradient-to-br', passive ? 'from-slate-500 to-slate-700' : 'from-[#262A6B] via-[#1E3FA0] to-[#262A6B]')}>
-        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
+    <button type="button" onClick={onOpen} className={cx('agency-bot-card text-left overflow-hidden bg-white', live && 'agency-bot-card-live', passive && 'opacity-80')}>
+      <div className="agency-bot-card-head relative px-4 pt-3.5 pb-3 text-ink-100">
         <div className="relative flex items-start gap-3">
-          <div className="relative w-12 h-12 rounded-xl bg-white/15 ring-2 ring-white/40 grid place-items-center"><DynIcon name={b.icon} className="w-6 h-6" />
-            {live && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-sky-300 ring-2 ring-white ops-pulse" />}</div>
+          <div className="relative w-12 h-12 rounded-2xl bg-white ring-1 ring-ink-700 shadow-sm text-brand-green grid place-items-center"><DynIcon name={b.icon} className="w-6 h-6" />
+            {live && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-brand-green ring-2 ring-white ops-pulse" />}</div>
           <div className="min-w-0 flex-1">
             <div className="font-display font-semibold text-[15px] leading-tight line-clamp-2">{b.name}</div>
-            <div className="text-[11px] text-[#CFE4FA] mt-0.5 inline-flex items-center gap-1.5"><PlatformBadge platform={b.platform || 'system'} />{platformMeta(b.platform).name}</div>
+            <div className="text-[11px] text-ink-400 mt-0.5 inline-flex items-center gap-1.5"><PlatformBadge platform={b.platform || 'system'} />{platformMeta(b.platform).name}</div>
           </div>
-          <span className={cx('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold', live ? 'bg-sky-300 text-[#1B1F52]' : passive ? 'bg-white/20' : 'bg-emerald-300 text-emerald-950')}>{live ? '● ÇALIŞIYOR' : meta.label}</span>
+          <span className={cx('shrink-0 rounded-full px-2 py-1 text-[10px] font-bold', live ? 'bg-emerald-100 text-emerald-800' : passive ? 'bg-slate-100 text-slate-600' : 'bg-brand-lightbg text-[#16428F]')}>{live ? 'ÇALIŞIYOR' : meta.label}</span>
         </div>
       </div>
       <div className="px-4 py-3 space-y-2">
         <p className="text-[12px] text-ink-300 line-clamp-2 min-h-[2.4em]">{b.description}</p>
-        <div className="flex flex-wrap gap-1">{skillNames.slice(0, 4).map((n) => <span key={n} className="text-[10px] rounded-md bg-emerald-50 ring-1 ring-emerald-200 px-1.5 py-0.5 text-emerald-900">{n}</span>)}{skillNames.length > 4 && <span className="text-[10px] text-ink-500">+{skillNames.length - 4}</span>}</div>
+        <div className="flex flex-wrap gap-1">{skillNames.slice(0, 4).map((n) => <span key={n} className="text-[10px] rounded-md bg-indigo-50 ring-1 ring-indigo-100 px-1.5 py-0.5 text-indigo-900">{n}</span>)}{skillNames.length > 4 && <span className="text-[10px] text-ink-500">+{skillNames.length - 4}</span>}</div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-ink-500">
           {capability && <span>{capability.promptOnly} talimat · {capability.handlerReady}/{capability.toolBacked} kayıtlı handler · {capability.connectorReady}/{capability.connectorBacked} hazır connector</span>}
           {b.connector_key && <span className={cx('rounded-full px-1.5 py-0.5 ring-1', connector?.status === 'connected' ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'bg-amber-50 text-amber-800 ring-amber-200')}>{connector ? connectorStatusLabel(connector) : 'Bağlantı durumu bilinmiyor'}</span>}
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-2 border-t border-ink-800 bg-ink-900/40 px-4 py-2.5 text-[10px]">
+      <div className="grid grid-cols-4 gap-2 border-t border-ink-700 bg-ink-850/80 px-4 py-2.5 text-[10px]">
         <div><div className="font-mono text-ink-500">SON GÖREV</div><div className="text-ink-200 truncate">{lm ? relTime(lm.at) : st.last ? relTime(st.last.created_at) : '—'}</div></div>
         <div><div className="font-mono text-ink-500">DOĞRULANDI</div><div className="text-ink-200">{lm ? lm.findings : '—'}</div></div>
         <div><div className="font-mono text-ink-500">BAŞARI</div><div className={cx('font-semibold', st.success === null ? 'text-ink-400' : st.success >= 80 ? 'text-emerald-700' : 'text-amber-700')}>{st.success === null ? '—' : `%${st.success}`}</div></div>
