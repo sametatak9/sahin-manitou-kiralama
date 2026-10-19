@@ -47,8 +47,8 @@ export function EditedVideosScreen({ embedded = false }: { embedded?: boolean })
   if (vids.loading && !vids.data.length) return <StateView kind="loading" />;
   return (
     <div className="space-y-4">
-      {!embedded && <section className="rounded-3xl bg-gradient-to-br from-[#141A4F] via-[#1E2470] to-[#2E3192] text-white p-4 sm:p-5">
-        <div className="text-[10px] font-mono tracking-[0.2em] text-[#8FC1F0]">EDİTLİ İÇERİKLER · GERÇEK ÇEKİM KURGU</div>
+      {!embedded && <section className="ops-hero">
+        <div className="text-[10px] font-semibold tracking-[0.16em] text-white/70">EDİTLİ İÇERİKLER · GERÇEK ÇEKİM KURGU</div>
         <h2 className="font-display text-xl font-semibold mt-0.5 inline-flex items-center gap-2"><Clapperboard className="w-5 h-5" />{vids.data.length} hazır Reels · kaydırmalı gönderiler</h2>
         <p className="text-[12px] text-[#D6E4F7] mt-1 max-w-2xl">Gerçek proje videolarımızdan kurgulandı: ilk saniyede dikkat çeken başlık, ritme oturan kesmeler, whip-pan / zoom / glitch geçişleri, ses efektleri ve lacivert Embay kapanış kartı (DM çağrısı + telefon). Her videonun Instagram + Facebook paylaşım saati aşağıda.</p>
       </section>}

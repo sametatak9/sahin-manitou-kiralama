@@ -64,8 +64,7 @@ export function AgencyControlStrip() {
       <div className="relative flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="agency-eyebrow"><Sparkles className="h-3.5 w-3.5" />AGENCY CONTROL</span>
-            <span className="agency-status-dot" />
+            <span className="agency-eyebrow"><Sparkles className="h-3.5 w-3.5" />EMBAY AGENCY</span>
             <span className="text-[11px] text-slate-500">{client?.name ?? overview.data.workspace?.name ?? 'EMBAY Agency'} çalışma alanı</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -76,7 +75,7 @@ export function AgencyControlStrip() {
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:flex xl:items-center">
           <div className="agency-metric" title="Kredi yükleme sağlayıcısı henüz bağlanmadıysa bakiye 0 görünür.">
-            <WalletCards className="h-4 w-4 text-indigo-500" />
+            <WalletCards className="h-4 w-4 text-brand-green" />
             <div><div className="agency-metric-label">AI kredisi</div><div className="agency-metric-value">{credits(wallet.available_credits)} <span>{wallet.currency ?? 'TRY'}</span></div></div>
           </div>
           <div className="agency-metric">
@@ -84,8 +83,8 @@ export function AgencyControlStrip() {
             <div><div className="agency-metric-label">Bugün kullanım</div><div className="agency-metric-value">{money(budget.today_usd)}</div></div>
           </div>
           <div className="agency-model-select">
-            <Cpu className="h-4 w-4 shrink-0 text-violet-600" />
-            <label className="min-w-0"><span className="agency-metric-label">Varsayılan model</span><select aria-label="Ajans varsayılan AI modeli" value={selectedModel} onChange={(e) => changeModel(e.target.value)}>{options.map((m) => <option key={m.id} value={m.id}>{m.label} · {m.note}</option>)}</select></label>
+            <Cpu className="h-4 w-4 shrink-0 text-brand-darkgreen" />
+            <label className="min-w-0"><span className="agency-metric-label">Model tercihi</span><select aria-label="Ajans AI model tercihi" value={selectedModel} onChange={(e) => changeModel(e.target.value)}>{options.map((m) => <option key={m.id} value={m.id}>{m.label} · {m.note}</option>)}</select></label>
           </div>
           <button type="button" className="agency-holo-btn" onClick={() => go('settings', null, { tab: 'ai' })}>
             <Zap className="h-4 w-4" />

@@ -73,7 +73,7 @@ function GrowthPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-gradient-to-br from-[#262A6B] to-[#1E3FA0] text-white p-4">
+      <div className="ops-hero">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-[11px] uppercase tracking-wider text-[#CFE4FA]">{growthBot.data.name}</div>

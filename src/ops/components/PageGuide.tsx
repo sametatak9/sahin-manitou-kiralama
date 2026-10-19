@@ -37,7 +37,7 @@ export function PageGuide({ route }: { route: Route }) {
     </button>
   );
   return (
-    <div className="mb-4 rounded-2xl bg-[#EAF1FC] ring-1 ring-[#C9DAF5] px-3.5 py-2.5 flex gap-2.5">
+    <div className="agency-page-guide mb-4 rounded-2xl px-3.5 py-2.5 flex gap-2.5">
       <Info className="w-4 h-4 text-[#1E5BC6] shrink-0 mt-0.5" />
       <div className="min-w-0 flex-1 text-xs text-ink-200">
         <div className="font-semibold text-ink-100">{g.what}</div>
