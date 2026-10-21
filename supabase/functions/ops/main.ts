@@ -28,6 +28,7 @@ import { processDueApprovals, publishContent, syncMetrics, tokenFor } from '../_
 import { generateContent, registeredHandlerKeys } from '../_shared/tools/registry.ts';
 import { createEditJob, editDone, editQueue, editToPool } from '../_shared/videoedit.ts';
 import { checkUpcoming, fixDraftText } from '../_shared/contentcheck.ts';
+import { quoteBotStart, startBot } from '../_shared/one-click-bot.ts';
 
 const PANEL_URL = () => Deno.env.get('PANEL_URL') || 'https://embay-panel.vercel.app';
 const REDIRECT_URI = () => `${Deno.env.get('SUPABASE_URL')}/functions/v1/ops/oauth/callback`;
@@ -673,6 +674,8 @@ async function api(db: Db, req: Request) {
   switch (action) {
     case 'status': { await requireUser(db, req); return status(db); }
     case 'capability_audit': { await requireUser(db, req); return capabilityAudit(db); }
+    case 'bot_start_quote': { await requireUser(db, req); return quoteBotStart(db, body); }
+    case 'bot_start': { const user = await requireUser(db, req); return startBot(db, body, user); }
     case 'copilot_chat': return copilotChat(db, req, body);
     case 'team_invite': { await requireUser(db, req, 'admin'); return teamInvite(db, body); }
     case 'inbox_reply': { await requireUser(db, req); return inboxReply(db, String(body.id || ''), String(body.message || '')); }

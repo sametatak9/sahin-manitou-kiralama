@@ -1,14 +1,14 @@
-// Bot görevleri: görev ver → canlı adım günlüğü → rapor (HTML).
+// Bot çalışmaları: gerçek çalışma günlüğü → rapor (HTML).
 import { useEffect, useState } from 'react';
-import { Play, Target, Wand2, Sparkles } from 'lucide-react';
-import { callMissions, errorText } from '../lib/api';
+import { Play, Target, Wand2, Sparkles, Coins } from 'lucide-react';
+import { callMissions, callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
 import type { Bot, Mission } from '../lib/types';
 import { useRouter } from '../session';
 import { LiveReport } from './LiveReport';
 import { Button, cx, Field, Modal, Notice, Pill, StateView } from '../ui';
-import { getPreferredModel } from '../lib/agency';
+import { AGENCY_MODEL_FALLBACKS, getPreferredModel, setPreferredModel } from '../lib/agency';
 import { findingCounts } from '../../../supabase/functions/_shared/pure/outcome.ts';
 
 export const MISSION_STATUS: Record<Mission['status'], { label: string; tone: Tone }> = {
@@ -115,6 +115,90 @@ export function MissionLauncher({ bots, botId, onClose, onStarted }: { bots: Bot
   );
 }
 
+interface BotStartQuote {
+  ready: boolean; can_start: boolean; blocked_reason: string | null; bot_name: string; company_name: string;
+  skill_name: string; skill_id: string; task_id: string; task_title: string; model: string; durations: number[]; estimated_cost_usd: number | null;
+  estimate_samples: number; budget: { enabled: boolean; today_usd: number; daily_usd: number; month_usd: number; monthly_usd: number } | null; note: string;
+}
+interface BotStartResult {
+  run_id: string; status: string; summary: string; error: string | null; skill_name: string; company_name: string;
+  requested_model: string; model_used: string[]; recorded_cost_estimate_usd: number | null; tokens_in: number | null; tokens_out: number | null;
+}
+
+/** Müşterinin yalnız süre/model seçtiği, sistemin şirket ve Academy profiline göre görevi belirlediği başlatma akışı. */
+export function BotStartModal({ botId, clientId, clientName, onClose, onStarted }: { botId: string; clientId: string | null; clientName: string | null; onClose: () => void; onStarted: (result: BotStartResult) => void }) {
+  const modelOptions = AGENCY_MODEL_FALLBACKS;
+  const initialModel = getPreferredModel();
+  const [model, setModel] = useState(() => modelOptions.some((item) => item.id === initialModel) ? initialModel : 'gpt-5-mini');
+  const [duration, setDuration] = useState(5);
+  const [quote, setQuote] = useState<BotStartQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setQuoteLoading(true); setErr(null); setQuote(null);
+    if (!clientId) { setErr('Önce bir işletme seçilmeli.'); setQuoteLoading(false); return () => { live = false; }; }
+    callOps<BotStartQuote>('bot_start_quote', { bot_id: botId, client_id: clientId, model })
+      .then((result) => { if (live) setQuote(result); })
+      .catch((error) => { if (live) setErr(errorText(error)); })
+      .finally(() => { if (live) setQuoteLoading(false); });
+    return () => { live = false; };
+  }, [botId, clientId, model]);
+
+  const start = async () => {
+    if (!clientId || !quote?.can_start) return;
+    setBusy(true); setErr(null);
+    try {
+      setPreferredModel(model);
+      const result = await callOps<BotStartResult>('bot_start', { bot_id: botId, client_id: clientId, task_id: quote.task_id, skill_id: quote.skill_id, duration_minutes: duration, model });
+      onStarted(result);
+    } catch (error) { setErr(errorText(error)); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal open wide onClose={onClose} title={<span className="inline-flex items-center gap-2"><Play className="w-4 h-4 text-brand-green" /> Botu başlat</span>}
+      footer={<><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" loading={busy} disabled={!quote?.can_start || quoteLoading} onClick={start} icon={<Play className="w-4 h-4" />}>Botu başlat</Button></>}>
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-4">
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-700">İşletme bağlamı</div>
+          <div className="mt-1 text-base font-semibold text-ink-100">{quote?.company_name ?? clientName ?? 'Seçili işletme'}</div>
+          <p className="mt-1 text-xs leading-5 text-ink-500">Bot, bu işletmeye atanmış Academy onaylı ve test edilmiş yetenekler arasından uygun profili kendisi seçer. Görev metni veya hedef linki girmeniz gerekmez.</p>
+          {quote && <div className="mt-2 rounded-xl bg-white/80 px-3 py-2 text-xs text-ink-600"><span className="font-semibold text-ink-900">Hazır profil:</span> {quote.skill_name} · {quote.task_title}</div>}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Çalışma süresi · en fazla">
+            <div className="flex gap-2">{[1, 5, 10].map((value) => <button key={value} type="button" onClick={() => setDuration(value)} className={cx('min-h-10 flex-1 rounded-xl px-3 text-sm font-semibold ring-1 transition', duration === value ? 'bg-brand-green text-white ring-brand-green' : 'bg-white text-ink-700 ring-ink-700 hover:bg-blue-50')} aria-pressed={duration === value}>{value} dk</button>)}</div>
+          </Field>
+          <Field label="Çalışma modeli">
+            <select className="ops-input" value={model} onChange={(event) => setModel(event.target.value)}>
+              {modelOptions.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.note}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <section className="rounded-2xl border border-ink-100 bg-white p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink-900"><Coins className="h-4 w-4 text-amber-600" /> Harcama görünümü</div>
+          {quoteLoading ? <div className="mt-2 text-xs text-ink-500">Güvenli çalışma profili ve bütçe bilgisi kontrol ediliyor…</div> : quote && <>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[10px] uppercase tracking-wide text-ink-500">Ön tahmin</div><div className="mt-1 text-lg font-bold text-ink-900">{quote.estimated_cost_usd === null ? 'Henüz yok' : `≈ $${quote.estimated_cost_usd.toFixed(4)}`}</div><div className="mt-1 text-[10px] text-ink-500">{quote.estimated_cost_usd === null ? 'Bu bot/yetenek için yeterli geçmiş yok.' : `${quote.estimate_samples} başarılı koşunun token hacmi, seçili modele göre fiyatlandı.`}</div></div>
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[10px] uppercase tracking-wide text-ink-500">Günlük AI bütçesi</div><div className="mt-1 text-sm font-semibold text-ink-900">{quote.budget?.enabled && quote.budget.daily_usd > 0 ? `$${quote.budget.today_usd.toFixed(2)} / $${quote.budget.daily_usd.toFixed(2)}` : 'Limit tanımlı değil'}</div><div className="mt-1 text-[10px] text-ink-500">Ajans genelindeki mevcut harcama / limit</div></div>
+            </div>
+            {quote.budget?.enabled && quote.budget.monthly_usd > 0 && <div className="mt-2 text-[11px] text-ink-500">Aylık kullanım: ${quote.budget.month_usd.toFixed(2)} / ${quote.budget.monthly_usd.toFixed(2)}</div>}
+            <p className="mt-2 text-[10px] leading-4 text-ink-500">{quote.note} Gerçek maliyet, koşu tamamlandığında kullanım kayıtlarından gösterilir; mevcut sistemde işlem başına ayrı cüzdan/garantili tavan yoktur.</p>
+          </>}
+        </section>
+
+        <Notice tone="info">Her koşuda şirket için en uygun tek, Academy onaylı yetenek seçilir; mevcut runtime tüm yetenekleri aynı anda orkestre etmez. İçerik/analiz taslağı üretimi desteklenir; yayınlama, mesaj gönderme ve dış sistem değişikliği ayrı insan onayı olmadan çalışmaz.</Notice>
+        {quote?.blocked_reason && <Notice tone="warn">Başlatma koruması: {quote.blocked_reason}</Notice>}
+        {err && <Notice tone="error">{err}</Notice>}
+      </div>
+    </Modal>
+  );
+}
+
 function progress(m: Mission) {
   const start = new Date(m.started_at).getTime(); const end = new Date(m.deadline_at).getTime();
   if (m.status !== 'running') return 100;
@@ -139,11 +223,11 @@ export function MissionList({ bots, botId, compact = false, review }: { bots: Bo
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div><div className="font-display font-semibold text-ink-100">Görevler & raporlar</div><div className="text-[11px] text-ink-400">Karta tıklayın → canlı rapor.</div></div>
-        <Button variant="primary" onClick={() => setLaunch(true)} icon={<Target className="w-4 h-4" />}>Görev ver</Button>
+        <div><div className="font-display font-semibold text-ink-100">Çalışmalar & raporlar</div><div className="text-[11px] text-ink-400">Karta tıklayın → canlı rapor.</div></div>
+        {!botId && <Button variant="primary" onClick={() => setLaunch(true)} icon={<Target className="w-4 h-4" />}>Araştırma başlat</Button>}
       </div>
       {q.error ? <Notice tone="error">{q.error}</Notice> : q.loading ? <StateView kind="loading" compact /> : q.data.length === 0 ? (
-        <StateView kind="empty" title="Henüz görev yok" message="Görev ver ile kısaca yazın." compact />
+        <StateView kind="empty" title="Henüz çalışma yok" message={botId ? 'Botu başlat düğmesiyle şirketinize uygun çalışma başlatabilirsiniz.' : 'Araştırma başlat ile yeni bir araştırma oluşturabilirsiniz.'} compact />
       ) : (
         <div className="space-y-2">
           {q.data.map((m) => {

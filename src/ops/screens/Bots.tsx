@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Archive, ArrowLeft, ChevronDown, Pause, Play, Plus, RotateCcw, Save, Target, Trash2, Wand2 } from 'lucide-react';
-import { MissionLauncher, MissionList, SkillPromptModal } from '../components/Missions';
+import { Archive, ArrowLeft, ChevronDown, Pause, Play, Plus, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
+import { BotStartModal, MissionList, SkillPromptModal } from '../components/Missions';
 import { callOps, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { approvalLabel, approvalTone, BOT_STATUS, dayKey, fmtDateTime, istanbulToIso, platformMeta, relTime, RUN_LABELS, runTone, TASK_LABELS, taskTone, timeOf } from '../lib/format';
@@ -10,25 +10,30 @@ import { summarizeBotCapabilities } from '../../../supabase/functions/_shared/pu
 import type { CapabilityAuditReport, CapabilityConnectorBinding } from '../../../supabase/functions/_shared/pure/capability-audit.ts';
 import type { Approval, Bot, Run, RunLog, Skill, Task, Tool } from '../lib/types';
 import { useRouter, useSession } from '../session';
+import { useClient } from '../client';
 import { Button, cx, DynIcon, ErrorState, Field, Modal, Notice, Panel, Pill, PlatformBadge, SavedStamp, Stat, StateView, Tabs } from '../ui';
 
 interface Portfolio { bots: Bot[]; skills: Skill[]; tools: Tool[]; tasks: Task[]; runs: Run[]; agents: Array<{ id: string; name: string; model: string; provider: string }>; live: Record<string, number>; lastMission: Record<string, { at: string; findings: number }>; capabilityAudit: CapabilityAuditReport | null; connectors: CapabilityConnectorBinding[]; capabilityError: string | null }
 const EMPTY: Portfolio = { bots: [], skills: [], tools: [], tasks: [], runs: [], agents: [], live: {}, lastMission: {}, capabilityAudit: null, connectors: [], capabilityError: null };
 
-async function loadPortfolio(): Promise<Portfolio> {
+async function loadPortfolio(clientId: string | null): Promise<Portfolio> {
+  if (!clientId) return { ...EMPTY };
   const s = db();
   const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const [bots, skills, tools, tasks, runs, agents] = await Promise.all([
-    s.from('automation_bots').select('*, automation_bot_skills(skill_id,position)').order('name'),
+  const bots = unwrap(await s.from('automation_bots').select('*, automation_bot_skills(skill_id,position)').eq('client_id', clientId).order('name')) as Bot[];
+  const botIds = bots.map((bot) => bot.id);
+  const [skills, tools, agents, tasks, runs] = await Promise.all([
     s.from('automation_skills').select('*, automation_skill_tools(tool_id)').order('display_name'),
     s.from('automation_tools').select('*').order('tool_key'),
-    s.from('automation_tasks').select('*').is('archived_at', null).order('next_run_at', { ascending: true, nullsFirst: false }),
-    s.from('social_bot_runs').select('id,bot_id,task_id,skill_id,status,created_at,duration_ms,tokens_in,tokens_out,summary,error,error_code,trigger,attempt,platform,run_scope,started_at,completed_at,output').gte('created_at', since).order('created_at', { ascending: false }).limit(1000),
     s.from('ai_agents').select('id,name,model,provider').eq('active', true),
+    botIds.length ? s.from('automation_tasks').select('*').in('bot_id', botIds).is('archived_at', null).order('next_run_at', { ascending: true, nullsFirst: false }) : Promise.resolve({ data: [], error: null }),
+    botIds.length ? s.from('social_bot_runs').select('id,bot_id,task_id,skill_id,status,created_at,duration_ms,tokens_in,tokens_out,summary,error,error_code,trigger,attempt,platform,run_scope,started_at,completed_at,output').in('bot_id', botIds).gte('created_at', since).order('created_at', { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null }),
   ]);
+  const skillRows = unwrap(skills); const toolRows = unwrap(tools); const agentRows = unwrap(agents);
+  const taskRows = unwrap(tasks); const runRows = unwrap(runs);
   // Görev (mission) bazlı canlılık: şu an çalışan görevler + son görev ve bulgu sayısı (hata olursa ekran yine açılır)
   const live: Record<string, number> = {}; const lastMission: Portfolio['lastMission'] = {};
-  const ms = await s.from('bot_missions').select('bot_id,status,created_at,findings').gte('created_at', since).order('created_at', { ascending: false }).limit(400);
+  const ms = await s.from('bot_missions').select('bot_id,status,created_at,findings').eq('client_id', clientId).gte('created_at', since).order('created_at', { ascending: false }).limit(400);
   for (const m of (ms.data ?? []) as Array<{ bot_id: string | null; status: string; created_at: string; findings: Array<{ verdict?: string }> | null }>) {
     if (!m.bot_id) continue;
     if (m.status === 'running' || m.status === 'finalizing') live[m.bot_id] = (live[m.bot_id] ?? 0) + 1;
@@ -36,7 +41,7 @@ async function loadPortfolio(): Promise<Portfolio> {
   }
   const [capabilityResult] = await Promise.allSettled([callOps<CapabilityAuditReport>('capability_audit')]);
   return {
-    bots: unwrap(bots), skills: unwrap(skills), tools: unwrap(tools), tasks: unwrap(tasks), runs: unwrap(runs), agents: unwrap(agents), live, lastMission,
+    bots, skills: skillRows, tools: toolRows, tasks: taskRows, runs: runRows, agents: agentRows, live, lastMission,
     capabilityAudit: capabilityResult.status === 'fulfilled' ? capabilityResult.value : null,
     connectors: capabilityResult.status === 'fulfilled' ? capabilityResult.value.connectors ?? [] : [],
     capabilityError: capabilityResult.status === 'rejected' ? errorText(capabilityResult.reason) : null,
@@ -56,11 +61,13 @@ function botStats(p: Portfolio, botId: string) {
 export function BotsScreen() {
   const { state, go } = useRouter();
   const session = useSession();
-  const q = useQuery(loadPortfolio, EMPTY, [], ['automation_tasks', 'social_bot_runs', 'bot_missions', 'social_accounts', 'automation_skills', 'automation_skill_tools', 'automation_tools']);
+  const { client } = useClient();
+  const q = useQuery(() => loadPortfolio(client?.id ?? null), EMPTY, [client?.id], ['automation_bots', 'automation_tasks', 'social_bot_runs', 'bot_missions', 'social_accounts', 'automation_skills', 'automation_skill_tools', 'automation_tools']);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'waiting_connection' | 'paused' | 'archived'>('all');
 
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
+  if (q.loading) return <StateView kind="loading" />;
   if (state.id) {
     const bot = q.data.bots.find((b) => b.id === state.id);
     if (q.loading) return <StateView kind="loading" />;
@@ -74,7 +81,7 @@ export function BotsScreen() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-semibold text-ink-100">Bot Merkezi</h2>
-          <p className="text-xs text-ink-400 max-w-2xl">Kartlarda botun gerçek çalışma durumu, son raporu, yetenek türü ve bağlantı hazırlığı görünür. Bu v0 görsel katmandır; görev başlatma akışını değiştirmez.</p>
+          <p className="text-xs text-ink-400 max-w-2xl">Şirketinizi seçin, botu başlatın. Sistem test edilmiş yeteneklerden uygun çalışmayı seçer; sonuç, onay ve maliyet kaydı burada görünür.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Tabs value={filter} onChange={setFilter} items={[{ id: 'all', label: 'Tümü' }, { id: 'active', label: 'Aktif' }, { id: 'waiting_connection', label: 'Bağlantı bekliyor' }, { id: 'paused', label: 'Duraklatılan' }, { id: 'archived', label: 'Arşiv' }]} />
@@ -86,7 +93,7 @@ export function BotsScreen() {
         const isLive = (b: Bot) => (q.data.live[b.id] ?? 0) > 0 || botStats(q.data, b.id).runs.some((r) => r.status === 'running');
         const groups: Array<{ key: string; title: string; hint: string; items: Bot[] }> = filter === 'all' ? [
           { key: 'live', title: 'Şu an çalışan', hint: 'Görevi süren botlar', items: bots.filter((b) => b.status === 'active' && isLive(b)) },
-          { key: 'active', title: 'Aktif · hazır', hint: 'Otopilotla ya da “Görev ver” ile çalışır', items: bots.filter((b) => b.status === 'active' && !isLive(b)) },
+          { key: 'active', title: 'Aktif · hazır', hint: '“Botu başlat” ile şirket bağlamına uygun çalışır', items: bots.filter((b) => b.status === 'active' && !isLive(b)) },
           { key: 'waiting', title: 'Bağlantı bekliyor', hint: 'Uygulama bağlanınca aktifleşir', items: bots.filter((b) => b.status === 'waiting_connection') },
           { key: 'paused', title: 'Pasif · duraklatılan', hint: 'Yönetici durdurdu', items: bots.filter((b) => b.status === 'paused') },
         ] : [{ key: filter, title: '', hint: '', items: bots }];
@@ -233,8 +240,10 @@ type Tab = 'missions' | 'automation' | 'skills' | 'general';
 function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => void }) {
   const { go } = useRouter();
   const session = useSession();
+  const { client } = useClient();
   const [tab, setTab] = useState<Tab>('missions');
   const [launch, setLaunch] = useState(false);
+  const [startResult, setStartResult] = useState<{ status: string; summary: string; error: string | null; skill_name: string; company_name: string; requested_model: string; model_used: string[]; recorded_cost_estimate_usd: number | null } | null>(null);
   const [editingBot, setEditingBot] = useState(false);
   const st = botStats(p, bot.id);
   const botSkills = (bot.automation_bot_skills || []).map((l) => p.skills.find((s) => s.id === l.skill_id)).filter(Boolean) as Skill[];
@@ -252,19 +261,24 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
           <div className="flex flex-wrap items-center gap-2"><h2 className="font-display text-xl font-semibold text-ink-100">{bot.name}</h2><Pill tone={meta.tone}>{meta.label}</Pill><span className="text-[10px] font-mono text-ink-500">/{bot.slug}</span></div>
           <p className="text-sm text-ink-300 mt-1">{bot.description}</p>
         </div>
-        <Button variant="primary" onClick={() => setLaunch(true)} icon={<Target className="w-4 h-4" />}>Görev ver</Button>
+        <Button variant="primary" onClick={() => setLaunch(true)} disabled={!client?.id || client.id !== bot.client_id || ['paused', 'archived'].includes(bot.status)} icon={<Play className="w-4 h-4" />}>Botu başlat</Button>
         <div className="grid grid-cols-3 gap-2 md:w-[380px]">
           <Stat label="30G koşu" value={st.total} /><Stat label="Başarı" value={st.success === null ? '—' : `%${st.success}`} tone={st.success === null ? undefined : st.success >= 80 ? 'go' : 'wait'} /><Stat label="Hata" value={st.errors} tone={st.errors ? 'stop' : undefined} />
         </div>
       </section>
       <Tabs value={tab} onChange={setTab} items={[
-        { id: 'missions', label: 'Görevler', count: p.live[bot.id] ?? 0 },
+        { id: 'missions', label: 'Çalışmalar', count: p.live[bot.id] ?? 0 },
         { id: 'automation', label: 'Otomasyon', count: st.tasks.length },
         { id: 'skills', label: 'Yetenekler', count: botSkills.length + botTools.length },
         { id: 'general', label: 'Genel & ayarlar' },
       ]} />
 
       {tab === 'missions' && <div className="space-y-3">
+        {startResult && <Notice tone={['completed', 'awaiting_approval'].includes(startResult.status) ? 'ok' : startResult.status === 'blocked' ? 'warn' : 'error'}>
+          <span className="font-semibold">{startResult.status === 'awaiting_approval' ? 'Taslak hazır · insan onayı bekliyor' : startResult.status === 'completed' ? 'Bot çalışması tamamlandı' : startResult.status === 'blocked' ? 'Çalışma güvenlik/yapılandırma nedeniyle engellendi' : 'Bot çalışması tamamlanamadı'}.</span>{' '}
+          {startResult.summary || startResult.error || 'Çıktı özeti yok.'} {startResult.skill_name} · {startResult.company_name}. Model: {startResult.model_used?.length ? startResult.model_used.join(', ') : startResult.requested_model}.{' '}
+          {startResult.recorded_cost_estimate_usd === null ? 'Bu koşu için token/kullanım kaydı alınamadı; maliyet tahmini bilinmiyor.' : `AI kullanım kaydına göre maliyet tahmini ≈ $${startResult.recorded_cost_estimate_usd.toFixed(4)}.`}
+        </Notice>}
         <MissionList bots={p.bots} botId={bot.id} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           <Foldout title={`Koşu geçmişi · ${st.runs.length}`}><RunsTable runs={st.runs} p={p} /></Foldout>
@@ -273,7 +287,7 @@ function BotDetail({ bot, p, reload }: { bot: Bot; p: Portfolio; reload: () => v
           <Foldout title="Sonuç kayıtları"><BotResults runs={st.runs.filter((r) => ['completed', 'awaiting_approval'].includes(r.status)).slice(0, 10)} /></Foldout>
         </div>
       </div>}
-      {launch && <MissionLauncher bots={p.bots} botId={bot.id} onClose={() => setLaunch(false)} onStarted={() => { setLaunch(false); setTab('missions'); }} />}
+      {launch && <BotStartModal botId={bot.id} clientId={client?.id ?? null} clientName={client?.name ?? null} onClose={() => setLaunch(false)} onStarted={(result) => { setLaunch(false); setStartResult(result); setTab('missions'); reload(); }} />}
 
       {tab === 'general' && (
         <div className="space-y-4">
