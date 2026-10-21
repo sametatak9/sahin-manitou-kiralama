@@ -1,7 +1,7 @@
 // Bot çalışmaları: gerçek çalışma günlüğü → rapor (HTML).
 import { useEffect, useState } from 'react';
 import { Play, Target, Wand2, Sparkles, Coins } from 'lucide-react';
-import { callMissions, callOps, errorText } from '../lib/api';
+import { callMissions, callOps, errorCode, errorText } from '../lib/api';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { fmtDateTime, relTime, type Tone } from '../lib/format';
 import type { Bot, Mission } from '../lib/types';
@@ -124,6 +124,7 @@ interface BotStartResult {
   run_id: string; status: string; summary: string; error: string | null; skill_name: string; company_name: string;
   requested_model: string; model_used: string[]; recorded_cost_estimate_usd: number | null; tokens_in: number | null; tokens_out: number | null;
 }
+const PROFILE_NOT_READY_MESSAGE = 'Bu bot henüz tek dokunuşla çalışmaya hazır değil. Yöneticinin bu işletmeye uygun bir yeteneği Akademi’de doğrulaması ve güvenli çalışma profili hazırlaması gerekiyor. Hazır olduğunda yalnızca süre ve modeli seçmeniz yeterli.';
 
 /** Müşterinin yalnız süre/model seçtiği, sistemin şirket ve Academy profiline göre görevi belirlediği başlatma akışı. */
 export function BotStartModal({ botId, clientId, clientName, onClose, onStarted }: { botId: string; clientId: string | null; clientName: string | null; onClose: () => void; onStarted: (result: BotStartResult) => void }) {
@@ -135,14 +136,19 @@ export function BotStartModal({ botId, clientId, clientName, onClose, onStarted 
   const [quoteLoading, setQuoteLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [profileNotReady, setProfileNotReady] = useState(false);
 
   useEffect(() => {
     let live = true;
-    setQuoteLoading(true); setErr(null); setQuote(null);
+    setQuoteLoading(true); setErr(null); setQuote(null); setProfileNotReady(false);
     if (!clientId) { setErr('Önce bir işletme seçilmeli.'); setQuoteLoading(false); return () => { live = false; }; }
     callOps<BotStartQuote>('bot_start_quote', { bot_id: botId, client_id: clientId, model })
       .then((result) => { if (live) setQuote(result); })
-      .catch((error) => { if (live) setErr(errorText(error)); })
+      .catch((error) => {
+        if (!live) return;
+        if (errorCode(error) === 'BOT_PROFILE_NOT_READY') { setProfileNotReady(true); setErr(PROFILE_NOT_READY_MESSAGE); }
+        else setErr(errorText(error));
+      })
       .finally(() => { if (live) setQuoteLoading(false); });
     return () => { live = false; };
   }, [botId, clientId, model]);
@@ -154,7 +160,10 @@ export function BotStartModal({ botId, clientId, clientName, onClose, onStarted 
       setPreferredModel(model);
       const result = await callOps<BotStartResult>('bot_start', { bot_id: botId, client_id: clientId, task_id: quote.task_id, skill_id: quote.skill_id, duration_minutes: duration, model });
       onStarted(result);
-    } catch (error) { setErr(errorText(error)); } finally { setBusy(false); }
+    } catch (error) {
+      if (errorCode(error) === 'BOT_PROFILE_NOT_READY') { setProfileNotReady(true); setErr(PROFILE_NOT_READY_MESSAGE); }
+      else setErr(errorText(error));
+    } finally { setBusy(false); }
   };
 
   return (
@@ -164,7 +173,7 @@ export function BotStartModal({ botId, clientId, clientName, onClose, onStarted 
         <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-4">
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-700">İşletme bağlamı</div>
           <div className="mt-1 text-base font-semibold text-ink-100">{quote?.company_name ?? clientName ?? 'Seçili işletme'}</div>
-          <p className="mt-1 text-xs leading-5 text-ink-500">Bot, bu işletmeye atanmış Academy onaylı ve test edilmiş yetenekler arasından uygun profili kendisi seçer. Görev metni veya hedef linki girmeniz gerekmez.</p>
+          <p className="mt-1 text-xs leading-5 text-ink-500">Uygun Academy profili varsa bot bu işletme için kendisi seçer. Hazır profil yoksa güvenlik için başlamaz; sizden görev metni veya hedef linki istenmez.</p>
           {quote && <div className="mt-2 rounded-xl bg-white/80 px-3 py-2 text-xs text-ink-600"><span className="font-semibold text-ink-900">Hazır profil:</span> {quote.skill_name} · {quote.task_title}</div>}
         </div>
 
@@ -193,7 +202,8 @@ export function BotStartModal({ botId, clientId, clientName, onClose, onStarted 
 
         <Notice tone="info">Her koşuda şirket için en uygun tek, Academy onaylı yetenek seçilir; mevcut runtime tüm yetenekleri aynı anda orkestre etmez. İçerik/analiz taslağı üretimi desteklenir; yayınlama, mesaj gönderme ve dış sistem değişikliği ayrı insan onayı olmadan çalışmaz.</Notice>
         {quote?.blocked_reason && <Notice tone="warn">Başlatma koruması: {quote.blocked_reason}</Notice>}
-        {err && <Notice tone="error">{err}</Notice>}
+        {profileNotReady && <Notice tone="warn">{err} <a className="ml-1 font-semibold underline" href="?ops=skills">Akademi’yi aç</a></Notice>}
+        {err && !profileNotReady && <Notice tone="error">{err}</Notice>}
       </div>
     </Modal>
   );
