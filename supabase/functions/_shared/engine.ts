@@ -8,13 +8,14 @@ import { decideToolUse } from './pure/rules.ts';
 import { computeNextRun, retryDelaySeconds } from './pure/schedule.ts';
 import { getHandler } from './tools/registry.ts';
 import { planWeek } from './planner.ts';
-import { defaultModelForProvider, fallbackProviders } from './pure/model-routing.ts';
+import { defaultModelForProvider, fallbackProviders, routeForModel } from './pure/model-routing.ts';
 
 export interface ExecuteOptions {
   trigger: 'schedule' | 'manual' | 'retry' | 'event';
   workerId: string;
   actorId?: string;     // manuel tetiklemede çalıştıran kullanıcı
   actorRole?: string;
+  model?: string;
 }
 
 class TimeoutError extends Error { code = 'TIMEOUT'; }
@@ -100,6 +101,11 @@ export async function executeTask(db: Db, task: TaskRow, opts: ExecuteOptions) {
     const tools: ToolRow[] = (links || []).map((l: any) => (Array.isArray(l.tool) ? l.tool[0] : l.tool)).filter(Boolean);
     const toolKeys = tools.map((t) => t.tool_key);
     ctx.agent = await loadAgent(db, bot?.ai_agent_id ?? null);
+    if (opts.model) {
+      const route = routeForModel(opts.model);
+      if (!route) throw Object.assign(new Error('Seçilen model desteklenmiyor'), { code: 'MODEL_NOT_ALLOWED' });
+      ctx.agent = { ...ctx.agent, provider: route.provider, model: route.model };
+    }
 
     const invoke = async (toolKey: string, input: Record<string, unknown>) => {
       const tool = tools.find((t) => t.tool_key === toolKey);

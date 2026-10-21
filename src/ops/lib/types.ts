@@ -4,7 +4,7 @@ import type { AcademyOutputKind, CapabilityKind, CapabilityRisk, CapabilityTestS
 import type { CapabilityAuditReport } from '../../../supabase/functions/_shared/pure/capability-audit.ts';
 export interface Bot {
   id: string; slug: string; name: string; bot_type: string; platform: string | null; icon: string; description: string; instructions: string;
-  ai_agent_id: string | null; connector_key: string | null; permissions: { denied_tools?: string[]; max_runs_per_day?: number } | null;
+  ai_agent_id: string | null; connector_key: string | null; client_id?: string | null; permissions: { denied_tools?: string[]; max_runs_per_day?: number } | null;
   status: string; created_at: string; archived_at: string | null;
   automation_bot_skills?: Array<{ skill_id: string; position: number }>;
 }
