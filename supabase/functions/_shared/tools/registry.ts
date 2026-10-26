@@ -4,6 +4,7 @@ import { aiComplete, brandForContext, istanbulDayRange, type EngineCtx } from '.
 import { resendEmail, telegramSend, waMeLink, whatsappCloudSend } from '../connectors/messaging.ts';
 import { normalizeDomain } from '../pure/rules.ts';
 import { contentDraftErrors, normalizeContentDraft } from '../pure/content.ts';
+import { chooseEditorialStyles, editorialPrompt, validateEditorialCandidate, type EditorialHistory } from '../pure/editorial.ts';
 import { publishContent } from '../publisher.ts';
 import { secret as appSecret } from '../secrets.ts';
 import { runSeoAudit, seoAuditDetail } from '../pure/seo-audit.ts';
@@ -30,21 +31,48 @@ async function brandLine(ctx: EngineCtx) {
 
 export async function generateContent(ctx: EngineCtx, input: Record<string, unknown>) {
   const brand = await brandForContext(ctx);
-  const prompt = [
+  const isEmbay = /embay/i.test(brand?.company_name ?? '') || ctx.bot?.slug === 'content-bot';
+  const clientId = ctx.bot?.client_id ?? brand?.client_id ?? null;
+  let history: EditorialHistory[] = [];
+  if (isEmbay && clientId) {
+    const { data } = await ctx.db.from('social_drafts').select('headline,caption,tone,content_pillar').eq('client_id', clientId)
+      .order('created_at', { ascending: false }).limit(36);
+    history = (data ?? []) as EditorialHistory[];
+  }
+  const style = isEmbay ? chooseEditorialStyles(history, 1, Date.now())[0] : null;
+  const topic = isEmbay
+    ? 'Embay Yapı’nın yalnızca hafif çelik ev ve hafif çelik yapı hizmetleri: proje konuşması, gerçek saha/proje görüntüsü, duvar-panel detayları, yalıtım katmanları veya ev sahibi adaylarının karar soruları. Ağır çelik, betonarme hizmeti veya başka sektör yok.'
+    : str(input.topic, 'Markanın seçili hizmetleri ve gerçek saha süreçleri');
+  const basePrompt = [
     `Platform: ${str(input.platform, 'instagram')}`,
-    `Konu: ${str(input.topic, 'Markanın seçili hizmetleri ve gerçek saha süreçleri')}`,
+    `Konu: ${topic}`,
     input.objective ? `Amaç: ${str(input.objective)}` : '',
     input.audience ? `Hedef kitle: ${str(input.audience)}` : '',
-    input.tone ? `Ton: ${str(input.tone)}` : '',
+    style ? editorialPrompt(style) : input.tone ? `Ton: ${str(input.tone)}` : '',
     input.cta ? `İstenen CTA: ${str(input.cta)}` : '',
     await brandLine(ctx),
-    'Görev konusu tek yetkili kapsamdır: konu veya marka kitinde olmayan başka bir hizmeti, sektörü, marka adını ya da müşteri örneğini ekleme. Platformun karakter ve format kurallarına uy. Hashtag’leri # olmadan değil, # ile yaz. Uydurma rakam/müşteri/proje kullanma.',
+    isEmbay
+      ? 'EMBAY YAPI ÜRÜN SINIRI: yalnız hafif çelik yapı. Ağır çelik, betonarme, kentsel dönüşüm, kat karşılığı, tadilat, tamirat, istinat/taş duvar, makine kiralama veya Manitou’dan söz etme; bunları hashtag, görsel brief’i veya CTA’ya da koyma. Bilinmeyen yapısal/ısı/deprem/güvenlik üstünlüğü, fiyat, süre, m², müşteri, proje veya teslim iddiası uydurma. Bir taslak hazırla, yayınlama.'
+      : 'Görev konusu tek yetkili kapsamdır: konu veya marka kitinde olmayan başka bir hizmeti, sektörü, marka adını ya da müşteri örneğini ekleme. Platformun karakter ve format kurallarına uy. Hashtag’leri # olmadan değil, # ile yaz. Uydurma rakam/müşteri/proje kullanma.',
   ].filter(Boolean).join('\n');
-  const { json, generationId } = await aiComplete(ctx, 'create_content', prompt, CONTENT_SCHEMA);
-  const draft = normalizeContentDraft(json);
+  let draft = normalizeContentDraft({});
+  let generationId: string | undefined;
+  let validation: ReturnType<typeof validateEditorialCandidate> | null = null;
+  for (let attempt = 0; attempt < (isEmbay ? 2 : 1); attempt++) {
+    const correction = attempt && validation ? `\nDÜZELTME: Önceki çıktı reddedildi (${validation.reason}). Tamamen yeni bir hafif çelik taslağı üret; yasaklı konu ve tekrar kullanma.` : '';
+    const generated = await aiComplete(ctx, 'create_content', `${basePrompt}${correction}`, CONTENT_SCHEMA);
+    draft = normalizeContentDraft(generated.json);
+    generationId = generated.generationId;
+    if (!isEmbay) break;
+    validation = validateEditorialCandidate(draft, history);
+    if (validation.ok) break;
+  }
+  if (isEmbay && validation && !validation.ok) {
+    throw Object.assign(new Error(`Taslak güvenlik/özgünlük kontrolünden geçmedi: ${validation.reason}`), { code: 'CONTENT_OUTPUT_INVALID' });
+  }
   const errors = contentDraftErrors(draft);
   if (errors.length) throw Object.assign(new Error(`İçerik çıktısı eksik: ${errors.join(', ')}`), { code: 'CONTENT_OUTPUT_INVALID' });
-  return { ...draft, ai_generation_id: generationId, brand_kit_id: brand?.id ?? null, client_id: ctx.bot?.client_id ?? null };
+  return { ...draft, ...(style ? { tone: style.label, pillar: `hafif_celik_${style.key}` } : {}), ai_generation_id: generationId, brand_kit_id: brand?.id ?? null, client_id: clientId };
 }
 
 const handlers: Record<string, ToolHandler> = {
@@ -97,6 +125,15 @@ const handlers: Record<string, ToolHandler> = {
     const scheduled = input.scheduled_at ? new Date(str(input.scheduled_at)) : null;
     const brand = await brandForContext(ctx);
     if (!str(input.title).trim() || !caption.trim() || !hashtags.length) throw Object.assign(new Error('Taslak kaydedilemedi: başlık, açıklama ve hashtag zorunlu'), { code: 'CONTENT_OUTPUT_INVALID' });
+    const isEmbay = /embay/i.test(brand?.company_name ?? '') || ctx.bot?.slug === 'content-bot';
+    if (isEmbay) {
+      const clientId = ctx.bot?.client_id ?? brand?.client_id ?? null;
+      if (!clientId) throw Object.assign(new Error('Embay taslağı kaydedilmedi: doğrulanmış müşteri kapsamı bulunamadı.'), { code: 'CONTENT_OUTPUT_INVALID' });
+      const { data: recent } = await ctx.db.from('social_drafts').select('headline,caption,tone,content_pillar').eq('client_id', clientId)
+        .neq('workflow_status', 'cancelled').order('created_at', { ascending: false }).limit(36);
+      const quality = validateEditorialCandidate({ title: input.title, headline: input.headline, caption, pillar: input.pillar, hashtags, cta: input.cta, image_idea: input.image_brief, design_brief: input.design_brief }, (recent ?? []) as EditorialHistory[]);
+      if (!quality.ok) throw Object.assign(new Error(`Embay taslağı kapsam/özgünlük filtresini geçemedi: ${quality.reason}`), { code: 'CONTENT_OUTPUT_INVALID' });
+    }
     const { data, error } = await ctx.db.from('social_drafts').insert({
       brand: brand?.company_name ?? 'İkisi', title: str(input.title, 'Bot taslağı').slice(0, 200), body, caption, headline: str(input.headline) || null,
       hashtags, cta: str(input.cta) || null, image_brief: str(input.image_brief) || null, design_brief: str(input.design_brief) || null,

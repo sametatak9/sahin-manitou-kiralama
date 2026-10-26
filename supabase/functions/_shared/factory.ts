@@ -3,64 +3,60 @@
 // Banner PNG sunucuda üretilir (SVG → PNG, resvg-wasm). Video: Video Havuzu'ndan gerçek video seçilir; yoksa çekim senaryosuyla "video gerekli" taslağı.
 import { initWasm, Resvg } from 'npm:@resvg/resvg-wasm@2.6.2';
 import jpeg from 'npm:jpeg-js@0.4.4';
-import { aiComplete, defaultBrand, istanbulDayRange, type Db } from './context.ts';
+import { aiComplete, brandForClient, istanbulDayRange, type Db } from './context.ts';
 import { telegramSend } from './connectors/messaging.ts';
 import { loadAppSecrets, secret as appSecret } from './secrets.ts';
 import { getAiKey } from './ai/keys.ts';
+import { chooseEditorialStyles, editorialPrompt, isEmbayOffScope, validateEditorialCandidate, type EditorialHistory } from './pure/editorial.ts';
 
 type Platform = 'instagram' | 'facebook' | 'tiktok' | 'youtube' | 'x';
 interface Quota { platform: Platform; enabled: boolean; video_per_day: number; image_per_day: number; slot_times: string[]; width: number; height: number }
-interface Item { format: 'reel' | 'banner'; title: string; headline: string; subtitle: string; badge: string; caption: string; hashtags: string[]; cta: string; video_script?: string; brand: 'Embay Yapı' | 'Şahin Manitou' }
+interface Item { format: 'reel' | 'banner'; title: string; headline: string; subtitle: string; badge: string; caption: string; hashtags: string[]; cta: string; tone?: string; video_script?: string; brand: 'Embay Yapı' | 'Şahin Manitou' }
 
 const PLATFORM_RULES: Record<Platform, string> = {
-  instagram: 'Instagram: açıklama 80-150 kelime, ilk satır kanca, 20-25 hashtag (yerel: #çatalca #silivri #istanbul + sektör + konu), konum ve WhatsApp çağrısı. Reels 15-30 sn.',
-  tiktok: 'TikTok: açıklama en fazla 150 karakter, 20 hashtag (#inşaat #şantiye #tadilat gibi), eğlenceli ama profesyonel; video 15-30 sn, ilk 2 saniye güçlü kanca.',
-  youtube: 'YouTube Shorts: başlık en fazla 70 karakter + açıklama 2-3 cümle, 15 hashtag (#shorts dahil; 15 üstüne çıkma). Banner içerikleri Topluluk gönderisi olarak.',
-  facebook: 'Facebook: 40-90 kelime, yerel ve güven veren dil, 20 hashtag, telefon ve WhatsApp çağrısı.',
-  x: 'X (Twitter): toplam en fazla 260 karakter, 2-3 hashtag, net teklif/haber dili.',
+  instagram: 'Instagram: görsel öncelikli, ilk satırda özgün kanca; 35-70 kelime, kısa paragraf ve yalnız 3-5 ilgili hashtag. Reels 15-30 sn.',
+  tiktok: 'TikTok: açıklama kısa (en fazla 150 karakter), yalnız 3-5 ilgili hashtag; ilk 2 saniyede doğal bir kanca, 15-30 sn video. #inşaat veya #tadilat kullanma.',
+  youtube: 'YouTube Shorts: başlık en fazla 70 karakter, 2-3 kısa cümle ve 3-5 ilgili hashtag (#shorts dahil). Banner içerikleri Topluluk gönderisi olarak.',
+  facebook: 'Facebook: 30-60 kelime, konuşma dili ve tek doğal soru/CTA; yalnız 3-5 ilgili hashtag.',
+  x: 'X: toplam en fazla 260 karakter; net, doğal ve 2-3 hafif çelik/ev odaklı hashtag.',
 };
 
-// İçerik direkleri — YALNIZCA Embay Yapı inşaat işleri (yönetici kararı 2026-09-27: Manitou için sosyal medya içeriği/reklamı YOK).
-// "150 günde villa" konsepti bir kez yayınlandı; tekrar etmemek için hiçbir direkte bu kalıp kullanılmaz.
+// EMBAY YAPI için yalnızca hafif çelik ev/yapı: içerik stili her gün döner, başka hizmet türü eklenmez.
 const PILLARS = [
-  { key: 'teslim', brand: 'Embay Yapı', topic: 'Anahtar teslim sözümüz: ev ve villaları söz verdiğimiz gibi teslim ediyoruz; projelerimizden gerçek görüntüler (belirli bir teslim olayı / tarih / m² UYDURMA)', badge: 'TESLİM ETTİK' },
-  { key: 'celik', brand: 'Embay Yapı', topic: 'Ağır çelik ve hafif çelik konstrüksiyon ev / villa: depreme dayanıklı, hızlı ve ekonomik yapı sistemleri', badge: 'ÇELİK YAPI' },
-  { key: 'ev', brand: 'Embay Yapı', topic: 'Müstakil ev yapımı: arsadan anahtar teslime ev yaptırma süreci, zemin etüdü, proje ve ruhsat, doğru malzeme seçimi', badge: 'EV YAPIMI' },
-  { key: 'tadilat', brand: 'Embay Yapı', topic: 'Komple tadilat ve renovasyon: mutfak, banyo, zemin, iç mekân yenileme; eski evi yeni gibi yapmak', badge: 'TADİLAT & RENOVASYON' },
-  { key: 'bina', brand: 'Embay Yapı', topic: 'Bina yapımı ve kentsel dönüşüm: depreme dayanıklı betonarme, kat karşılığı, apartman inşaatı', badge: 'BİNA YAPIMI' },
-  { key: 'tamirat', brand: 'Embay Yapı', topic: 'Tamirat ve onarım: çatı aktarma, su yalıtımı, dış cephe mantolama, çatlak ve rutubet onarımı', badge: 'TAMİRAT & ONARIM' },
-  { key: 'villa', brand: 'Embay Yapı', topic: 'Villa yapımı: Çatalca ve Silivri’de bahçeli villa, mimari detaylar, kaliteli işçilik (süre/gün vaadi verme)', badge: 'VİLLA YAPIMI' },
-  { key: 'santiye', brand: 'Embay Yapı', topic: 'Şantiyeden gerçek iş: kalıp, demir, beton dökümü, duvar örme, sıva — işin mutfağı ve ekibin emeği', badge: 'ŞANTİYE GÜNLÜĞÜ' },
-  { key: 'ipucu', brand: 'Embay Yapı', topic: 'İnşaat ve tadilat ipuçları: ev yaptırırken/tadilatta yapılan hatalar, dikkat edilmesi gerekenler, bilinçli müşteri rehberi', badge: 'USTADAN İPUCU' },
-  // "HER GÜN İNŞAATA DAİR YENİ BİR ŞEY ÖĞRENİYORUZ!" — sloganımızdaki 5 sistemi aşama aşama anlatan eğitim serisi (müşteri ne yaptıracağını bilsin)
-  { key: 'e_agir', brand: 'Embay Yapı', topic: 'AĞIR ÇELİK SİSTEMİ aşamaları: 1) zemin etüdü ve statik proje 2) betonarme temel ve ankraj bulonları 3) çelik kolon-kirişlerin atölyede kesim, kaynak ve boyası 4) sahada bulonlu montaj 5) trapez sac + beton kompozit döşeme 6) duvar, çatı, yalıtım ve ince işler — avantaj: hafif, sünek, depreme dayanıklı, hızlı', badge: 'BUGÜN ÖĞRENİYORUZ' },
-  { key: 'e_beton', brand: 'Embay Yapı', topic: 'BETONARME SİSTEMİ aşamaları: 1) zemin etüdü, proje ve ruhsat 2) hafriyat 3) temel (radye/sürekli) kalıp, demir, beton 4) her katta kolon-perde-kiriş-döşeme: kalıp, donatı, yapı denetim kontrolü, beton dökümü ve kür 5) çatı 6) duvar örme 7) sıva, tesisat ve ince işler', badge: 'BUGÜN ÖĞRENİYORUZ' },
-  { key: 'e_hafif', brand: 'Embay Yapı', topic: 'HAFİF ÇELİK SİSTEMİ aşamaları: 1) radye temel 2) galvaniz profillerin fabrikada hassas kesimi 3) duvar ve çatı panellerinin montajı 4) OSB / çimento esaslı levha ve su yalıtım membranı 5) taşyünü ısı-ses yalıtımı 6) dış cephe kaplama ve iç alçıpan 7) ince işler — avantaj: hızlı, hafif, deprem yükü düşük', badge: 'BUGÜN ÖĞRENİYORUZ' },
-  { key: 'e_kaba', brand: 'Embay Yapı', topic: 'İLERİ KABA İNŞAAT nedir: taşıyıcı sistem (temel, kolon, kiriş, döşeme) + duvarlar + çatı + sıva + elektrik/su tesisat altyapısı + doğrama — evi ince işlere (boya, zemin, mutfak, banyo) hazır hâle getiren aşama; bütçeyi kontrol etmek isteyenler için', badge: 'BUGÜN ÖĞRENİYORUZ' },
-  { key: 'e_istinat', brand: 'Embay Yapı', topic: 'İSTİNAT DUVARI / TAŞ DUVAR aşamaları: 1) eğim ve zemin etüdü 2) temel kazısı 3) betonarme temel (pabuç) 4) donatı + kalıp ya da taş örgü 5) barbakan delikleri, arkasına drenaj borusu ve çakıl filtre 6) geri dolgunun katman katman sıkıştırılması 7) taş kaplama — eğimli arsada toprağı tutar, bahçeyi kazandırır', badge: 'BUGÜN ÖĞRENİYORUZ' },
+  { key: 'question_hook', brand: 'Embay Yapı', topic: 'Hafif çelik ev yaptırmayı düşünen arsa sahibinin gerçek karar soruları; cevap için kaynak veya proje bilgisi yoksa kesin hüküm verme', badge: 'EV SAHİBİNİN SORUSU' },
+  { key: 'myth_fact', brand: 'Embay Yapı', topic: 'Hafif çelik yapı hakkında yaygın bir yanlış anlaşılma ve kaynak gerektirmeyen, ölçülü bir açıklama; teknik üstünlük iddiası uydurma', badge: 'DOĞRU BİLİNENLER' },
+  { key: 'mini_checklist', brand: 'Embay Yapı', topic: 'Hafif çelik ev için görüşmeye hazırlanan kişinin sorabileceği üç genel kontrol sorusu', badge: 'KISA KONTROL LİSTESİ' },
+  { key: 'detail_closeup', brand: 'Embay Yapı', topic: 'Hafif çelik duvar/panel, birleşim veya yalıtım katmanında tek bir görülebilir detay; görüntüde olmayanı iddia etme', badge: 'BİR DETAYA YAKINDAN' },
+  { key: 'project_journey', brand: 'Embay Yapı', topic: 'Yalnızca etiketlenmiş gerçek hafif çelik proje görüntüsünde görülebilen ilerleme; proje adı, tarih, ölçü veya teslim iddiası uydurma', badge: 'PROJE YOLCULUĞU' },
+  { key: 'homeowner_view', brand: 'Embay Yapı', topic: 'Hafif çelik ev düşünen arsa sahibinin ihtiyaç, kullanım ve yerel koşulları netleştirme süreci', badge: 'ARSA SAHİBİNE NOT' },
+  { key: 'short_explainer', brand: 'Embay Yapı', topic: 'Hafif çelik yapı sistemindeki tek bir terimi gündelik Türkçeyle, iddiasız biçimde açıklama', badge: 'KISA AÇIKLAMA' },
+  { key: 'process_steps', brand: 'Embay Yapı', topic: 'Hafif çelik proje görüşmesinden uygulama planına uzanan genel süreci en fazla üç aşamada anlatma; süre uydurma', badge: 'SÜREÇTEN ÜÇ ADIM' },
+  { key: 'visual_story', brand: 'Embay Yapı', topic: 'Yalnızca uygun etiketli gerçek hafif çelik saha/proje görselinde görülen bir ayrıntı üzerinden kısa anlatı', badge: 'GÖRÜNTÜDEN BİR NOT' },
+  { key: 'choice_guide', brand: 'Embay Yapı', topic: 'Hafif çelik ev kararı öncesi arsa, kullanım amacı ve proje kapsamı hakkında değerlendirilecek bir soru', badge: 'KARAR REHBERİ' },
+  { key: 'comment_prompt', brand: 'Embay Yapı', topic: 'Hafif çelik ev planlayan kişiye tek kısa bilgi ve doğal, tek cevaplı etkileşim sorusu', badge: 'SEN NE DÜŞÜNÜYORSUN?' },
+  { key: 'quiet_asmr', brand: 'Embay Yapı', topic: 'Uygun gerçek hafif çelik saha görüntüsü için sakin ve kısa ASMR/saha notu; trend veya dayanım vaadi yok', badge: 'SAHADAN SAKİN BİR AN' },
+  { key: 'materials', brand: 'Embay Yapı', topic: 'Hafif çelik duvar veya çatı sisteminde kullanılabilecek katman/malzeme hakkında genel bilgilendirme; marka ve teknik değer uydurma', badge: 'KATMANLARA YAKINDAN' },
 ] as const;
-const EGITIM_KEYS = ['e_istinat', 'e_agir', 'e_beton', 'e_hafif', 'e_kaba'];
-// Her direk için birbirinden farklı yedek başlıklar (AI yoksa bile aynı başlık tekrar tekrar çıkmasın)
+// Her direk için birden fazla yedek başlık; tükenince tarih-indeks ekiyle tekrar engellenir.
 const HEADLINES: Record<string, string[]> = {
-  teslim: ['Sözümüzün Arkasındayız', 'Anahtar Teslim, Söz Verdiğimiz Gibi', 'Hayallerinizdeki Yaşamı Teslim Ediyoruz', 'Projelerimizden Kareler', 'Temelden Anahtara Tek Muhatap'],
-  celik: ['Ağır Çelik ile Depreme Dayanıklı Ev', 'Hafif Çelik Villa: Hızlı ve Sağlam', 'Çelik Konstrüksiyonun Avantajları', 'Çelik Yapıyla Güvenli Yaşam', 'Çelik Villa Adım Adım Yükseliyor'],
-  ev: ['Hayalinizdeki Ev, Temelden', 'Ev Yaptırmadan Önce Bunu İzleyin', 'Arsadan Anahtara Tek Muhatap', 'Sağlam Ev Zeminden Başlar', 'Müstakil Ev Yaptırmak İstiyorum'],
-  tadilat: ['Eski Ev, Yeni Hayat', 'Tadilatta En Çok Yapılan 3 Hata', 'Mutfak Yenileme Nasıl Yapılır?', 'Banyo Tadilatı Adım Adım', 'Önce / Sonra: Farkı Görün'],
-  bina: ['Depreme Dayanıklı Bina Nasıl Yapılır?', 'Kentsel Dönüşümde Doğru Adım', 'Betonarmede Gözden Kaçanlar', 'Apartman İnşaatı Aşamaları', 'Kat Karşılığında Nelere Dikkat?'],
-  tamirat: ['Çatınız Akıtıyorsa İzleyin', 'Rutubetin Kökünü Kazıyoruz', 'Mantolama Neden Önemli?', 'Çatlak Duvar Tehlikeli mi?', 'Su Yalıtımı Doğru Yapılırsa'],
-  villa: ['Bahçeli Villa Hayali', 'Villada İşçilik Detayda Gizli', 'Çatalca’da Villa Yapımı', 'Villa Projesinde Doğru Planlama', 'Villanın Kaba İnşaatı'],
-  santiye: ['Şantiyede Bir Sabah', 'Beton Dökümü Günü', 'Ustalarımızın Emeği', 'Kalıptan Duvara', 'İşin Mutfağından Kareler'],
-  e_agir: ['Ağır Çelik Ev Nasıl Yapılır?', 'Ağır Çelikte 6 Aşama', 'Çelik İskelet Adım Adım', 'Ağır Çelik Neden Sağlam?', 'Ağır Çelik: Temelden Çatıya'],
-  e_beton: ['Betonarme Ev Nasıl Yükselir?', 'Betonarmede 7 Aşama', 'Beton Dökmeden Önce Neler Yapılır?', 'Betonarme: Temelden Çatıya', 'Kalıp, Demir, Beton'],
-  e_hafif: ['Hafif Çelik Ev Nasıl Yapılır?', 'Hafif Çelikte 7 Aşama', 'Hafif Çelik Neden Hızlı?', 'Hafif Çelik: Panelden Eve', 'Hafif Çelik Evin Katmanları'],
-  e_kaba: ['İleri Kaba İnşaat Nedir?', 'Kaba İnşaatta Hangi İşler Biter?', 'İnce İşlere Hazır Ev', 'Kaba İnşaat Adım Adım', 'Bütçe Dostu: İleri Kaba'],
-  e_istinat: ['İstinat Duvarı Nasıl Yapılır?', 'Taş Duvarın 7 Aşaması', 'Eğimli Arsaya Çözüm', 'Drenajsız İstinat Duvarı Yıkılır', 'Taş Duvar Adım Adım'],
-  ipucu: ['Ev Yaptıracaklara 5 İpucu', 'Tadilattan Önce Sorun', 'Müteahhit Seçerken Dikkat', 'Zemin Etüdü Neden Şart?', 'Malzeme Seçiminde Püf Noktalar'],
+  question_hook: ['Hafif Çelik Ev Planlarken İlk Sorunuz Ne?', 'Arsanız Hazır mı, Planınız da Hazır mı?', 'Ev Projesine Nereden Başlamalı?', 'Hafif Çelik Ev Hakkında Merak Ettikleriniz', 'İlk Görüşmede Neleri Konuşmalı?'],
+  myth_fact: ['Hafif Çelik Hakkında Bir Not', 'Sık Duyulan Bir Soruyu Açalım', 'Bilgi mi, Varsayım mı?', 'Bir Kavramı Netleştirelim', 'Yapı Sistemini Konuşalım'],
+  mini_checklist: ['Görüşmeden Önce 3 Soru', 'Hafif Çelik İçin Mini Liste', 'Proje Konuşmasına Hazırlık', 'Bu Üç Noktayı Not Edin', 'İlk Adımda Neleri Sorarsınız?'],
+  detail_closeup: ['Birleşim Detayına Yakından', 'Duvar Panelinde Bir Ayrıntı', 'Katman Katman Bir Bakış', 'Küçük Detay, Büyük Merak', 'Sahadaki Bir Noktaya Bakalım'],
+  project_journey: ['Gerçek Projeden Bir Kare', 'Bir Proje, Bir Sonraki Adım', 'Sahadan Bugünün Görüntüsü', 'Proje Yolculuğundan Notlar', 'Görüntüde Hangi Aşamayı Görüyorsunuz?'],
+  homeowner_view: ['Arsa Sahiplerine Kısa Bir Not', 'Evinizi Planlarken Kendinize Sorun', 'Kullanım İhtiyacınız Ne?', 'Hayalinizdeki Evi Tarif Edin', 'Planlamada Önce İhtiyaç'],
+  short_explainer: ['Bir Terimi Kısaca Açıklayalım', 'Hafif Çelikte Bu Ne Demek?', 'Kısa Bilgi: Panel Sistemi', 'Bugünün Yapı Terimi', 'Tek Kavram, Sade Anlatım'],
+  process_steps: ['Süreçte İlk Üç Adım', 'Proje Görüşmesinden Plana', 'Önce Konuşalım, Sonra Planlayalım', 'Birlikte Netleştirilecek Başlıklar', 'Başlangıç Noktası Neresi?'],
+  visual_story: ['Bu Görüntüde Ne Dikkatinizi Çekti?', 'Sahadan Kısa Bir Not', 'Kadrajın İçindeki Detay', 'Bugünün Proje Anı', 'Görüntüden Bir Gözlem'],
+  choice_guide: ['Karar Vermeden Önce', 'Arsa ve İhtiyaç Birlikte Düşünülür', 'Proje Kapsamını Netleştirin', 'Kendinize Sorabileceğiniz Bir Soru', 'Planınıza Uygun Sorular'],
+  comment_prompt: ['Sizin İlk Sorunuz Ne Olurdu?', 'Sizce İlk Adım Hangisi?', 'Hayalinizdeki Evin Bir Detayı?', 'Yorumlarda Buluşalım', 'Bu Konuda Siz Ne Merak Ediyorsunuz?'],
+  quiet_asmr: ['Sahadan Sakin Bir An', 'Günün Hafif Çelik Sesi', 'İşin Ritminden Kısa Bir Kesit', 'Saha Sesleri, Kısa Bir Not', 'Bir Anı Durduralım'],
+  materials: ['Bir Katmanı Tanıyalım', 'Duvar Sistemine Yakından', 'Malzeme Seçiminde Sorular', 'Katmanların Görevi Nedir?', 'Detayı Görmeden Karar Vermeyin'],
 };
 function pickHeadline(key: string, di: number, used: Set<string>) {
-  const list = HEADLINES[key] ?? HEADLINES.santiye;
+  const list = HEADLINES[key] ?? HEADLINES.question_hook;
   for (let k = 0; k < list.length; k++) { const h = list[(di + k) % list.length]; if (!used.has(h.toLocaleLowerCase('tr-TR'))) return h; }
-  return list[di % list.length];
+  return `${list[di % list.length]} · ${di + 1}`;
 }
 
 const CONTENT_SCHEMA = {
@@ -150,7 +146,7 @@ function renderEmbay(o: BannerOpts) {
   const textW = panelW - pad * 2;
   const clean = (l: string) => l.replace(/^[\s·|,-]+|[\s·|,-]+$/g, '');
   const cta = (o.cta.replace(/[:\s]*(\+?90\s*)?0?\s*5\d{2}[\s\d]{7,}/g, '').trim().replace(/^WhatsApp:?$/i, 'WhatsApp’tan yazın')) || 'Ücretsiz keşif için arayın';
-  const chips: Array<[string, string]> = [['bina', 'Betonarme'], ['vinc', 'Çelik yapı'], ['ev', 'Anahtar teslim']];
+  const chips: Array<[string, string]> = [['bina', 'Hafif çelik'], ['vinc', 'Proje süreci'], ['ev', 'Müstakil ev']];
   const showChips = tall;
   // Yazı sığmazsa (fotoğraf en az %38 kalacak şekilde) başlık ve alt yazı %8'lik adımlarla küçültülür → taşma/üst üste binme olmaz
   let scale = 1; let hSize = 0, sSize = 0, badgeH = 0, chipH = 0, hLines: string[] = [], sLines: string[] = [], contentH = 0;
@@ -302,15 +298,19 @@ ${bar}
 
 // ── Yapay zekâ görseli (Google Gemini görsel modeli). Temsili konsept görsel üretir; gönderide "temsilidir" notu düşülür.
 const AI_SCENES: Record<string, string[]> = {
-  teslim: ['newly completed modern two-storey villa handed over to owners, keys on a table in front, landscaped garden, golden hour', 'finished modern detached house exterior at sunset, fresh landscaping, warm lights'],
-  celik: ['steel frame house structure under construction, heavy steel beams and columns, clean site, blue sky', 'modern light gauge steel framed villa under construction, galvanized steel studs, daylight'],
-  ev: ['modern two-storey detached family house with garden, warm evening light, stone and white plaster facade, wooden details', 'newly built detached house in Istanbul countryside, landscaped yard, golden hour, architectural photography'],
-  villa: ['luxury modern villa with infinity pool at dusk, warm interior lights, natural stone walls, olive trees', 'contemporary villa with large glass windows and wooden pergola, sunset, Mediterranean landscape'],
-  bina: ['modern residential apartment building, clean facade with balconies, blue sky, urban Istanbul street', 'reinforced concrete building under construction with tower crane, scaffolding, dramatic sky'],
-  tadilat: ['bright renovated living room with oak floor and stone accent wall, warm lighting, interior design photography', 'freshly renovated modern kitchen with marble countertop and wood cabinets, soft daylight'],
-  tamirat: ['roof renovation with new clay tiles on a family house, craftsman tools, clear sky', 'house exterior facade insulation and fresh plaster work, scaffolding, daylight'],
-  santiye: ['construction site at sunrise with concrete formwork and rebar, workers silhouettes, cinematic', 'concrete pouring on a building slab, construction workers, golden hour, cinematic'],
-  ipucu: ['architect blueprint and hard hat on a table with a house model, soft light, top view', 'site engineer checking building plans at a construction site, shallow depth of field'],
+  question_hook: ['light gauge steel home planning desk with house sketches and site plan, no text, natural daylight', 'homeowner reviewing a small light steel house model and plans, candid hands only'],
+  myth_fact: ['clean close-up of light gauge steel wall framing detail, bright neutral workshop, no people faces', 'light steel wall panel beside a simple house plan, editorial architecture photography'],
+  mini_checklist: ['three blank note cards beside a light steel house model, calm blue palette, no legible text', 'architectural plan, pencil and small light steel home model on a bright desk'],
+  detail_closeup: ['close-up of light gauge steel wall panel and connection detail, realistic galvanized profiles, no heavy beams', 'light steel framing detail in a residential wall, soft natural light, authentic construction photography'],
+  project_journey: ['light gauge steel detached home project at an intermediate stage, residential scale, realistic site photo style', 'light steel wall panels being assembled for a small home, daylight, no crane or heavy beams'],
+  homeowner_view: ['quiet view from a residential plot toward a modest light steel home concept, realistic architecture', 'homeowner hands pointing at a small house plan on a table, no text, warm daylight'],
+  short_explainer: ['simple light steel wall cross section model on a white workbench, clear layers without labels', 'light gauge steel residential panel detail, neutral background, accurate modest scale'],
+  process_steps: ['three-stage light steel home planning sequence represented by simple sketches, no text, editorial style', 'architectural plan and light steel wall-panel sample arranged as a project discussion scene'],
+  visual_story: ['authentic light steel residential project detail with natural site light, documentary photography, no dramatic effects', 'light steel home wall-panel detail framed naturally in a real-looking residential worksite'],
+  choice_guide: ['light steel home plan, plot outline and pencil, homeowner planning scene, no readable text', 'residential light steel model on a desk with a site sketch, bright editorial photography'],
+  comment_prompt: ['light steel home model with a blank speech bubble card, no text, airy composition', 'homeowner looking at a small light steel home model from above, candid planning scene'],
+  quiet_asmr: ['calm close-up of hands fitting a light steel panel detail, documentary natural light, no faces', 'quiet light steel residential site detail in soft morning light, authentic and understated'],
+  materials: ['light steel wall sample with clearly separated layers on a clean table, no labels or text', 'residential light steel wall section sample with insulation layer visible, realistic materials'],
 };
 function aiPrompt(pillar: string, di: number) {
   const list = AI_SCENES[pillar] ?? AI_SCENES.ev;
@@ -491,56 +491,52 @@ ${wide ? '' : chips.map((c, i) => { const cw = Math.round((w - pad * 2 - u * 0.0
 function slotIso(day: string, hhmm: string) { return new Date(`${day}T${hhmm}:00+03:00`).toISOString(); }
 function dayIndex(day: string) { return Math.floor(new Date(`${day}T00:00:00Z`).getTime() / 86400000); }
 
-// ── Etiket stratejisi (yönetici kararı: gönderi başı EN AZ 20 etiket) ──
-// Instagram/Facebook/TikTok: 25 etiket (Instagram üst sınırı 30). YouTube 15'i geçerse TÜM etiketleri yok sayar → 15.
-// X (Twitter) 280 karakter sınırı yüzünden 3 etiket. Karışım: marka + konu + yerel + geniş inşaat etiketleri.
-const TAGS = {
-  yerel: ['#çatalca', '#silivri', '#büyükçekmece', '#istanbul', '#arnavutköy', '#beylikdüzü', '#hadımköy', '#esenyurt', '#avcılar', '#başakşehir', '#güngören', '#istanbulinşaat'],
-  konu: {
-    teslim: ['#anahtarteslim', '#tesliminyapıldı', '#villa', '#evyapımı', '#müstakilev', '#yenievimiz', '#hayalimdekiev', '#çatalca', '#projeteslim'],
-    celik: ['#çelikev', '#ağırçelik', '#hafifçelik', '#çelikkonstrüksiyon', '#çelikyapı', '#çelikvilla', '#depremedayanıklı', '#hızlıev', '#modülerev'],
-    ev: ['#evyapımı', '#müstakilev', '#anahtarteslim', '#evyaptırmak', '#yapı', '#bahçeliev', '#evinşaatı', '#yeniev', '#hayalimdekiev'],
-    bina: ['#binayapımı', '#kentseldönüşüm', '#depremedayanıklı', '#betonarme', '#müteahhit', '#apartman', '#katkarşılığı', '#yenibina', '#depremgüvenliği'],
-    tamirat: ['#tamirat', '#onarım', '#çatıtamiri', '#suyalıtımı', '#mantolama', '#çatıaktarma', '#rutubet', '#dışcephe', '#bakımonarım'],
-    villa: ['#villa', '#villainşaatı', '#villaprojesi', '#müstakilev', '#evyapımı', '#anahtarteslim', '#mimari', '#bahçelivilla', '#lüksev'],
-    donusum: ['#kentseldönüşüm', '#katkarşılığı', '#depremedayanıklı', '#müteahhit', '#yenibina', '#riskliyapı', '#binayapımı'],
-    tadilat: ['#tadilat', '#renovasyon', '#evtadilatı', '#mutfaktadilatı', '#banyotadilatı', '#dekorasyon', '#içmimari', '#tadilatöncesisonrası', '#evyenileme'],
-    santiye: ['#şantiye', '#şantiyehayatı', '#betonarme', '#kabainşaat', '#kalıp', '#demir', '#betondökümü', '#usta', '#inşaatmühendisi'],
-    e_agir: ['#ağırçelik', '#çelikkonstrüksiyon', '#çelikev', '#çelikvilla', '#depremedayanıklı', '#inşaatbilgisi', '#öğreniyoruz', '#yapısistemleri', '#evyaptırmak'],
-    e_beton: ['#betonarme', '#betondökümü', '#kabainşaat', '#evyapımı', '#depremedayanıklı', '#inşaatbilgisi', '#öğreniyoruz', '#yapısistemleri', '#evyaptırmak'],
-    e_hafif: ['#hafifçelik', '#hafifçelikev', '#çelikev', '#prefabrikev', '#hızlıev', '#inşaatbilgisi', '#öğreniyoruz', '#yapısistemleri', '#evyaptırmak'],
-    e_kaba: ['#kabainşaat', '#ilerikabainşaat', '#evyapımı', '#müstakilev', '#inşaatbilgisi', '#öğreniyoruz', '#yapısistemleri', '#evyaptırmak', '#bütçe'],
-    e_istinat: ['#istinatduvarı', '#taşduvar', '#bahçeduvarı', '#peyzaj', '#drenaj', '#inşaatbilgisi', '#öğreniyoruz', '#eğimliarsa', '#taşev'],
-    ipucu: ['#evyaptırmak', '#inşaatipuçları', '#müstakilev', '#zeminetüdü', '#bilgi', '#ipucu', '#evsahibi', '#müteahhitseçimi', '#yapıdenetim'],
-  } as Record<string, string[]>,
-  genis: ['#inşaat', '#insaat', '#construction', '#yapı', '#müteahhitlik', '#inşaatsektörü', '#mimarlık', '#architecture', '#building', '#renovation', '#homedesign', '#evdekorasyonu', '#türkiye', '#ev', '#emlak'],
-  marka: { manitou: '#şahinmanitou', diger: '#embayyapı' },
+// ── Etiket stratejisi: kısa, konu/marka/yer bakımından alakalı 3–5 etiket. ──
+const LIGHT_STEEL_TAGS = ['#hafifçelik', '#hafifçelikev', '#hafifçelikyapı', '#hafifçelikevler', '#müstakilev', '#evyaptırmak', '#evprojesi', '#hafifçelikduvar', '#duvarpaneli', '#yalıtım', '#evsahibi', '#arsa', '#mimari', '#istanbul', '#çatalca', '#silivri', '#büyükçekmece', '#embayyapı', '#evhayali', '#projeplanlama', '#sahagünlüğü', '#reels'];
+const STYLE_TAGS: Record<string, string[]> = {
+  question_hook: ['#sorucevap', '#evsahibisoruyor'], myth_fact: ['#doğrubeklenen', '#yapıbilgisi'], mini_checklist: ['#kontrol listesi'.replace(' ', ''), '#projehazırlığı'],
+  detail_closeup: ['#yapıdetayı', '#detayayakından'], project_journey: ['#projejurnali', '#projesüreci'], homeowner_view: ['#arsa', '#evplanı'],
+  short_explainer: ['#kısabilgi', '#hafifçelikbilgi'], process_steps: ['#süreçadımları', '#planlama'], visual_story: ['#sahadangörüntü', '#gerçekproje'],
+  choice_guide: ['#kararrehberi', '#evyaptırmak'], comment_prompt: ['#yorumlarda', '#sorunuzualalım'], quiet_asmr: ['#sahaasmr', '#hafifçelik'], materials: ['#duvarkatmanları', '#malzemebilgisi'],
 };
-function tagMix(p: Platform, pillar: string, ai: string[]) {
-  const max = p === 'x' ? 3 : p === 'youtube' ? 15 : 25;
-  const brand = TAGS.marka.diger;
-  const topic = (TAGS.konu[pillar] ?? TAGS.konu.santiye).filter((t) => !/[^\p{L}#]/u.test(t));
-  const extra = p === 'youtube' ? ['#shorts'] : p === 'tiktok' ? ['#fyp', '#keşfet'] : p === 'instagram' ? ['#keşfet', '#reels'] : [];
-  const plan = p === 'x' ? [topic[0], TAGS.yerel[3], brand]
-    : [brand, ...extra, ...topic, ...TAGS.yerel.slice(0, 6), ...TAGS.genis.slice(0, 7), ...TAGS.yerel.slice(6), ...TAGS.genis.slice(7), '#embay'];
+function tagMix(p: Platform, pillar: string) {
+  const max = p === 'x' ? 3 : 5;
+  const topic = [...(STYLE_TAGS[pillar] ?? []), ...LIGHT_STEEL_TAGS].filter((t) => !isEmbayOffScope(t));
+  const extra = p === 'youtube' ? ['#shorts'] : p === 'instagram' ? ['#reels'] : [];
+  const plan = p === 'x' ? [topic[0], '#istanbul', '#embayyapı'] : [...topic.slice(0, 2), ...extra, '#hafifçelik', '#embayyapı'];
   const out: string[] = [];
-  // önce kendi planımız (en az 20 garanti), sonra AI'ın önerdikleri araya karışır
-  for (const t of [...plan.slice(0, 12), ...ai, ...plan.slice(12)]) {
+  // Yalnız doğrulanmış konu/marka etiketlerini kullan; AI'ın genel/alakasız etiketlerini ekleme.
+  for (const t of plan) {
     const k = t.toLocaleLowerCase('tr-TR');
-    if (t.startsWith('#') && !/manitou|kiralama/i.test(t) && !out.some((o) => o.toLocaleLowerCase('tr-TR') === k)) out.push(t);
+    if (t.startsWith('#') && !isEmbayOffScope(t) && !out.some((o) => o.toLocaleLowerCase('tr-TR') === k)) out.push(t);
   }
   return out.slice(0, max);
 }
 
 function fallbackItems(p: Platform, pillars: typeof PILLARS[number][], di: number, used: Set<string>, V = 1): Item[] {
-  // AI yoksa: marka bilgisiyle hazır, uydurma içermeyen kısa metinler; başlıklar son 30 günde kullanılmamış olanlardan seçilir
+  // AI yoksa: style başına değişen, marka bilgisiyle uyumlu, uydurma içermeyen metinler.
   return pillars.map((pl, i) => {
     const headline = pickHeadline(pl.key, di + i, used); used.add(headline.toLocaleLowerCase('tr-TR'));
+    const captions: Record<string, string> = {
+      question_hook: 'Hafif çelik ev planlarken aklınıza ilk hangi soru geliyor? İhtiyacınızı ve arsanızla ilgili bilgileri netleştirerek görüşmeye başlayabilirsiniz.',
+      myth_fact: 'Hafif çelik yapı hakkında duyduğunuz her bilgiyi kendi projenizin koşullarıyla birlikte değerlendirin. Merak ettiğiniz noktayı bize sorabilirsiniz.',
+      mini_checklist: 'Görüşme öncesi üç başlığı not edin: kullanım amacı, arsa bilgileri ve proje kapsamı. Böylece ihtiyaçlarınızı daha net konuşabilirsiniz.',
+      detail_closeup: 'Bir yapı sistemini değerlendirirken tek bir detaya değil, projenin bütününe bakmak gerekir. Hafif çelik ev planınız için sorularınızı birlikte netleştirelim.',
+      project_journey: 'Her proje kendi ihtiyaçları ve koşullarıyla şekillenir. Hafif çelik ev düşünceniz varsa ilk adım beklentilerinizi ve kapsamı konuşmaktır.',
+      homeowner_view: 'Arsanızda nasıl bir yaşam alanı hayal ediyorsunuz? Kullanım ihtiyacınızı tarif etmek, proje görüşmesinin iyi bir başlangıcı olabilir.',
+      short_explainer: 'Hafif çelik ev planında sistem, kullanım amacı ve proje kapsamı birlikte değerlendirilir. Aklınızdaki soruyu bize iletin.',
+      process_steps: 'İlk görüşmede ihtiyacınızı, arsa bilgilerinizi ve proje kapsamını netleştirin. Uygun sonraki adımlar bu başlıklar üzerinden konuşulur.',
+      visual_story: 'Bu karede dikkatinizi çeken ilk detay ne? Hafif çelik ev projelerini gerçek görüntüler ve doğru bilgilerle konuşalım.',
+      choice_guide: 'Karar vermeden önce arsanız, kullanım amacınız ve ihtiyaç listeniz üzerine düşünün. Sonra seçenekleri birlikte değerlendirebiliriz.',
+      comment_prompt: 'Hafif çelik ev planlarken ilk hangi konuyu öğrenmek isterdiniz? Yorumlarda paylaşın, birlikte konuşalım.',
+      quiet_asmr: 'Sahadan sakin bir an. Görüntünün ritmini izleyin; hafif çelik ev projenizle ilgili sorularınızı bize iletin.',
+      materials: 'Duvar ve çatı katmanları projeye göre değerlendirilir. Malzeme seçimiyle ilgili sorularınızı görüşmede netleştirebilirsiniz.',
+    };
     return {
       format: i < V ? 'reel' : 'banner', brand: 'Embay Yapı', title: `${pl.badge} · ${p}`, badge: pl.badge, headline,
-      subtitle: pl.topic.split(':')[0], caption: `${headline} — ${pl.topic}. Ev, villa, bina, tadilat ve tamirat: inşaata dair tüm işleriniz yapılır. Keşif ve teklif için bize yazın: 0531 436 29 04`,
-      hashtags: p === 'x' ? ['#inşaat', '#istanbul'] : ['#inşaat', '#istanbul', '#çatalca', '#tadilat', '#evyapımı'].slice(0, p === 'tiktok' ? 4 : 5),
-      cta: 'WhatsApp: 0531 436 29 04', video_script: i < V ? '0-2 sn: güçlü kanca · 3-10 sn: işin yapılışı · 11-20 sn: bitmiş iş/önce-sonra · son 3 sn: logo + telefon' : undefined,
+      subtitle: pl.topic.split(';')[0].slice(0, 100), tone: pl.key, caption: captions[pl.key] ?? captions.question_hook,
+      hashtags: p === 'x' ? ['#hafifçelik', '#istanbul', '#embayyapı'] : ['#hafifçelik', '#hafifçelikev', '#embayyapı', '#istanbul', '#evprojesi'].slice(0, p === 'tiktok' ? 4 : 5),
+      cta: 'Bize danışın', video_script: i < V ? '0-2 sn: o günün farklı soru/gözlem kancası · 3-12 sn: yalnız gerçek ve uygun hafif çelik görüntüsü · son bölüm: kısa açıklama + logo. Görüntüde olmayan bilgi veya sonuç ekleme.' : undefined,
     } as Item;
   });
 }
@@ -549,10 +545,10 @@ function fallbackItems(p: Platform, pillars: typeof PILLARS[number][], di: numbe
 /** Günlük yayın sınırı (platform başına): 1 banner + 1 Reels. Üretim sürer; sınırı aşan içerik taslak olarak HAVUZDA bekler
  *  (önerilen saati korunur; Yayın Kuyruğu → Havuz sekmesinden tek tıkla planlanır). Gerekçe: günde 3-4 banner etkileşimi düşürüyordu (0-5 beğeni). */
 export const DAILY_LIMIT: Record<string, { formats: string[]; max: number }> = { banner: { formats: ['banner'], max: 1 }, reel: { formats: ['reel', 'short'], max: 1 } };
-async function dayFull(db: Db, platform: string, day: string, format: string) {
+async function dayFull(db: Db, platform: string, day: string, format: string, clientId: string) {
   const lim = DAILY_LIMIT[format]; if (!lim) return false;
   const start = `${day}T00:00:00+03:00`; const end = new Date(new Date(start).getTime() + 86400_000).toISOString();
-  const { count } = await db.from('social_drafts').select('id', { count: 'exact', head: true }).eq('primary_platform', platform).in('format', lim.formats).is('archived_at', null)
+  const { count } = await db.from('social_drafts').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('primary_platform', platform).in('format', lim.formats).is('archived_at', null)
     .in('workflow_status', ['scheduled', 'approved', 'pending_approval', 'processing', 'published']).gte('scheduled_at', start).lt('scheduled_at', end);
   return (count ?? 0) >= lim.max;
 }
@@ -560,133 +556,120 @@ async function dayFull(db: Db, platform: string, day: string, format: string) {
 export async function runContentFactory(db: Db, opts: { force?: boolean; maxBanners?: number } = {}) {
   const maxBanners = opts.maxBanners ?? 1; let rendered = 0; let partial = false;
   const { label: day } = istanbulDayRange();
-  // Haftalık plan olan günde yapay zekâ ile ayrıca içerik üretilmez (plan, gözle seçilmiş görsel + uyumlu metin içerir)
-  const { count: planned } = await db.from('content_plan').select('id', { count: 'exact', head: true }).eq('day', day);
-  if (planned) { await db.from('content_factory_days').update({ finished_at: new Date().toISOString() }).eq('day', day); return { day, created: 0, errors: [], partial: false, plan: planned }; }
   const { data: quotas } = await db.from('content_quota').select('*').eq('enabled', true);
-  const brand = await defaultBrand(db);
+  const { data: client } = await db.from('agency_clients').select('id,name').eq('slug', 'embay-yapi').eq('status', 'active').maybeSingle();
+  if (!client?.id) return { day, created: 0, errors: ['İçerik Fabrikası durduruldu: aktif Embay Yapı müşterisi bulunamadı.'], partial: false, blocked: true };
+  const clientId = String(client.id);
+  // Haftalık plan olan günde ayrıca günlük içerik üretilmez; yalnız seçili müşteri planı etkili olur.
+  const { count: planned } = await db.from('content_plan').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('day', day);
+  if (planned) { await db.from('content_factory_days').update({ finished_at: new Date().toISOString() }).eq('day', day); return { day, created: 0, errors: [], partial: false, plan: planned }; }
+  const { data: brand } = await db.from('brand_kits').select('*').eq('client_id', clientId).order('is_default', { ascending: false }).limit(1).maybeSingle();
+  if (!brand || !/embay/i.test(String(brand.company_name ?? ''))) return { day, created: 0, errors: ['İçerik Fabrikası durduruldu: Embay Yapı marka kiti doğrulanamadı.'], partial: false, blocked: true };
   const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
   const { data: admin } = await db.from('team_members').select('user_id').eq('role', 'admin').order('created_at').limit(1).maybeSingle();
   // Otopilot 'onaysız yayın' açıksa taslaklar doğrudan zamanlanır (Reels otomatik montaj bağlanana kadar yayınlanmaz)
   const { data: ap } = await db.from('ops_autopilot').select('auto_publish').eq('id', 1).maybeSingle();
   const autoPublish = (ap as { auto_publish?: boolean } | null)?.auto_publish === true;
   // Gerçek medya: en az kullanılan video/fotoğraf önce (Drive'dan gelenler dahil) → her gün farklı kareler
-  const { data: vids } = await db.from('media_library').select('id,url,cover_url,title,caption,use_count,source,edit').eq('kind', 'video').is('archived_at', null)
+  const { data: vids } = await db.from('media_library').select('id,url,cover_url,title,caption,use_count,source,edit').eq('client_id', clientId).eq('kind', 'video').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(300);
   // Önce hazır montajlar (logolu, adım yazılı Reels), sonra ham videolar; HEVC en sona (bazı tarayıcılarda önizlenmez)
   // Ham şantiye videoları önce (otomatik montaj yeni Embay tarzında editler); eski tarz montajlar ve HEVC en sona
   const rank = (v: { source?: string | null; edit?: { codec?: string } | null }) => (v.source === 'ig_archive' ? 0 : v.source === 'montage' ? 3 : v.edit?.codec === 'hevc' ? 2 : 1);
-  const videos = (vids || []).map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
-  const { data: aiPool } = await db.from('media_library').select('id,url,mime,use_count,pillar').eq('kind', 'image').eq('source', 'ai').is('archived_at', null)
-    .order('use_count', { ascending: true, nullsFirst: true }).order('last_used_at', { ascending: true, nullsFirst: true }).limit(200);
-  const { data: photos } = await db.from('media_library').select('id,url,mime,use_count').eq('kind', 'image').neq('source', 'ai').is('archived_at', null)
+  const videos = (vids || []).filter((v) => !isEmbayOffScope(`${v.title ?? ''} ${v.caption ?? ''}`)).map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
+  const { data: photos } = await db.from('media_library').select('id,url,mime,use_count,title,caption').eq('client_id', clientId).eq('kind', 'image').neq('source', 'ai').is('archived_at', null)
     .order('last_used_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }).limit(60);
   let pIdx = 0;
   // Tekrar yasağı: son 30 günün başlıkları (yayınlanmış/planlanmış) ve daha önce bir gönderide kullanılmış videolar yeniden kullanılmaz
-  const { data: recent } = await db.from('social_drafts').select('headline,video_url').gte('created_at', new Date(Date.now() - 30 * 86400_000).toISOString()).limit(1000);
+  const { data: recent } = await db.from('social_drafts').select('headline,video_url,caption,tone,content_pillar').eq('client_id', clientId).gte('created_at', new Date(Date.now() - 45 * 86400_000).toISOString()).order('created_at', { ascending: false }).limit(1000);
   const usedHeads = new Set<string>((recent || []).map((r) => String(r.headline ?? '').toLocaleLowerCase('tr-TR')).filter(Boolean));
-  usedHeads.add('150 günde bir villa nasıl yükselir?');
+  const editorialHistory = (recent || []) as EditorialHistory[];
   const usedVideos = new Set<string>((recent || []).map((r) => r.video_url as string).filter(Boolean));
-  const freshVideos = videos.filter((v) => (v.use_count ?? 0) === 0 && v.source !== 'montage' && v.edit?.codec !== 'hevc' && !usedVideos.has(v.url) && !/manitou|telehandler/i.test(v.title ?? ''));
+  const freshVideos = videos.filter((v) => (v.use_count ?? 0) === 0 && v.source !== 'montage' && v.edit?.codec !== 'hevc' && !usedVideos.has(v.url));
+  const cleanPhotos = (photos || []).filter((v) => !isEmbayOffScope(`${v.title ?? ''} ${v.caption ?? ''}`));
   const markUsed = async (m: { id: string; use_count?: number | null }) => {
     m.use_count = (m.use_count ?? 0) + 1;
     await db.from('media_library').update({ use_count: m.use_count, last_used_at: new Date().toISOString() }).eq('id', m.id);
   };
-  const { data: existing } = await db.rpc('content_quota_today');
-  const have = new Map(((existing || []) as Array<{ platform: string; videos: number; banners: number }>).map((r) => [r.platform, r]));
+  const { data: existing } = await db.from('social_drafts').select('primary_platform,format').eq('client_id', clientId).is('archived_at', null)
+    .in('workflow_status', ['scheduled', 'approved', 'pending_approval', 'processing', 'published']).gte('scheduled_at', `${day}T00:00:00+03:00`).lt('scheduled_at', new Date(new Date(`${day}T00:00:00+03:00`).getTime() + 86400_000).toISOString()).limit(1000);
+  const have = new Map<string, { videos: number; banners: number }>();
+  for (const row of existing ?? []) {
+    const entry = have.get(row.primary_platform) ?? { videos: 0, banners: 0 };
+    if (['reel', 'short'].includes(row.format)) entry.videos++;
+    if (row.format === 'banner') entry.banners++;
+    have.set(row.primary_platform, entry);
+  }
   const di = dayIndex(day); let created = 0; const errors: string[] = []; let vIdx = 0;
   const actx = { db, runId: null, actorId: admin?.user_id ?? null, tokens: { in: 0, out: 0 }, agent: null } as unknown as Parameters<typeof aiComplete>[0];
 
   const ORDER = ['instagram', 'facebook', 'youtube', 'tiktok', 'x'];
-  // Öğrenme döngüsü: son 45 günün ölçümlerine göre (beğeni + 3×yorum) en iyi giden konu her gün 1 yer alır (en az 3 ölçüm);
-  // diğer yerler dönüşümlü kalır → yeni konular denenmeye devam eder. Veri azsa varsayılan sıra.
-  const { data: learnRows } = await db.rpc('content_learning', { p_days: 45 });
-  const learn = ((learnRows || []) as Array<{ format: string; pillar: string; n: number; score: number; best_headline: string | null }>);
-  const bestOf = (fmt: string) => learn.find((r) => r.format === fmt && r.n >= 3);
-  const bestKey = (fmt: string) => { const b = bestOf(fmt); return b ? PILLARS.find((pp) => pp.badge === b.pillar)?.key : undefined; };
-  const learnHint = learn.filter((r) => r.n >= 3 && r.best_headline).slice(0, 3)
-    .map((r) => `“${r.best_headline}” (${r.format}, ${r.pillar}: ort. skor ${r.score}, ${r.n} paylaşım)`).join(' · ');
   // Bugün daha önce yapay zekâ görselli banner üretildiyse (yarım kalan üretim) yeniden üretme
-  const { count: aiToday } = await db.from('media_library').select('id', { count: 'exact', head: true }).eq('kind', 'banner').gte('created_at', `${day}T00:00:00+03:00`).eq('template->>ai_image', 'true');
-  let aiBudget = (aiToday ?? 0) > 0 ? 0 : 1;
+  // Embay Yapı için yalnızca tenant'a atanmış gerçek fotoğraf/video kullanılır; AI ile temsili yapı görseli üretilmez.
   for (const q of ((quotas || []) as Quota[]).sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform))) {
     if (partial) break;
     const h = have.get(q.platform); const needV = Math.max(0, q.video_per_day - (h?.videos ?? 0)); const needB = Math.max(0, q.image_per_day - (h?.banners ?? 0));
     if (!needV && !needB && !opts.force) continue;
     const pIdx0 = ['instagram', 'tiktok', 'youtube', 'facebook', 'x'].indexOf(q.platform);
     const V = Math.max(0, q.video_per_day); const B = Math.max(0, q.image_per_day); const N = V + B;
-    // Geçmiş verisi (Instagram 2025): en çok ilgi ve fiyat sorusu 'biten/teslim edilen proje' ve 'çelik villa' videolarına geldi → Reels bunlardan
-    const bR = bestKey('reel'); const bB = bestKey('banner');
-    const REEL_KEYS = ['teslim', 'celik', 'villa', 'teslim', 'ev', 'celik', 'santiye'];
-    const BANNER_KEYS = [EGITIM_KEYS[di % EGITIM_KEYS.length], 'villa', 'teslim', EGITIM_KEYS[(di + 2) % EGITIM_KEYS.length], 'ev', 'celik', 'tadilat', 'bina'];
     const pillars: Array<typeof PILLARS[number]> = [];
-    for (let k = 0; k < N; k++) {
-      const keys = k < V ? REEL_KEYS : BANNER_KEYS; let off = 0; let pl: typeof PILLARS[number] | undefined;
-      const forced = k === 0 && V > 0 ? bR : k === V ? bB : undefined; // günün ilk Reels'i ve ilk banner'ı: en iyi giden konu
-      if (forced) pl = PILLARS.find((pp) => pp.key === forced);
-      if (!pl || pillars.some((x) => x.key === pl!.key)) {
-        pl = undefined;
-        do { pl = PILLARS.find((pp) => pp.key === keys[(di + pIdx0 * 2 + k + off) % keys.length]); off++; } while (pl && pillars.some((x) => x.key === pl!.key) && off < keys.length);
-      }
-      pillars.push(pl ?? PILLARS[k % PILLARS.length]);
-    }
+    const chosenStyles = chooseEditorialStyles(editorialHistory, N, di + pIdx0 * N);
+    for (const style of chosenStyles) pillars.push(PILLARS.find((pillar) => pillar.key === style.key) ?? PILLARS[0]);
     // Reels videoları önceden seçilir: eski başarılı gönderilerimizin (ig_archive) videosu ise gerçek proje bilgisi (konum, m², sistem) metne bağlam olarak verilir
     const reelVids = freshVideos.slice(vIdx, vIdx + needV) as Array<{ source?: string | null; caption?: string | null; title?: string | null }>;
-    const context = reelVids.map((rv, k) => rv?.source === 'ig_archive' && (rv.caption || rv.title) ? `${k + 1}. Reels'in videosu ESKİ GÖNDERİMİZDEN (gerçek proje): "${String(rv.caption || rv.title).replace(/\s+/g, ' ').slice(0, 320)}" — bu metindeki konum/m²/yapı sistemi bilgisini kullanabilirsin ama cümleleri tamamen YENİ ve farklı kur.` : '').filter(Boolean);
+    const context = reelVids.map((rv, k) => rv?.source === 'ig_archive' && (rv.caption || rv.title) && !isEmbayOffScope(`${rv.caption ?? ''} ${rv.title ?? ''}`) ? `${k + 1}. GERÇEK GÖRÜNTÜ BAĞLAMI: "${String(rv.caption || rv.title).replace(/\s+/g, ' ').slice(0, 240)}". Yalnız doğrulanabilir bilgi ve kadrajda görüleni kullan; metni özgün kur.` : '').filter(Boolean);
     let items: Item[] = [];
     try {
       const { json } = await aiComplete(actx, 'content_factory', [
-        `Embay Yapı (Çatalca/İstanbul) için ${q.platform.toUpperCase()} platformunda BUGÜN paylaşılacak ${N} içerik yaz. Amaç: bitmiş villa ve biten proje tanıtımlarıyla "ben de böyle bir ev yaptırmak istiyorum" diyen kişilerin dikkatini çekmek ve keşfete düşmek.`,
-        `ÜSLUP (geçmişte en çok ilgi ve fiyat talebi alan gönderilerimizden): kısa ve samimi, emojili bir açılış cümlesi (ör. "SÖZÜMÜZÜN ARKASINDAYIZ 🎉", "Biten İstanbul/Çatalca projemiz sizlerle! 🏡"), ardından "Embay Yapı olarak ..." ile başlayan 2-3 cümlelik güven veren açıklama, sonunda "Fiyat ve detaylı bilgi için DM'den ya da WhatsApp ${brand?.phone ?? '0531 436 29 04'}'ten yazın" çağrısı. Proje adı, m², şehir UYDURMA — yalnızca aşağıda verilen eski gönderi metinlerindeki bilgileri kullan, bilinmiyorsa genel yaz.`,
+        `Embay Yapı için ${q.platform.toUpperCase()} platformunda ${N} özgün içerik hazırla. Marka kapsamı SADECE HAFİF ÇELİK EV/YAPI. Hafif çelik ev düşünen arsa sahiplerine yararlı, doğal ve çeşitli içerikler üret. Her öğe kendi açısını ve anlatım düzenini kullanmalı.`,
+        `HER ÖĞE İÇİN AYRI TARZ: ${pillars.map((p, i) => `${i + 1}. ${editorialPrompt(chosenStyles[i])}`).join('\n')}`,
         ...context,
-        ...(learnHint ? [`GEÇMİŞ PERFORMANS (bizim hesabımızda en çok etkileşim alanlar): ${learnHint}. Bu başlıkların TARZINI (soru mu, sayı mı, duygu mu) örnek al ama kelimesi kelimesine tekrar ETME.`] : []),
-        `YASAK: Manitou, iş makinesi, kiralama konusu YAZMA. "150 günde villa" kalıbını ve aşağıdaki son kullanılan başlıkları TEKRAR ETME; her içerik özgün bir açı olsun. Son kullanılan başlıklar: ${[...usedHeads].slice(0, 40).join(' | ') || '—'}`,
+        `YASAK: Ağır çelik, betonarme, kentsel dönüşüm, tadilat, tamirat, Manitou, kiralama ve alakasız hizmetleri anma. Proje adı, teslim, m², süre, teknik üstünlük, fiyat veya başarı iddiası UYDURMA. Son 45 gündeki başlık ve kalıpları tekrar etme: ${editorialHistory.slice(0, 20).map((r) => `${r.headline ?? ''}: ${(r.caption ?? '').slice(0, 80)}`).join(' | ') || '—'}`,
         `İlk ${V} içerik format=reel (kısa dikey video: kanca + çekim senaryosu video_script'e), kalan ${B} içerik format=banner (görsel üzerinde büyük başlık "headline" en fazla 5 kelime, "subtitle" en fazla 14 kelime).`,
         `Konular sırasıyla: ${pillars.map((p, i) => `${i + 1}) ${p.topic}`).join(' · ')}`,
-        `"BUGÜN ÖĞRENİYORUZ" konulu içerikler EĞİTİM SERİSİDİR: caption "Her gün inşaata dair yeni bir şey öğreniyoruz! 📚" ile başlasın, sonra sistemi 1 cümleyle tanıt, verilen aşamaları numaralı ve emojili kısa satırlarla sırala (aşama ekleme/uydurma yapma), "Siz hangi sistemle ev yaptırmak isterdiniz? Yorumlara yazın 👇" sorusuyla etkileşim iste, en sonda "Türkiye'nin 81 iline kurulum! 🇹🇷" ve iki telefonu yaz. headline soru biçiminde olsun (ör. "İstinat Duvarı Nasıl Yapılır?").`,
         PLATFORM_RULES[q.platform],
-        `"cta" en fazla 24 karakter. İletişim: ${brand?.phone ?? '0531 436 29 04'}${brand?.phone2 ? ' / ' + brand.phone2 : ''} · WhatsApp · ${brand?.website ?? ''}. Uydurma müşteri adı, fiyat YAZMA. Türkçe, doğal, harekete geçiren dil. Hashtag'ler # ile (en az 20).`,
+        `"cta" en fazla 24 karakter ve her öğede aynı CTA'yı tekrarlama. Gerçek iletişim: ${brand.phone ?? ''}${brand.phone2 ? ' / ' + brand.phone2 : ''} · ${brand.website ?? ''}. Türkçe, doğal ve kısa yaz. Hashtag önerileri ver; sistem sonradan yalnız hafif çelik, ev ve yerel alakalı etiketleri kullanacak.`,
       ].join('\n'), CONTENT_SCHEMA);
       // deno-lint-ignore no-explicit-any
-      items = ((json?.items ?? []) as any[]).slice(0, N).filter((it) => !/manitou|kiralama|150 g[üu]n/i.test(`${it.headline} ${it.caption}`) && !usedHeads.has(String(it.headline ?? '').toLocaleLowerCase('tr-TR'))).map((it, i) => ({ ...it, format: i < V ? 'reel' : 'banner', badge: pillars[i].badge, brand: 'Embay Yapı' as Item['brand'],
-        hashtags: (Array.isArray(it.hashtags) ? it.hashtags : []).map((t: string) => (String(t).startsWith('#') ? String(t) : `#${t}`)).slice(0, 30) }));
+      const generated = ((json?.items ?? []) as any[]).slice(0, N).map((it, i) => ({ ...it, format: i < V ? 'reel' : 'banner', badge: pillars[i].badge, tone: pillars[i].key, brand: 'Embay Yapı' as Item['brand'],
+        hashtags: (Array.isArray(it.hashtags) ? it.hashtags : []).map((t: string) => (String(t).startsWith('#') ? String(t) : `#${t}`)).slice(0, 30) } as Item));
+      for (const candidate of generated) {
+        const check = validateEditorialCandidate({ ...candidate, pillar: candidate.badge }, [...editorialHistory, ...items.map((it) => ({ headline: it.headline, caption: it.caption, tone: it.tone }))]);
+        if (check.ok) items.push(candidate);
+      }
     } catch (e) { errors.push(`${q.platform}: AI — ${String((e as Error).message).slice(0, 120)} (hazır metin kullanıldı)`); }
-    if (items.length < N) items = fallbackItems(q.platform, pillars, di, usedHeads, V);
+    if (items.length < N) {
+      const fallbacks = fallbackItems(q.platform, pillars.slice(items.length), di, usedHeads, Math.max(0, V - items.length));
+      for (const candidate of fallbacks) if (items.length < N && validateEditorialCandidate({ ...candidate, pillar: candidate.badge }, [...editorialHistory, ...items.map((x) => ({ headline: x.headline, caption: x.caption, tone: x.tone }))]).ok) items.push(candidate);
+    }
     for (const it of items) usedHeads.add(it.headline.toLocaleLowerCase('tr-TR'));
-    items = items.map((it, i) => ({ ...it, hashtags: tagMix(q.platform, pillars[i].key, it.hashtags) }));
+    items = items.map((it, i) => ({ ...it, tone: it.tone ?? pillars[i]?.key ?? 'question_hook', hashtags: tagMix(q.platform, it.tone ?? pillars[i]?.key ?? 'question_hook') }));
 
     const plan = [...items.slice(V - needV, V), ...items.slice(V + (B - needB), V + B)]; // yarım kalan günde kalan içerikten devam
     for (const [i, it] of plan.entries()) {
-      if (it.format === 'banner' && rendered >= maxBanners) { partial = true; break; }
+        if (it.format === 'banner' && rendered >= maxBanners) { partial = true; break; }
       try {
-        if (it.format === 'banner') rendered++;
         const slot = q.slot_times[Math.min(i + Math.max(0, q.slot_times.length - plan.length), q.slot_times.length - 1)] ?? '12:00';
-        let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null; let aiUsed = false;
+        let media: string[] = []; let video_url: string | null = null; let note = ''; let reelCover: string | null = null;
         if (it.format === 'banner') {
-          // Banner'lar gerçek fotoğraflarımızla; günde yalnızca 1 tanesi yapay zekâ konsept görseliyle (temsilî — açıklamaya not düşülür)
-          const pillarKey = PILLARS.find((pp) => pp.badge === it.badge)?.key ?? 'ev';
+          // Banner'lar yalnızca bu şirketin atanmış gerçek görselleriyle hazırlanır.
           let photo: Uint8Array | null = null; let photoMime: string | undefined; let ph: { id: string; url: string; mime?: string | null } | null = null;
-          // Gerçek fotoğraf ağırlıklı: tüm platformlarda günde EN FAZLA 1 yapay zekâ görselli banner (yönetici kararı)
-          if (it.format === 'banner' && i === plan.length - 1 && aiBudget > 0) { aiBudget--; photo = await aiImage(aiPrompt(pillarKey, di + i), q.width, q.height, di * 10 + i + ORDER.indexOf(q.platform) * 101); if (photo) { photoMime = photo[0] === 0x89 ? 'image/png' : 'image/jpeg'; aiUsed = true; }
-            else {
-              // Gemini yoksa: önceden üretilmiş yapay zekâ görsel havuzundan (Canva) bu konuya en az kullanılanı
-              const cand = (aiPool || []).filter((a) => a.pillar === pillarKey).concat((aiPool || []).filter((a) => a.pillar !== pillarKey));
-              const pick = cand.sort((a, b) => (a.use_count ?? 0) - (b.use_count ?? 0))[0];
-              if (pick) { const rr = await fetch(pick.url).catch(() => null); if (rr?.ok) { photo = new Uint8Array(await rr.arrayBuffer()); photoMime = pick.mime ?? 'image/jpeg'; aiUsed = true; await markUsed(pick); } }
-            } }
-          if (!photo) {
-            ph = photos?.length ? photos[pIdx++ % photos.length] : null;
-            photo = ph ? new Uint8Array(await (await fetch(ph.url)).arrayBuffer()).slice(0) : null; photoMime = ph?.mime ?? undefined;
-            if (ph) await markUsed(ph as { id: string });
-          }
-          const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: it.brand, badge: it.badge, headline: it.headline, subtitle: it.subtitle, cta: it.cta, photo: photo && photo.length < 4_000_000 ? photo : null, photoMime });
+          ph = cleanPhotos.length ? cleanPhotos[pIdx++ % cleanPhotos.length] : null;
+          if (!ph) { errors.push(`${q.platform}: atanmış gerçek şirket fotoğrafı bulunamadı; temsili görsel oluşturulmadı.`); continue; }
+          const photoResponse = await fetch(ph.url);
+          if (!photoResponse.ok) { errors.push(`${q.platform}: atanmış gerçek şirket fotoğrafı okunamadı; banner oluşturulmadı.`); continue; }
+          photo = new Uint8Array(await photoResponse.arrayBuffer()); photoMime = ph.mime ?? photoResponse.headers.get('content-type') ?? undefined;
+          if (photo.length > 4_000_000) { errors.push(`${q.platform}: gerçek şirket fotoğrafı 4 MB sınırını aşıyor; banner oluşturulmadı.`); continue; }
+          rendered++;
+          if (ph) await markUsed(ph as { id: string });
+          const png = await renderBanner({ w: q.width, h: q.height, brand, brandName: it.brand, badge: it.badge, headline: it.headline, subtitle: it.subtitle, cta: it.cta, photo, photoMime });
           const path = `factory/${day}/${q.platform}-${Date.now()}-${i}.jpg`;
           const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/jpeg', upsert: true });
           if (up.error) throw up.error;
           media = [db.storage.from('design-exports').getPublicUrl(path).data.publicUrl];
           await db.from('media_library').insert({ kind: 'banner', title: it.headline.slice(0, 120), url: media[0], mime: 'image/jpeg', width: q.width, height: q.height, targets: [q.platform],
             caption: it.caption, hashtags: it.hashtags, status: 'queued', platform: q.platform, pillar: it.badge, source: 'factory', created_by: admin?.user_id ?? null,
-            template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null, ai_image: aiUsed } });
+            client_id: clientId, template: { headline: it.headline, subtitle: it.subtitle, badge: it.badge, cta: it.cta, brand: it.brand, width: q.width, height: q.height, photo_url: ph?.url ?? null, tone: it.tone } });
         } else {
           // Her Reels için DAHA ÖNCE HİÇ KULLANILMAMIŞ bir video; kalmadıysa aynı videoyu tekrar atmak yerine Reels üretilmez
           const v = freshVideos[vIdx++];
@@ -694,18 +677,17 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
           else {
             // Yeni video kalmadıysa: kendi fotoğraflarımızdan ritme oturan foto-Reels (otomatik montaj müzik + geçiş ekler)
             const set: Array<{ id: string; url: string; use_count?: number | null }> = [];
-            while (set.length < 6 && photos?.length && pIdx < photos.length * 2) { const ph = photos[pIdx++ % photos.length]; if (!set.some((x) => x.id === ph.id)) set.push(ph); }
-            if (set.length < 4) { errors.push(`${q.platform}: yeni video/fotoğraf kalmadı — Havuza yeni şantiye/tadilat videosu veya fotoğrafı yükleyin`); continue; }
+            while (set.length < 6 && cleanPhotos.length && pIdx < cleanPhotos.length * 2) { const ph = cleanPhotos[pIdx++ % cleanPhotos.length]; if (!set.some((x) => x.id === ph.id)) set.push(ph); }
+            if (set.length < 4) { errors.push(`${q.platform}: uygun hafif çelik içerik medyası yetersiz — Havuzdaki uygun video/fotoğrafları kontrol edin`); continue; }
             for (const ph of set) await markUsed(ph);
             media = set.map((x) => x.url); reelCover = set[0].url; note = 'FOTO-REELS: fotoğraflardan otomatik montaj';
           }
         }
-        if (aiUsed) it.caption = `${it.caption}\n\n📌 Görsel temsilidir (yapay zekâ ile hazırlanmıştır).`;
         const body = `${it.caption}\n\n${it.hashtags.join(' ')}`;
-        const toPool = await dayFull(db, q.platform, day, it.format);
+        const toPool = await dayFull(db, q.platform, day, it.format, clientId);
         const { error } = await db.from('social_drafts').insert({
           brand: it.brand, title: `${q.platform.toUpperCase()} · ${it.format === 'reel' ? 'Kısa video' : 'Banner'} · ${it.headline}`.slice(0, 200), body,
-          caption: it.caption, headline: it.headline, hashtags: it.hashtags, cta: it.cta, format: it.format, networks: [q.platform], platform_targets: [q.platform], primary_platform: q.platform,
+          caption: it.caption, headline: it.headline, hashtags: it.hashtags, cta: it.cta, tone: it.tone ?? null, format: it.format, networks: [q.platform], platform_targets: [q.platform], primary_platform: q.platform, client_id: clientId,
           media_urls: media, video_url, design_url: it.format === 'banner' ? media[0] : reelCover, design_brief: it.video_script ? `Çekim senaryosu: ${it.video_script}` : null,
           image_brief: note || null, scheduled_at: slotIso(day, slot), // havuzdakiler de önerilen saati taşır (günlük kota sayımı için); yayın yalnızca scheduled/approved alır
           status: toPool ? 'taslak' : autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: toPool ? 'draft' : autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
@@ -714,8 +696,9 @@ export async function runContentFactory(db: Db, opts: { force?: boolean; maxBann
           kvkk_basis: autoPublish ? 'İçerik Fabrikası; yönetici otomatik yayını açtı (otopilot).' : 'İçerik Fabrikası taslağı; yayın öncesi insan onayı zorunlu.',
         });
         if (error) throw error;
-        await db.from('post_templates').insert({ title: it.headline.slice(0, 200), platform: q.platform, brand: it.brand, pillar: it.badge, headline: it.headline, caption: it.caption,
+        await db.from('post_templates').insert({ title: it.headline.slice(0, 200), platform: q.platform, brand: it.brand, pillar: it.badge, headline: it.headline, caption: it.caption, tone: it.tone ?? null, client_id: clientId,
           hashtags: it.hashtags, cta: it.cta, source: 'factory', created_by: admin?.user_id ?? null });
+        editorialHistory.unshift({ headline: it.headline, caption: it.caption, tone: it.tone ?? null, content_pillar: it.badge });
         created++;
       } catch (e) { errors.push(`${q.platform}/${it.format}: ${String((e as Error).message).slice(0, 160)}`); }
     }
@@ -769,22 +752,32 @@ export async function factoryTick(db: Db, background: (p: Promise<unknown>) => v
 }
 
 /** Havuzdaki banner'ı şablonundan (yeniden) çizer ve kaydeder. id verilirse aynı kayıt güncellenir, yoksa yeni banner eklenir. */
-export async function renderBannerToPool(db: Db, input: { id?: string | null; title?: string; platform?: string; template: { headline: string; subtitle?: string; badge?: string; cta?: string; brand?: string; width?: number; height?: number; photo_url?: string | null } }, userId: string | null) {
+export async function renderBannerToPool(db: Db, input: { id?: string | null; clientId: string; title?: string; platform?: string; template: { headline: string; subtitle?: string; badge?: string; cta?: string; brand?: string; width?: number; height?: number; photo_url?: string | null } }, userId: string | null) {
   const t = input.template;
-  const brand = await defaultBrand(db);
+  const { data: client } = await db.from('agency_clients').select('id,name,status').eq('id', input.clientId).eq('status', 'active').maybeSingle();
+  if (!client) throw new Error('Etkin müşteri seçimi doğrulanamadı.');
+  const brand = await brandForClient(db, input.clientId);
+  if (!brand) throw new Error('Bu müşteriye atanmış marka kiti yok; başka müşterinin markası kullanılmadı.');
   const size: Record<string, [number, number]> = { instagram: [1080, 1350], facebook: [1080, 1350], tiktok: [1080, 1920], youtube: [1080, 1920], x: [1600, 900] };
   const [w, h] = t.width && t.height ? [t.width, t.height] : size[input.platform ?? 'instagram'] ?? [1080, 1350];
   let photo: Uint8Array | null = null; let photoMime: string | undefined;
-  if (t.photo_url) { const r = await fetch(t.photo_url).catch(() => null); if (r?.ok) { photo = new Uint8Array(await r.arrayBuffer()); photoMime = r.headers.get('content-type') ?? undefined; if (photo.length > 4_000_000) photo = null; } }
-  const brandName = (t.brand === 'Şahin Manitou' || t.brand === 'Embay Yapı') ? t.brand : 'İkisi';
+  if (t.photo_url) {
+    const { data: selectedPhoto } = await db.from('media_library').select('url,mime').eq('client_id', input.clientId).eq('kind', 'image').eq('url', t.photo_url).is('archived_at', null).limit(1).maybeSingle();
+    if (!selectedPhoto?.url) throw new Error('Seçilen fotoğraf bu müşteriye ait değil veya arşivli.');
+    const r = await fetch(selectedPhoto.url).catch(() => null);
+    if (!r?.ok) throw new Error('Müşteriye ait seçili fotoğraf okunamadı.');
+    photo = new Uint8Array(await r.arrayBuffer()); photoMime = selectedPhoto.mime ?? r.headers.get('content-type') ?? undefined;
+    if (photo.length > 4_000_000) throw new Error('Fotoğraf boyutu 4 MB sınırını aşıyor.');
+  }
+  const brandName = brand.company_name || client.name;
   const png = await renderBanner({ w, h, brand, brandName, badge: (t.badge || 'EMBAY').slice(0, 24), headline: t.headline, subtitle: t.subtitle ?? '', cta: t.cta || brand?.default_cta || 'Hemen arayın', photo, photoMime });
   const path = `pool/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.jpg`;
   const up = await db.storage.from('design-exports').upload(path, png, { contentType: 'image/jpeg', upsert: true });
   if (up.error) throw up.error;
   const url = db.storage.from('design-exports').getPublicUrl(path).data.publicUrl;
-  const row = { url, mime: 'image/jpeg', width: w, height: h, template: { ...t, width: w, height: h }, title: (input.title || t.headline).slice(0, 120), platform: input.platform ?? null, pillar: t.badge ?? null, updated_at: new Date().toISOString() };
+  const row = { client_id: input.clientId, url, mime: 'image/jpeg', width: w, height: h, template: { ...t, brand: brandName, width: w, height: h }, title: (input.title || t.headline).slice(0, 120), platform: input.platform ?? null, pillar: t.badge ?? null, updated_at: new Date().toISOString() };
   if (input.id) {
-    const { data, error } = await db.from('media_library').update(row).eq('id', input.id).eq('kind', 'banner').select('*').single();
+    const { data, error } = await db.from('media_library').update(row).eq('id', input.id).eq('client_id', input.clientId).eq('kind', 'banner').select('*').single();
     if (error) throw error; return data;
   }
   const { data, error } = await db.from('media_library').insert({ ...row, kind: 'banner', status: 'pool', source: 'manual', targets: input.platform ? [input.platform] : [], created_by: userId }).select('*').single();
@@ -798,9 +791,16 @@ export async function renderBannerToPool(db: Db, input: { id?: string | null; ti
 interface PlanRow { id: string; day: string; slot: string; platforms: string[]; format: 'reel' | 'banner'; badge: string | null; media_ids: string[]; headline: string; subtitle: string | null;
   caption: string; hashtags: string[]; cta: string | null; drafted_platforms: string[]; draft_ids: string[] }
 export async function planTick(db: Db) {
-  const { data: rows } = await db.from('content_plan').select('*').eq('status', 'planned').order('day').order('slot').limit(6);
+  const { data: client } = await db.from('agency_clients').select('id').eq('slug', 'embay-yapi').eq('status', 'active').maybeSingle();
+  if (!client?.id) return { processed: 0, done: [], errors: ['Etkin Embay Yapı müşteri kaydı bulunamadı.'] };
+  const clientId = String(client.id);
+  const { data: rows } = await db.from('content_plan').select('*').eq('client_id', clientId).eq('status', 'planned').order('day').order('slot').limit(6);
   if (!rows?.length) return null;
-  const brand = await defaultBrand(db);
+  const { data: recent } = await db.from('social_drafts').select('headline,caption,tone,content_pillar').eq('client_id', clientId)
+    .gte('created_at', new Date(Date.now() - 45 * 86400_000).toISOString()).order('created_at', { ascending: false }).limit(300);
+  const editorialHistory = (recent ?? []) as EditorialHistory[];
+  const brand = await brandForClient(db, clientId);
+  if (!brand) return { processed: 0, done: [], errors: ['Embay Yapı için atanmış marka kiti bulunamadı; başka müşterinin markası kullanılmadı.'] };
   const { data: quotas } = await db.from('content_quota').select('platform,width,height');
   const size = new Map(((quotas || []) as Array<{ platform: string; width: number; height: number }>).map((q) => [q.platform, q]));
   const { data: bot } = await db.from('automation_bots').select('id').eq('slug', 'icerik-fabrikasi').maybeSingle();
@@ -809,11 +809,23 @@ export async function planTick(db: Db) {
   const autoPublish = (ap as { auto_publish?: boolean } | null)?.auto_publish === true;
   let banners = 0; const done: string[] = []; const errors: string[] = [];
   for (const r of rows as PlanRow[]) {
+    const quality = validateEditorialCandidate({ headline: r.headline, caption: r.caption, pillar: r.badge, hashtags: r.hashtags, cta: r.cta }, editorialHistory);
+    if (!quality.ok) {
+      await db.from('content_plan').update({ status: 'blocked', error: `Hafif çelik kapsamı/özgünlük kontrolü: ${quality.reason}`, updated_at: new Date().toISOString() }).eq('id', r.id).eq('client_id', clientId);
+      errors.push(`${r.id}: kapsam/özgünlük kontrolünden geçmedi (${quality.reason})`);
+      continue;
+    }
     const todo = r.platforms.filter((p) => !r.drafted_platforms.includes(p));
     const drafted = [...r.drafted_platforms]; const ids = [...r.draft_ids];
     try {
-      const { data: media } = await db.from('media_library').select('id,url,cover_url,mime,kind').in('id', r.media_ids.length ? r.media_ids : ['00000000-0000-0000-0000-000000000000']);
+      const { data: media } = await db.from('media_library').select('id,url,cover_url,mime,kind').eq('client_id', clientId).in('id', r.media_ids.length ? r.media_ids : ['00000000-0000-0000-0000-000000000000']);
       const ordered = r.media_ids.map((id) => (media || []).find((m) => m.id === id)).filter(Boolean) as Array<{ id: string; url: string; cover_url: string | null; mime: string | null; kind: string }>;
+      if (!ordered.length || ordered.length !== r.media_ids.length) {
+        const reason = !ordered.length ? 'Atanmış gerçek Embay medyası bulunamadı.' : 'Plan medyasının bir kısmı bu şirkete ait değil veya arşivli.';
+        await db.from('content_plan').update({ status: 'blocked', error: reason, updated_at: new Date().toISOString() }).eq('id', r.id).eq('client_id', clientId);
+        errors.push(`${r.id}: ${reason}`);
+        continue;
+      }
       for (const p of todo) {
         let mediaUrls: string[] = []; let video_url: string | null = null; let design: string | null = null;
         if (r.format === 'banner') {
@@ -829,17 +841,17 @@ export async function planTick(db: Db) {
           if (up.error) throw up.error;
           design = db.storage.from('design-exports').getPublicUrl(path).data.publicUrl; mediaUrls = [design];
           await db.from('media_library').insert({ kind: 'banner', title: r.headline.slice(0, 120), url: design, mime: 'image/jpeg', width: q.width, height: q.height, targets: [p], caption: r.caption, hashtags: r.hashtags,
-            status: 'queued', platform: p, pillar: r.badge, source: 'factory', created_by: admin?.user_id ?? null, template: { headline: r.headline, subtitle: r.subtitle, badge: r.badge, cta: r.cta, photo_url: ph?.url ?? null, plan_id: r.id } });
+            status: 'queued', platform: p, pillar: r.badge, source: 'factory', client_id: clientId, created_by: admin?.user_id ?? null, template: { headline: r.headline, subtitle: r.subtitle, badge: r.badge, cta: r.cta, photo_url: ph?.url ?? null, plan_id: r.id } });
         } else {
           // Ana video + aynı projenin diğer videoları (montaj ek sahneleri yalnızca bunlardan keser — alakasız kare girmez)
           const vid = ordered.find((m) => m.kind === 'video');
           if (vid) { video_url = vid.url; mediaUrls = [vid.url, ...ordered.filter((m) => m.kind === 'video' && m.id !== vid.id).map((m) => m.url)]; design = vid.cover_url; }
           else { mediaUrls = ordered.map((m) => m.url); design = mediaUrls[0] ?? null; }
         }
-        const toPool = await dayFull(db, p, r.day, r.format);
+        const toPool = await dayFull(db, p, r.day, r.format, clientId);
         const { data: ins, error } = await db.from('social_drafts').insert({
           brand: 'Embay Yapı', title: `${p.toUpperCase()} · ${r.format === 'reel' ? 'Reels' : 'Banner'} · ${r.headline}`.slice(0, 200), body: `${r.caption}\n\n${r.hashtags.join(' ')}`,
-          caption: r.caption, headline: r.headline, hashtags: r.hashtags, cta: r.cta, format: r.format, networks: [p], platform_targets: [p], primary_platform: p,
+          caption: r.caption, headline: r.headline, hashtags: r.hashtags, cta: r.cta, format: r.format, networks: [p], platform_targets: [p], primary_platform: p, client_id: clientId,
           media_urls: mediaUrls, video_url, design_url: design, scheduled_at: slotIso(r.day, r.slot),
           status: toPool ? 'taslak' : autoPublish ? 'planlandi' : 'onay_bekliyor', workflow_status: toPool ? 'draft' : autoPublish ? 'scheduled' : 'pending_approval', archive_status: 'active',
           ...(autoPublish && !toPool ? { approved_at: new Date().toISOString(), approved_by: admin?.user_id ?? null } : {}),
@@ -851,7 +863,8 @@ export async function planTick(db: Db) {
       }
       for (const m of ordered) await db.from('media_library').update({ use_count: 1, last_used_at: new Date().toISOString() }).eq('id', m.id);
       const complete = r.platforms.every((p) => drafted.includes(p));
-      await db.from('content_plan').update({ drafted_platforms: drafted, draft_ids: ids, status: complete ? 'drafted' : 'planned', error: null, updated_at: new Date().toISOString() }).eq('id', r.id);
+      await db.from('content_plan').update({ drafted_platforms: drafted, draft_ids: ids, status: complete ? 'drafted' : 'planned', error: null, updated_at: new Date().toISOString() }).eq('id', r.id).eq('client_id', clientId);
+      editorialHistory.unshift({ headline: r.headline, caption: r.caption, tone: r.pillar, content_pillar: r.badge });
       if (complete) done.push(r.id);
     } catch (e) {
       errors.push(`${r.day} ${r.slot}: ${String((e as Error).message).slice(0, 160)}`);

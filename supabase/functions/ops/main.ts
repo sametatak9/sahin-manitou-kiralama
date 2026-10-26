@@ -837,7 +837,9 @@ async function api(db: Db, req: Request) {
       const u = await requireUser(db, req);
       const t = body.template as { headline?: string } | undefined;
       if (!t?.headline || String(t.headline).trim().length < 2) throw new HttpError(400, 'Banner başlığı gerekli');
-      return await renderBannerToPool(db, { id: (body.id as string) || null, title: body.title as string | undefined, platform: body.platform as string | undefined, template: t as never }, u.userId);
+      const clientId = String(body.client_id || '');
+      if (!clientId) throw new HttpError(400, 'Müşteri seçimi gerekli');
+      return await renderBannerToPool(db, { id: (body.id as string) || null, clientId, title: body.title as string | undefined, platform: body.platform as string | undefined, template: t as never }, u.userId);
     }
     case 'content_factory_run': {
       await requireUser(db, req, 'admin');

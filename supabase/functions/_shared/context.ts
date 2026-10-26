@@ -129,6 +129,12 @@ export async function defaultBrand(db: Db): Promise<BrandKitRow | null> {
   return data as BrandKitRow | null;
 }
 
+/** Strict tenant lookup: never substitute another client's default brand kit. */
+export async function brandForClient(db: Db, clientId: string): Promise<BrandKitRow | null> {
+  const { data } = await db.from('brand_kits').select('*').eq('client_id', clientId).limit(1).maybeSingle();
+  return data as BrandKitRow | null;
+}
+
 /** Bot müşteri bağlamına sahipse o müşterinin marka kitini seçer; yoksa varsayılanı kullanır. */
 export async function brandForContext(ctx: Pick<EngineCtx, 'db' | 'bot'>): Promise<BrandKitRow | null> {
   const clientId = ctx.bot?.client_id;

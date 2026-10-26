@@ -2,35 +2,35 @@
 // Silme = arşive kaldırma (archived_at): veri kaybı yok. Gönderi planlarken PoolPicker ile havuzdan seçilir.
 import { useState } from 'react';
 import { Archive, Copy, Download, FileText, ImagePlus, Pencil, Plus, RefreshCw, Save } from 'lucide-react';
+import { useClient } from '../client';
 import { callOps, errorText } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 import { db, unwrap, useQuery } from '../lib/hooks';
 import { Button, cx, Field, Modal, Notice, PlatformBadge, StateView } from '../ui';
 
 export interface BannerItem {
-  id: string; kind: 'banner'; title: string; url: string; width: number | null; height: number | null; platform: string | null; pillar: string | null;
+  id: string; client_id: string | null; kind: 'banner'; title: string; url: string; width: number | null; height: number | null; platform: string | null; pillar: string | null;
   source: string; caption: string | null; hashtags: string[]; use_count: number; status: string; created_at: string; updated_at: string;
   template: { headline?: string; subtitle?: string; badge?: string; cta?: string; brand?: string; width?: number; height?: number; photo_url?: string | null } | null;
 }
-export interface PostTemplate { id: string; title: string; platform: string | null; brand: string | null; pillar: string | null; headline: string | null; caption: string; hashtags: string[]; cta: string | null; notes: string | null; source: string; use_count: number; created_at: string; updated_at: string }
+export interface PostTemplate { id: string; client_id: string | null; tone: string | null; title: string; platform: string | null; brand: string | null; pillar: string | null; headline: string | null; caption: string; hashtags: string[]; cta: string | null; notes: string | null; source: string; use_count: number; created_at: string; updated_at: string }
 
 const PLATFORMS = [['instagram', 'Instagram (1080×1350)'], ['tiktok', 'TikTok (1080×1920)'], ['youtube', 'YouTube (1080×1920)'], ['facebook', 'Facebook (1080×1350)'], ['x', 'X (1600×900)']] as const;
-const BRANDS = ['Embay Yapı', 'Şahin Manitou', 'İkisi'];
-
 // ── Banner havuzu ────────────────────────────────────────────────────────────
 export function BannerPool() {
+  const { client } = useClient(); const clientId = client?.id ?? '';
   const [edit, setEdit] = useState<BannerItem | 'new' | null>(null);
   const [filter, setFilter] = useState('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const q = useQuery(async () => unwrap(await db().from('media_library').select('*').eq('kind', 'banner').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as BannerItem[], [] as BannerItem[], [], ['media_library']);
+  const q = useQuery(async () => clientId ? unwrap(await db().from('media_library').select('*').eq('client_id', clientId).eq('kind', 'banner').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as BannerItem[] : [], [] as BannerItem[], [clientId], ['media_library']);
   const rows = q.data.filter((b) => filter === 'all' || b.platform === filter);
   const archive = async (b: BannerItem) => {
     if (!confirm(`“${b.title}” havuzdan kaldırılsın mı? (Arşive taşınır, geri alınabilir)`)) return;
-    setBusy(b.id); try { unwrap(await db().from('media_library').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', b.id).select('id')); setMsg({ tone: 'ok', text: 'Banner arşive kaldırıldı.' }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+    if (!clientId) return; setBusy(b.id); try { unwrap(await db().from('media_library').update({ archived_at: new Date().toISOString(), status: 'archived' }).eq('id', b.id).eq('client_id', clientId).select('id')); setMsg({ tone: 'ok', text: 'Banner arşive kaldırıldı.' }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
   const duplicate = async (b: BannerItem) => {
-    setBusy(b.id); try { await callOps('banner_render', { platform: b.platform, title: `${b.title} (kopya)`, template: b.template ?? { headline: b.title } }); setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
+    if (!clientId) return; setBusy(b.id); try { await callOps('banner_render', { client_id: clientId, platform: b.platform, title: `${b.title} (kopya)`, template: b.template ?? { headline: b.title } }); setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' }); q.reload(); } catch (e) { setMsg({ tone: 'error', text: errorText(e) }); } finally { setBusy(null); }
   };
   return (
     <div className="space-y-3">
@@ -62,25 +62,25 @@ export function BannerPool() {
             </div>))}
         </div>
       )}
-      {edit && <BannerEditor item={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={(t) => { setEdit(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
+      {edit && client && <BannerEditor item={edit === 'new' ? null : edit} clientId={clientId} brandName={client.name} onClose={() => setEdit(null)} onSaved={(t) => { setEdit(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
     </div>
   );
 }
 
-function BannerEditor({ item, onClose, onSaved }: { item: BannerItem | null; onClose: () => void; onSaved: (msg: string) => void }) {
+function BannerEditor({ item, clientId, brandName, onClose, onSaved }: { item: BannerItem | null; clientId: string; brandName: string; onClose: () => void; onSaved: (msg: string) => void }) {
   const t = item?.template ?? {};
-  const [f, setF] = useState({ title: item?.title ?? '', platform: item?.platform ?? 'instagram', brand: t.brand ?? 'Embay Yapı', badge: t.badge ?? 'KAMPANYA', headline: t.headline ?? item?.title ?? '', subtitle: t.subtitle ?? '', cta: t.cta ?? 'Hemen arayın', photo_url: t.photo_url ?? '', caption: item?.caption ?? '', hashtags: (item?.hashtags ?? []).join(' ') });
+  const [f, setF] = useState({ title: item?.title ?? '', platform: item?.platform ?? 'instagram', badge: t.badge ?? 'KAMPANYA', headline: t.headline ?? item?.title ?? '', subtitle: t.subtitle ?? '', cta: t.cta ?? 'Hemen arayın', photo_url: t.photo_url ?? '', caption: item?.caption ?? '', hashtags: (item?.hashtags ?? []).join(' ') });
   const [preview, setPreview] = useState(item?.url ?? '');
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
-  const photos = useQuery(async () => unwrap(await db().from('media_library').select('id,url,title').eq('kind', 'image').is('archived_at', null).order('created_at', { ascending: false }).limit(40)) as Array<{ id: string; url: string; title: string }>, [], []);
+  const photos = useQuery(async () => clientId ? unwrap(await db().from('media_library').select('id,url,title').eq('client_id', clientId).eq('kind', 'image').is('archived_at', null).order('created_at', { ascending: false }).limit(40)) as Array<{ id: string; url: string; title: string }> : [], [], [clientId]);
   const render = async () => {
     setBusy(true); setErr(null);
     try {
       const sized = item && item.platform === f.platform ? { width: item.width ?? undefined, height: item.height ?? undefined } : {};
-      const out = await callOps<BannerItem>('banner_render', { id: item?.id ?? null, platform: f.platform, title: f.title || f.headline,
-        template: { headline: f.headline.trim(), subtitle: f.subtitle.trim(), badge: f.badge.trim().toLocaleUpperCase('tr-TR'), cta: f.cta.trim(), brand: f.brand, photo_url: f.photo_url || null, ...sized } });
+      const out = await callOps<BannerItem>('banner_render', { id: item?.id ?? null, client_id: clientId, platform: f.platform, title: f.title || f.headline,
+        template: { headline: f.headline.trim(), subtitle: f.subtitle.trim(), badge: f.badge.trim().toLocaleUpperCase('tr-TR'), cta: f.cta.trim(), brand: brandName, photo_url: f.photo_url || null, ...sized } });
       const tags = f.hashtags.split(/\s+/).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`));
-      await db().from('media_library').update({ caption: f.caption.trim() || null, hashtags: tags }).eq('id', out.id);
+      await db().from('media_library').update({ caption: f.caption.trim() || null, hashtags: tags }).eq('id', out.id).eq('client_id', clientId);
       setPreview(`${out.url}?v=${Date.now()}`);
       onSaved(item ? 'Banner güncellendi ve yeniden çizildi.' : 'Yeni banner havuza eklendi.');
     } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
@@ -91,7 +91,7 @@ function BannerEditor({ item, onClose, onSaved }: { item: BannerItem | null; onC
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <Field label="Platform / ölçü"><select className="ops-input" value={f.platform} onChange={(e) => setF({ ...f, platform: e.target.value })}>{PLATFORMS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-            <Field label="Marka"><select className="ops-input" value={f.brand} onChange={(e) => setF({ ...f, brand: e.target.value })}>{BRANDS.map((b) => <option key={b}>{b}</option>)}</select></Field>
+            <Field label="Müşteri / marka"><input className="ops-input" value={brandName} readOnly /></Field>
           </div>
           <Field label="Rozet (üst etiket)"><input className="ops-input" maxLength={24} value={f.badge} onChange={(e) => setF({ ...f, badge: e.target.value })} /></Field>
           <Field label="Büyük başlık" hint="En fazla 5-6 kelime"><input className="ops-input" maxLength={60} value={f.headline} onChange={(e) => setF({ ...f, headline: e.target.value })} /></Field>
@@ -118,13 +118,14 @@ function BannerEditor({ item, onClose, onSaved }: { item: BannerItem | null; onC
 
 // ── Gönderi metni havuzu ─────────────────────────────────────────────────────
 export function PostPool() {
+  const { client } = useClient(); const clientId = client?.id ?? '';
   const [edit, setEdit] = useState<PostTemplate | 'new' | null>(null);
   const [filter, setFilter] = useState('all');
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
-  const q = useQuery(async () => unwrap(await db().from('post_templates').select('*').is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as PostTemplate[], [] as PostTemplate[], [], ['post_templates']);
+  const q = useQuery(async () => clientId ? unwrap(await db().from('post_templates').select('*').eq('client_id', clientId).is('archived_at', null).order('updated_at', { ascending: false }).limit(300)) as PostTemplate[] : [], [] as PostTemplate[], [clientId], ['post_templates']);
   const rows = q.data.filter((p) => filter === 'all' || p.platform === filter);
-  const archive = async (p: PostTemplate) => { if (!confirm(`“${p.title}” şablonu kaldırılsın mı? (Arşive taşınır)`)) return; await db().from('post_templates').update({ archived_at: new Date().toISOString() }).eq('id', p.id); setMsg({ tone: 'ok', text: 'Şablon arşive kaldırıldı.' }); q.reload(); };
-  const duplicate = async (p: PostTemplate) => { await db().from('post_templates').insert({ title: `${p.title} (kopya)`, platform: p.platform, brand: p.brand, pillar: p.pillar, headline: p.headline, caption: p.caption, hashtags: p.hashtags, cta: p.cta, source: 'manual' }); setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' }); q.reload(); };
+  const archive = async (p: PostTemplate) => { if (!clientId || !confirm(`“${p.title}” şablonu kaldırılsın mı? (Arşive taşınır)`)) return; await db().from('post_templates').update({ archived_at: new Date().toISOString() }).eq('id', p.id).eq('client_id', clientId); setMsg({ tone: 'ok', text: 'Şablon arşive kaldırıldı.' }); q.reload(); };
+  const duplicate = async (p: PostTemplate) => { if (!clientId || p.client_id !== clientId) return; await db().from('post_templates').insert({ client_id: clientId, tone: p.tone, title: `${p.title} (kopya)`, platform: p.platform, brand: client?.name ?? p.brand, pillar: p.pillar, headline: p.headline, caption: p.caption, hashtags: p.hashtags, cta: p.cta, source: 'manual' }); setMsg({ tone: 'ok', text: 'Kopya oluşturuldu.' }); q.reload(); };
   const copyText = (p: PostTemplate) => { navigator.clipboard?.writeText(`${p.caption}\n\n${p.hashtags.join(' ')}`); setMsg({ tone: 'ok', text: 'Metin kopyalandı.' }); };
   return (
     <div className="space-y-3">
@@ -140,7 +141,7 @@ export function PostPool() {
           {rows.map((p) => (
             <div key={p.id} className="ops-panel p-3 space-y-1.5 flex flex-col">
               <div className="flex items-center gap-1.5">{p.platform && <PlatformBadge platform={p.platform} />}<span className="text-sm font-semibold text-ink-100 line-clamp-1">{p.title}</span></div>
-              <div className="text-[10px] text-ink-500">{p.pillar ?? '—'} · {p.brand ?? '—'} · {p.source === 'factory' ? 'Fabrika' : 'Elle'} · {p.use_count} kez kullanıldı</div>
+              <div className="text-[10px] text-ink-500">{p.tone ?? p.pillar ?? '—'} · {p.brand ?? '—'} · {p.source === 'factory' ? 'Fabrika' : 'Elle'} · {p.use_count} kez kullanıldı</div>
               <p className="text-xs text-ink-300 line-clamp-4 whitespace-pre-line flex-1">{p.caption}</p>
               <div className="text-[11px] text-brand-green line-clamp-1">{p.hashtags.join(' ')}</div>
               <div className="flex flex-wrap gap-1 pt-1">
@@ -152,21 +153,22 @@ export function PostPool() {
             </div>))}
         </div>
       )}
-      {edit && <PostEditor item={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={(t) => { setEdit(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
+      {edit && <PostEditor item={edit === 'new' ? null : edit} clientId={clientId} brandName={client?.name ?? 'Embay Yapı'} onClose={() => setEdit(null)} onSaved={(t) => { setEdit(null); setMsg({ tone: 'ok', text: t }); q.reload(); }} />}
     </div>
   );
 }
 
-function PostEditor({ item, onClose, onSaved }: { item: PostTemplate | null; onClose: () => void; onSaved: (msg: string) => void }) {
-  const [f, setF] = useState({ title: item?.title ?? '', platform: item?.platform ?? 'instagram', brand: item?.brand ?? 'Embay Yapı', pillar: item?.pillar ?? '', headline: item?.headline ?? '', caption: item?.caption ?? '', hashtags: (item?.hashtags ?? []).join(' '), cta: item?.cta ?? '' });
+function PostEditor({ item, clientId, brandName, onClose, onSaved }: { item: PostTemplate | null; clientId: string; brandName: string; onClose: () => void; onSaved: (msg: string) => void }) {
+  const [f, setF] = useState({ title: item?.title ?? '', platform: item?.platform ?? 'instagram', brand: item?.brand ?? brandName, pillar: item?.pillar ?? '', headline: item?.headline ?? '', caption: item?.caption ?? '', hashtags: (item?.hashtags ?? []).join(' '), cta: item?.cta ?? '' });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const save = async () => {
     setBusy(true); setErr(null);
     try {
       if (!f.title.trim() || !f.caption.trim()) throw new Error('Başlık ve metin gerekli');
-      const row = { title: f.title.trim().slice(0, 200), platform: f.platform, brand: f.brand, pillar: f.pillar.trim() || null, headline: f.headline.trim() || null, caption: f.caption.trim(),
+      if (!clientId) throw new Error('Önce işletme seçin.');
+      const row = { client_id: clientId, tone: item?.tone ?? null, title: f.title.trim().slice(0, 200), platform: f.platform, brand: brandName, pillar: f.pillar.trim() || null, headline: f.headline.trim() || null, caption: f.caption.trim(),
         hashtags: f.hashtags.split(/\s+/).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`)).slice(0, 30), cta: f.cta.trim() || null };
-      if (item) unwrap(await db().from('post_templates').update(row).eq('id', item.id).select('id')); else unwrap(await db().from('post_templates').insert({ ...row, source: 'manual' }).select('id'));
+      if (item) unwrap(await db().from('post_templates').update(row).eq('id', item.id).eq('client_id', clientId).select('id')); else unwrap(await db().from('post_templates').insert({ ...row, source: 'manual' }).select('id'));
       onSaved(item ? 'Şablon güncellendi.' : 'Şablon havuza eklendi.');
     } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
   };
@@ -176,7 +178,7 @@ function PostEditor({ item, onClose, onSaved }: { item: PostTemplate | null; onC
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Şablon adı"><input className="ops-input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
         <Field label="Platform"><select className="ops-input" value={f.platform} onChange={(e) => setF({ ...f, platform: e.target.value })}>{PLATFORMS.map(([k, l]) => <option key={k} value={k}>{l.split(' (')[0]}</option>)}</select></Field>
-        <Field label="Marka"><select className="ops-input" value={f.brand} onChange={(e) => setF({ ...f, brand: e.target.value })}>{BRANDS.map((b) => <option key={b}>{b}</option>)}</select></Field>
+        <Field label="Marka"><input className="ops-input" value={brandName} readOnly /></Field>
         <Field label="Konu"><input className="ops-input" placeholder="Ör: KİRALIK MANİTOU" value={f.pillar} onChange={(e) => setF({ ...f, pillar: e.target.value })} /></Field>
         <Field label="Başlık (isteğe bağlı)" className="sm:col-span-2"><input className="ops-input" value={f.headline} onChange={(e) => setF({ ...f, headline: e.target.value })} /></Field>
         <Field label={`Metin (${f.caption.length}/${limit})`} className="sm:col-span-2"><textarea className={cx('ops-input min-h-[140px]', f.caption.length > limit && 'ring-rose-500')} value={f.caption} onChange={(e) => setF({ ...f, caption: e.target.value })} /></Field>
@@ -191,13 +193,14 @@ function PostEditor({ item, onClose, onSaved }: { item: PostTemplate | null; onC
 // ── Gönderi planlarken havuzdan seçim ────────────────────────────────────────
 export interface PickedPoolMedia { id: string; url: string; video: boolean; title: string }
 export function PoolPicker({ mode, onClose, onPickMedia, onPickText }: { mode: 'media' | 'text'; onClose: () => void; onPickMedia?: (items: PickedPoolMedia[]) => void; onPickText?: (t: PostTemplate) => void }) {
+  const { client } = useClient(); const clientId = client?.id ?? '';
   const [tab, setTab] = useState<'banner' | 'video' | 'image'>('banner');
   const [sel, setSel] = useState<PickedPoolMedia[]>([]);
-  const media = useQuery(async () => unwrap(await db().from('media_library').select('id,kind,url,title,cover_url').eq('kind', tab).is('archived_at', null).order('updated_at', { ascending: false }).limit(120)) as Array<{ id: string; kind: string; url: string; title: string; cover_url: string | null }>, [], [tab]);
-  const texts = useQuery(async () => (mode === 'text' ? unwrap(await db().from('post_templates').select('*').is('archived_at', null).order('updated_at', { ascending: false }).limit(200)) as PostTemplate[] : []), [] as PostTemplate[], [mode]);
+  const media = useQuery(async () => clientId ? unwrap(await db().from('media_library').select('id,kind,url,title,cover_url').eq('client_id', clientId).eq('kind', tab).is('archived_at', null).order('updated_at', { ascending: false }).limit(120)) as Array<{ id: string; kind: string; url: string; title: string; cover_url: string | null }> : [], [], [tab, clientId]);
+  const texts = useQuery(async () => (mode === 'text' && clientId ? unwrap(await db().from('post_templates').select('*').eq('client_id', clientId).is('archived_at', null).order('updated_at', { ascending: false }).limit(200)) as PostTemplate[] : []), [] as PostTemplate[], [mode, clientId]);
   const toggle = (m: { id: string; url: string; kind: string; title: string }) => setSel((cur) => (cur.some((x) => x.id === m.id) ? cur.filter((x) => x.id !== m.id) : [...cur, { id: m.id, url: m.url, video: m.kind === 'video', title: m.title }]));
-  const useText = async (t: PostTemplate) => { onPickText?.(t); await db().from('post_templates').update({ use_count: t.use_count + 1, last_used_at: new Date().toISOString() }).eq('id', t.id); onClose(); };
-  const done = async () => { onPickMedia?.(sel); for (const s of sel) await db().from('media_library').update({ last_used_at: new Date().toISOString() }).eq('id', s.id); onClose(); };
+  const useText = async (t: PostTemplate) => { if (t.client_id !== clientId) return; onPickText?.(t); await db().from('post_templates').update({ use_count: t.use_count + 1, last_used_at: new Date().toISOString() }).eq('id', t.id).eq('client_id', clientId); onClose(); };
+  const done = async () => { onPickMedia?.(sel); for (const s of sel) await db().from('media_library').update({ last_used_at: new Date().toISOString() }).eq('id', s.id).eq('client_id', clientId); onClose(); };
   return (
     <Modal open wide onClose={onClose} title={mode === 'text' ? 'Metin havuzundan seç' : 'Havuzdan görsel / video seç'}
       footer={mode === 'media' ? <><Button variant="ghost" onClick={onClose}>Vazgeç</Button><Button variant="primary" disabled={!sel.length} onClick={done}>{sel.length ? `${sel.length} öğeyi ekle` : 'Seçin'}</Button></> : <Button variant="ghost" onClick={onClose}>Kapat</Button>}>
