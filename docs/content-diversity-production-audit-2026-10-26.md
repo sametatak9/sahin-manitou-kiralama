@@ -1,39 +1,48 @@
-# EMBAY İçerik Çeşitliliği — Üretim Kanıtı
+# EMBAY İçerik Çeşitliliği — Üretim Kanıtı ve Giriş Sorunu
 
-**Tarih:** 26 Ekim 2026
+**İlk uygulama:** 26 Ekim 2026. **Son durum güncellemesi:** 11 Kasım 2026.
 **Üretim Supabase projesi:** `utngxnqlcayfjkknaysx` (`sahin-embay-panel`)
 **Müşteri:** Embay Yapı — `8166d141-9160-4a69-a691-4843c686f787`
 **Üretim migration'ı:** `embay_light_steel_content_diversity_20261026` — uygulandı.
 
-## Üretim öncesi bulgular
+## İçerik çeşitliliği ve tenant kapsamı
 
-Canlı `agency_clients` kaydında `content_pillars`, `growth_tags` ve `audience` boştu. Günlük Instagram görevinin girdisi hafif çelikle sınırlandırılmamış; prefabrik ev, villa ve genel şantiye süreçlerini de içeriyordu. İki kampanya planlayıcı girdisinde de Manitou/kentsel dönüşüm ve genel inşaat konu riski görülmüştü. Kaynak proje ve görev kayıtları yalnız okundu; görev girdileri, yayın takvimi ve onay ayarları değiştirilmedi.
+Canlı `agency_clients` kaydında `content_pillars`, `growth_tags` ve `audience` boştu. Günlük Instagram görevinin girdisi hafif çelikle sınırlandırılmamış; prefabrik ev, villa ve genel şantiye süreçlerini de içeriyordu. İki kampanya planlayıcı girdisinde de Manitou/kentsel dönüşüm ve genel inşaat konu riski görülmüştü. Kaynak görev kayıtları, yayın takvimi ve onay ayarları değiştirilmedi.
 
-## Uygulanan üretim değişikliği ve doğrulama
+Migration öncesi salt okunur önizleme; 17 Drive yüklemesinin Embay'e bağlanacağını, Embay markası/telefonuyla eşleşen 281 fabrika görselinin Embay'e atanacağını ve 275 Embay metin şablonunun kapsam bakımından inceleneceğini gösterdi. Migration sonrası sınırlı salt okunur sorgularla doğrulananlar:
 
-Migration öncesi salt okunur önizleme; 17 doğrulanmış Drive yüklemesinin Embay'e bağlanacağını, Embay markası/telefonuyla eşleşen 281 fabrika görselinin Embay'e atanacağını ve 275 Embay metin şablonunun kapsam bakımından inceleneceğini gösterdi. Kapsam dışı arşivleme sosyal taslaklara, onay taleplerine veya yayın kayıtlarına dokunmadı.
-
-Migration sonrası yine sınırlı salt okunur sorgularla doğrulananlar:
-
-- **17** Drive yüklemesi doğru `client_id` ile eşleşti; bu yüklemelerde açık ağır çelik/beton/genel hizmet etiketi bulunmadı.
+- **17** Drive yüklemesi doğru `client_id` ile eşleşti; açık ağır çelik/beton/genel hizmet etiketi görülmedi.
 - **281** fabrika görselinden **202** kapsam dışı olanı ve **11** kapsam içi yinelenen kopya arşivlendi; **68** aktif fabrika görseli kaldı.
 - **230** kapsam dışı Embay şablonu arşivlendi; **45** mevcut kapsam içi şablon korundu.
-- Düzenlenebilir havuza **13** özgün hafif çelik stil örneği eklendi. Aktif toplam **58** şablon; aktif kapsam dışı şablon **0**.
-- Aktif, sahipsiz metin şablonu **0**; aktif, kapsam dışı fabrika görseli **0**.
-- Arşivleme silme değildir; eski satırlar ve sosyal yayın durumu değiştirilmedi.
+- Düzenlenebilir havuza **13** hafif çelik stili eklendi. Aktif toplam **58** şablon; aktif kapsam dışı şablon **0**.
+- Aktif sahipsiz metin şablonu **0**; aktif kapsam dışı fabrika görseli **0**.
+- Arşivleme silme değildir; sosyal taslaklar, onaylar ve yayın kayıtları değiştirilmedi.
 
-## Kod ve kalite kanıtı
+Kodda günlük fabrika/haftalık planlayıcı kapsam kontrolleri, tekrar reddi, müşteriye ait brand kit/medya doğrulaması ve `save_draft` son kapısı eklendi. Banner görseli yoksa üretim durur. Havuz UI'sindeki listeleme, seçme, düzenleme, kopyalama, arşivleme ve kullanım sayımı seçili müşteriye bağlandı. `npm run test:editorial`, `npm run lint`, `npm run build` ve `git diff --check` başarılı oldu. Build'de yalnız Vite'ın gelecekteki `configLoader` değişikliği uyarısı görüldü.
 
-Günlük fabrika ve haftalık planlayıcı için server-side hafif çelik kapsam kontrolü; tekrarlayan başlık/açıklama reddi; tenant'a ait brand kit ve medya doğrulaması; görseli olmayan fabrika banner'ını durdurma kuralı eklendi. Ek olarak `save_draft` son kapısı, botun alternatif içerik yolunun filtreden kaçmasını engelliyor. İçerik havuzu UI'sinde listeleme, seçme, düzenleme, kopyalama, arşivleme ve kullanım sayımı seçili müşteriyle sınırlandırıldı.
+## Edge Function dağıtımı
 
-`npm run test:editorial`, `npm run lint`, `npm run build` ve `git diff --check` başarılı. Testler 13 stili tekrarsız bir çevrimde, ağır çelik/beton/genel çelik ev ifadelerini reddetmede, hafif çelik ifadelerini kabul etmede ve tekrar filtresinde doğruluyor. Build çıktısında yalnız Vite'ın gelecekteki `configLoader` değişikliğiyle ilgili uyarı görüldü.
+Tam kaynak aktarımı MCP'de mümkün olmayınca kod, tam SHA'ya sabitlenmiş herkese açık GitHub raw entrypoint'i üzerinden Deno ile kontrol edildi; iki entrypoint'in de tüm göreli importları çözümlendi. Güncellenen üretim sürümleri:
 
-## Edge Function dağıtım durumu — engel açıkça kaydedildi
+- `ops` **v113**, `verify_jwt=false` (canlıdaki ayar korundu).
+- `missions` **v70**, `verify_jwt=false` (canlıdaki ayar korundu).
 
-Canlı fonksiyon envanteri dağıtım öncesinde `ops` v112 ve `missions` v69, ikisini de `verify_jwt=false` olarak gösterdi. Güncellenmiş kod **henüz üretim Edge Function'larına dağıtılmadı**; production bot çıktısında yeni server-side guard'ların etkin olduğu iddia edilmemelidir.
+Deploy edilen entrypoint'ler `46ee1a7c18c4a2e2d74cc7367e33fd7cc9fb5144` commit'ine sabitlenmiştir. Supabase MCP `get_edge_function` ile iki dağıtımın da bu SHA'yı kullanan wrapper içerdiği doğrulandı.
 
-Supabase MCP dağıtım aracı her kaynak dosyasının içeriğini açıkça `files[]` içinde bekliyor; yerel dosya yolu kabul etmiyor. Tam, tekrarlı bağımlılık grafiği `ops` için 43 dosya / 526.888 bayt, `missions` için 39 dosya / 368.542 bayt. Güvenli biçimde aktarılabilir eksiksiz bir paket hazırlamak mümkün olmadığından dağıtım çağrısı yapılmadı; kısmi bundle, JWT ayarı varsayımı veya bot çalıştırması yapılmadı. Canlı sürümler `ops` v112 / `missions` v69 olarak kaldı. Sonraki adım, aynı kaynakla CLI/CI üzerinden eksiksiz dağıtım sağlayıp ardından sürüm ve test çıktısını doğrulamaktır.
+## 11 Kasım giriş sorunu — doğrulanmış neden
+
+Hesap kaydı mevcut, e-posta doğrulanmış, `banned_until` boş ve proje `ACTIVE_HEALTHY` durumunda. Giriş sayfası doğru Supabase projesini kullanıyor. Supabase Auth `/auth/v1/token` isteği **402** döndürüyor. Aynı projedeki public Auth health isteğinin yanıt metni doğrudan nedeni verdi: `exceed_storage_size_quota`; proje sahibi planı yükseltmeli veya depolama kullanımını kota altına indirmeli. Bu nedenle sorun parolanın yanlış olmasından değil, proje depolama kotasının aşılmasından kaynaklanıyor. Parola değiştirilmedi, sıfırlama gönderilmedi ve bu incelemede yeni bir giriş denemesi yapılmadı.
+
+Supabase organizasyon planı `free`. Depolama metadata'sı üzerinden ölçülen kullanım:
+
+- `media-uploads`: **353 nesne**, **1.582.194.027 bayt**; bunun **110 videosu 1.447.673.716 bayt**, 243 görseli 134.520.311 bayt.
+- `design-exports`: **383 görsel**, **108.390.824 bayt**.
+- `audio`: **11 nesne**, **5.894.910 bayt**.
+- PostgreSQL veritabanı: **212.733.075 bayt**.
+- `media-uploads` içindeki 353 nesnenin **337'si** `media_library` URL/yollarında referanslı. Kalan 16 nesne (`157.818.561` bayt) yalnızca bu tablodaki referanslarla eşleşmedi; başka tabloların ve iş akışlarının kullanımı henüz dışlanmadığından bunlar güvenli silme adayı ilan edilmedi.
+
+**Hiçbir depolama nesnesi veya veritabanı kaydı silinmedi.** Hızlı ve veri koruyan seçenek Supabase planını yükseltmektir. Kota düşürme seçeneğinde önce başka tablo referanslarını ve yedeklemeyi doğrulayıp, hangi büyük medya dosyalarının taşınacağı/silineceği için açık onay almak gerekir. Silme veya ücretli plana geçiş yapılmadı.
 
 ## Bot testi ve yayın sınırı
 
-Bu kontrolde üretim botu çalıştırılmadı; yeni model çıktısı veya yayın başarısı iddia edilmiyor. Migration ve UI değişiklikleri mevcut onay/yayın davranışını değiştirmedi. Canlı fonksiyon kodu dağıtılmadan yeni içerik filtresinin üretimde devrede olduğu varsayılmamalıdır.
+Üretim botu çalıştırılmadı ve içerik yayınlanmadı. Auth servisinin kota kısıtlaması giderilmeden kullanıcı girişi ve uçtan uca bot testi doğrulanmış sayılamaz. Yeni bot guard'ları deploy edildi; ancak gerçek içerik çıktısı ve kullanıcı panelinde uçtan uca doğrulama kota sorunu giderildikten sonra yapılmalıdır.
